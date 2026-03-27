@@ -1,0 +1,806 @@
+// @ts-nocheck
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useStore } from '../../store';
+import { Button } from '../ui/Button';
+import { Icons } from '../ui/Icons';
+import { generateTextResponse, generateTTS, generateChatTitle } from '../../services/aiService';
+import { generateMinimaxTTS } from '../../services/minimaxService';
+import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
+import { ThemeStudio } from '../views/ThemeStudio';
+import { supabase } from '../../services/supabase';
+
+// Chat subcomponents
+import { PLACEHOLDERS, TYPING_INDICATORS, PROVIDERS, SESSIONS_PER_PAGE } from './chat/chatConstants';
+import { MessageBubble } from './chat/MessageBubble';
+import { SessionItem } from './chat/SessionItem';
+import { ArchiveItem } from './chat/ArchiveItem';
+import { SearchBar } from './chat/SearchBar';
+import { ChatInputArea } from './chat/ChatInputArea';
+import { LlmSelectorPanel } from './chat/LlmSelectorPanel';
+import { ActionSheet } from './chat/ActionSheet';
+import { TextSelectionModal } from './chat/TextSelectionModal';
+import { ConversationMapModal } from './chat/ConversationMapModal';
+import { PromptEditorModal } from './chat/PromptEditorModal';
+import { MemoryModal } from './chat/MemoryModal';
+import { XRayModal } from './chat/XRayModal';
+
+export const ChatInterface: React.FC = () => {
+  const {
+    messages, addMessage, updateMessage, updateMessageAudioCache, deleteMessage, settings, updateSettings, activeMode, setMode, toggleFavorite, setNavHidden,
+    sessions, createSession, updateSession, updateSessionTitle, deleteSession, toggleSessionPin, activeSessionId, setActiveSessionId,
+    addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
+    coreMemories, toggleCoreMemoryEnabled, llmPresets, ttsPresets,
+    chatArchives, loadArchiveMessages, deleteArchiveMessage, toggleArchiveFavorite, updateArchiveMessage,
+    importArchive, deleteArchive, updateArchiveTitle
+  } = useStore();
+
+  // Session Summary
+  const [sessionSummary, setSessionSummary] = useState<string>("");
+
+  useEffect(() => {
+    const loadSummary = async () => {
+      setSessionSummary("");
+      if (!activeSessionId) return;
+      try {
+        const { data, error } = await supabase
+          .from('session_summaries')
+          .select('summary')
+          .eq('session_id', activeSessionId)
+          .single();
+        if (data && data.summary) {
+          setSessionSummary(data.summary);
+        }
+      } catch (err) {
+        console.error("Failed to load summary:", err);
+      }
+    };
+    loadSummary();
+  }, [activeSessionId]);
+  
+  const [viewState, setViewState] = useState<'menu' | 'list' | 'chat'>('menu');
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [waitingForSMS, setWaitingForSMS] = useState(false);
+  const [wadeStatus, setWadeStatus] = useState<'online' | 'typing'>('online');
+  const [lastSentMessageId, setLastSentMessageId] = useState<string | null>(null);
+  const [lastInputText, setLastInputText] = useState('');
+  const [delayTimer, setDelayTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  // Archive Viewer State
+  const [archiveMessages, setArchiveMessages] = useState<ArchiveMessage[]>([]);
+  const [allArchiveMessages, setAllArchiveMessages] = useState<ArchiveMessage[]>([]);
+  const [visibleArchiveCount, setVisibleArchiveCount] = useState(50);
+  const [activeArchiveId, setActiveArchiveId] = useState<string | null>(null);
+  const [isLoadingArchive, setIsLoadingArchive] = useState(false);
+  const [archiveScrollPositions, setArchiveScrollPositions] = useState<Record<string, number>>({});
+  const [archiveVisited, setArchiveVisited] = useState<Record<string, boolean>>({});
+  const [isLoadingArchiveList, setIsLoadingArchiveList] = useState(false);
+
+  // Action Sheet State
+  const [archiveDates, setArchiveDates] = useState<Record<string, string>>({});
+  const [archiveTimestamps, setArchiveTimestamps] = useState<Record<string, number>>({});
+  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
+  const [textSelectionMsg, setTextSelectionMsg] = useState<Message | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
+
+  // Session Actions State
+  const [actionSessionId, setActionSessionId] = useState<string | null>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [sessionDeleteConfirm, setSessionDeleteConfirm] = useState(false);
+
+  // Archive Actions State
+  const [actionArchiveId, setActionArchiveId] = useState<string | null>(null);
+  const [renamingArchiveId, setRenamingArchiveId] = useState<string | null>(null);
+  const [archiveDeleteConfirm, setArchiveDeleteConfirm] = useState(false);
+
+  // Search & Map State
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [showMap, setShowMap] = useState(false);
+  const [showLlmSelector, setShowLlmSelector] = useState(false);
+  const [isThemeStudioOpen, setIsThemeStudioOpen] = useState(false);
+  const [showMemorySelector, setShowMemorySelector] = useState(false);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [placeholderText, setPlaceholderText] = useState("Type a message...");
+  const [typingText, setTypingText] = useState(TYPING_INDICATORS[0]);
+
+  useEffect(() => {
+    setPlaceholderText(PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)]);
+  }, [activeMode]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isTyping) {
+      setTypingText(TYPING_INDICATORS[Math.floor(Math.random() * TYPING_INDICATORS.length)]);
+      interval = setInterval(() => {
+        setTypingText(TYPING_INDICATORS[Math.floor(Math.random() * TYPING_INDICATORS.length)]);
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [isTyping]);
+
+  const [customPromptText, setCustomPromptText] = useState('');
+
+  // Neural Net Selector State
+  const [llmSelectorMode, setLlmSelectorMode] = useState<'list' | 'add'>('list');
+  const [newPresetForm, setNewPresetForm] = useState({
+    provider: 'Custom', name: '', model: '', apiKey: '', baseUrl: ''
+  });
+
+  const handleProviderChange = (provider: string) => {
+    const preset = PROVIDERS.find(p => p.value === provider);
+    if (preset) {
+      setNewPresetForm(prev => ({ ...prev, provider, baseUrl: preset.baseUrl, model: preset.defaultModel, name: prev.name || preset.label }));
+    }
+  };
+
+  const handleSavePreset = async () => {
+    if (!newPresetForm.name || !newPresetForm.apiKey) return alert("Missing required fields.");
+    await (useStore.getState() as any).addLlmPreset({
+      provider: newPresetForm.provider, name: newPresetForm.name, model: newPresetForm.model,
+      apiKey: newPresetForm.apiKey, baseUrl: newPresetForm.baseUrl.replace(/\/$/, ''), apiPath: '',
+      temperature: 1.0, topP: 0.95, topK: 40, frequencyPenalty: 0, presencePenalty: 0, isVision: false, isImageGen: false
+    });
+    setLlmSelectorMode('list');
+    setNewPresetForm({ provider: 'Custom', name: '', model: '', apiKey: '', baseUrl: '' });
+  };
+  
+  // Pagination State
+  const [sessionPage, setSessionPage] = useState(1);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const smsDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Audio playback state
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
+  const [attachments, setAttachments] = useState<{ type: 'image' | 'file', content: string, mimeType: string, name: string }[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [deletingArchiveId, setDeletingArchiveId] = useState<string | null>(null);
+
+  const messagesRef = useRef(messages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (viewState === 'chat') {
+      setNavHidden(true);
+      if (activeMode === 'archive' && activeArchiveId) {
+        const isFirstVisit = !archiveVisited[activeArchiveId];
+        const savedPosition = archiveScrollPositions[activeArchiveId];
+        setTimeout(() => {
+          if (messagesContainerRef.current) {
+            if (isFirstVisit) { messagesContainerRef.current.scrollTop = 0; setArchiveVisited(prev => ({ ...prev, [activeArchiveId]: true })); }
+            else if (savedPosition !== undefined) { messagesContainerRef.current.scrollTop = savedPosition; }
+          }
+        }, 100);
+      } else {
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      }
+    } else { setNavHidden(false); }
+  }, [viewState, activeMode, activeArchiveId]);
+
+  useEffect(() => { return () => setNavHidden(false); }, []);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  }, [inputText]);
+
+  useEffect(() => {
+    const loadDates = async () => {
+      if (chatArchives.length === 0) { setIsLoadingArchiveList(false); return; }
+      setIsLoadingArchiveList(true);
+      const newDates: Record<string, string> = {};
+      const timestamps: Record<string, number> = {};
+      for (const arch of chatArchives) {
+        try {
+          const msgs = await loadArchiveMessages(arch.id);
+          if (msgs.length > 0) {
+            const date = new Date(msgs[0].timestamp);
+            newDates[arch.id] = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            timestamps[arch.id] = msgs[0].timestamp;
+          } else { newDates[arch.id] = 'No messages'; }
+        } catch (err) { newDates[arch.id] = 'Unknown date'; }
+      }
+      setArchiveDates(newDates);
+      setArchiveTimestamps(timestamps);
+      setIsLoadingArchiveList(false);
+    };
+    if (chatArchives.length > 0 && viewState === 'list' && activeMode === 'archive') { loadDates(); }
+    else if (activeMode === 'archive' && viewState === 'list') { setIsLoadingArchiveList(false); }
+  }, [chatArchives, loadArchiveMessages, viewState, activeMode]);
+
+  // Determine display messages
+  let displayMessages: Message[] = [];
+  if (activeMode === 'archive') {
+    displayMessages = archiveMessages.map(am => ({
+      id: am.id, role: am.role === 'user' ? 'Luna' : 'Wade', text: am.content,
+      timestamp: am.timestamp, mode: 'archive', variants: [am.content], isFavorite: am.isFavorite
+    }));
+  } else {
+    displayMessages = activeSessionId ? messages.filter(m => m.sessionId === activeSessionId) : [];
+  }
+
+  displayMessages.sort((a, b) => {
+    const timeA = Math.floor(a.timestamp / 1000);
+    const timeB = Math.floor(b.timestamp / 1000);
+    if (timeA !== timeB) return timeA - timeB;
+    if (a.role === 'Luna' && b.role !== 'Luna') return -1;
+    if (a.role !== 'Luna' && b.role === 'Luna') return 1;
+    return 0;
+  });
+
+  const modeSessions = sessions
+    .filter(s => s.mode === activeMode)
+    .sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return b.updatedAt - a.updatedAt;
+    });
+
+  // === NAVIGATION HANDLERS ===
+  const handleModeSelect = (mode: ChatMode) => { setMode(mode); setViewState('list'); setSessionPage(1); };
+  const handleOpenSession = (sessionId: string) => { setActiveSessionId(sessionId); setViewState('chat'); };
+  
+  const handleOpenArchive = async (archiveId: string) => {
+    setIsLoadingArchive(true); setActiveArchiveId(archiveId); setVisibleArchiveCount(30);
+    try {
+      const msgs = await loadArchiveMessages(archiveId);
+      setAllArchiveMessages(msgs); setArchiveMessages(msgs.slice(0, 50)); setViewState('chat');
+    } catch (e) { console.error(e); } finally { setIsLoadingArchive(false); }
+  };
+
+  const loadMoreArchiveMessages = () => {
+    const newCount = visibleArchiveCount + 50;
+    setVisibleArchiveCount(newCount); setArchiveMessages(allArchiveMessages.slice(0, newCount));
+  };
+
+  const handleStartDraftSession = () => { setActiveSessionId(null); setViewState('chat'); };
+
+  const handleBack = () => {
+    if (viewState === 'chat') {
+      if (activeMode === 'archive' && activeArchiveId && messagesContainerRef.current) {
+        setArchiveScrollPositions(prev => ({ ...prev, [activeArchiveId]: messagesContainerRef.current!.scrollTop }));
+      }
+      setViewState('list'); setActiveSessionId(null); setActiveArchiveId(null); setArchiveMessages([]);
+    } else if (viewState === 'list') { setViewState('menu'); }
+  };
+
+  // === ACTION HANDLERS ===
+  const closeActions = () => { setSelectedMsgId(null); setIsEditing(false); setEditContent(''); setIsDeleteConfirming(false); };
+  const selectedMsg = displayMessages.find(m => m.id === selectedMsgId) || null;
+
+  const handleTextSelection = () => { if (selectedMsg) { setTextSelectionMsg(selectedMsg); closeActions(); } };
+  const handleCopy = () => {
+    if (selectedMsg) {
+      let textToCopy = selectedMsg.text;
+      const idx = selectedMsg.selectedIndex || 0;
+      const thinking = selectedMsg.variantsThinking?.[idx];
+      if (thinking) textToCopy = `[Thinking]\n${thinking}\n\n[Response]\n${selectedMsg.text}`;
+      navigator.clipboard.writeText(textToCopy); closeActions();
+    }
+  };
+
+  const handleDelete = () => {
+    if (selectedMsgId) {
+      if (!isDeleteConfirming) { setIsDeleteConfirming(true); if (navigator.vibrate) navigator.vibrate(50); }
+      else {
+        if (activeMode === 'archive' && activeArchiveId) { deleteArchiveMessage(selectedMsgId, activeArchiveId); setArchiveMessages(prev => prev.filter(m => m.id !== selectedMsgId)); }
+        else { deleteMessage(selectedMsgId); }
+        closeActions();
+      }
+    }
+  };
+
+  const handleFavorite = () => {
+    if (selectedMsgId) {
+      if (activeMode === 'archive' && activeArchiveId) { toggleArchiveFavorite(selectedMsgId, activeArchiveId); setArchiveMessages(prev => prev.map(m => m.id === selectedMsgId ? { ...m, isFavorite: !m.isFavorite } : m)); }
+      else { toggleFavorite(selectedMsgId); }
+      closeActions();
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (selectedMsgId && activeSessionId) {
+      closeActions();
+      const currentSessionMsgs = messagesRef.current.filter(m => m.sessionId === activeSessionId).sort((a, b) => a.timestamp - b.timestamp);
+      const isLatest = currentSessionMsgs.length > 0 && currentSessionMsgs[currentSessionMsgs.length - 1].id === selectedMsgId;
+      if (!isLatest) {
+        if (activeMode === 'sms') { alert("Babe, in SMS mode, I can only rewrite my last text. Otherwise I get confused!"); return; }
+        if (confirm("Create a new timeline (branch) from here? This will start a new chat with history up to this point.")) { await forkSession(selectedMsgId); }
+      } else { triggerAIResponse(activeSessionId, selectedMsgId); }
+    }
+  };
+
+  const handleBranch = async () => { if (selectedMsgId) { closeActions(); await forkSession(selectedMsgId); } };
+  const handleInitEdit = () => { if (selectedMsg) { setEditContent(selectedMsg.text); setIsEditing(true); } };
+  const handleSaveEdit = () => {
+    if (selectedMsgId && editContent) {
+      if (activeMode === 'archive' && activeArchiveId) { updateArchiveMessage(selectedMsgId, editContent); setArchiveMessages(prev => prev.map(m => m.id === selectedMsgId ? { ...m, content: editContent } : m)); }
+      else { updateMessage(selectedMsgId, editContent); }
+      closeActions();
+    }
+  };
+
+  // === TTS ===
+  const executeTTS = async (text: string, messageId: string, forceRegenerate: boolean = false) => {
+    try {
+      if (playingMessageId === messageId) {
+        if (audioRef.current) { if (isPaused) { audioRef.current.play(); setIsPaused(false); } else { audioRef.current.pause(); setIsPaused(true); } return; }
+      }
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; }
+      setPlayingMessageId(null); setIsPaused(false);
+
+      const message = messages.find(m => m.id === messageId);
+      let base64Audio: string | undefined;
+      if (!forceRegenerate && message?.audioCache) { base64Audio = message.audioCache; }
+      else {
+        const activeTts = settings.activeTtsId ? ttsPresets.find(p => p.id === settings.activeTtsId) : null;
+        if (!activeTts) throw new Error("没找到声音配置！");
+        const cleanText = text.replace(/[*_~`#]/g, '');
+        base64Audio = await generateMinimaxTTS(cleanText, {
+          apiKey: activeTts.apiKey, baseUrl: activeTts.baseUrl || 'https://api.minimax.io',
+          model: activeTts.model || 'speech-2.8-hd', voiceId: activeTts.voiceId || 'English_expressive_narrator',
+          speed: activeTts.speed || 1, vol: activeTts.vol || 1, pitch: activeTts.pitch || 0,
+          emotion: activeTts.emotion, sampleRate: activeTts.sampleRate || 32000,
+          bitrate: activeTts.bitrate || 128000, format: activeTts.format || 'mp3', channel: activeTts.channel || 1
+        });
+        if (base64Audio) updateMessageAudioCache(messageId, base64Audio);
+      }
+      if (!base64Audio) throw new Error("Failed to generate audio");
+
+      const binaryString = atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'audio/mp3' });
+      const url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { setPlayingMessageId(null); setIsPaused(false); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
+      audio.onerror = () => { setPlayingMessageId(null); setIsPaused(false); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
+      setPlayingMessageId(messageId); setIsPaused(false); await audio.play();
+    } catch (e) { console.error("TTS Error", e); alert("Voice module glitching. Check key?"); setPlayingMessageId(null); setIsPaused(false); }
+  };
+
+  const playTTS = async () => { if (selectedMsg) { closeActions(); executeTTS(selectedMsg.text, selectedMsg.id, false); } };
+  const regenerateTTS = async () => { if (selectedMsg) { closeActions(); executeTTS(selectedMsg.text, selectedMsg.id, true); } };
+  const handleQuickTTS = (text: string, messageId: string) => { executeTTS(text, messageId, false); };
+  const handleRegenerateTTS = (text: string, messageId: string) => { executeTTS(text, messageId, true); };
+
+  const prevVariant = () => { if (selectedMsg && selectedMsg.selectedIndex !== undefined && selectedMsg.selectedIndex > 0) selectMessageVariant(selectedMsg.id, selectedMsg.selectedIndex - 1); };
+  const nextVariant = () => { if (selectedMsg && selectedMsg.variants && selectedMsg.selectedIndex !== undefined && selectedMsg.selectedIndex < selectedMsg.variants.length - 1) selectMessageVariant(selectedMsg.id, selectedMsg.selectedIndex + 1); };
+
+  const isLatestMessage = (() => { if (!selectedMsg) return false; const msgs = [...displayMessages].sort((a, b) => a.timestamp - b.timestamp); return msgs.length > 0 && msgs[msgs.length - 1].id === selectedMsg.id; })();
+  const canRegenerate = selectedMsg?.role === 'Wade' && isLatestMessage && activeMode !== 'archive';
+  const canBranch = !!selectedMsg && activeMode !== 'sms' && activeMode !== 'archive';
+
+  // === TRIGGER AI RESPONSE (原版忠实保留) ===
+  const triggerAIResponse = async (targetSessionId: string, regenMsgId?: string) => {
+    abortControllerRef.current = new AbortController();
+    if (regenMsgId) { setRegenerating(regenMsgId, true); setWadeStatus('typing'); }
+    else { setIsTyping(true); setWaitingForSMS(false); if (activeMode === 'deep' || activeMode === 'roleplay') setWadeStatus('typing'); }
+
+    try {
+      const freshMessages = messagesRef.current.filter(m => m.sessionId === targetSessionId);
+      let historyMsgs = freshMessages;
+      if (regenMsgId) { const targetIdx = freshMessages.findIndex(m => m.id === regenMsgId); if (targetIdx !== -1) historyMsgs = freshMessages.slice(0, targetIdx); }
+      else if (activeMode !== 'sms') { const lastMsg = historyMsgs[historyMsgs.length - 1]; if (lastMsg && lastMsg.role === 'Luna' && lastMsg.text === inputText) historyMsgs = historyMsgs.slice(0, -1); }
+
+      const history = historyMsgs.map(m => {
+        let content = m.text;
+        if (m.role === 'Wade') { const idx = m.selectedIndex || 0; const thought = m.variantsThinking?.[idx]; if (thought) content = `<think>${thought}</think>\n${content}`; }
+        const parts: any[] = [];
+        if (content) parts.push({ text: content });
+        if (m.attachments && m.attachments.length > 0) { m.attachments.forEach(att => { parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } }); }); }
+        else if (m.image) { parts.push({ inlineData: { mimeType: 'image/png', data: m.image } }); }
+        if (parts.length === 0) parts.push({ text: "..." });
+        return { role: m.role, parts: parts };
+      }).slice(-(settings.contextLimit || 50));
+
+      let modePrompt = settings.wadePersonality;
+      if (sessionSummary) modePrompt = `[PREVIOUS CONVERSATION SUMMARY]\n${sessionSummary}\n[END SUMMARY]\n\n${modePrompt}`;
+      if (activeMode === 'sms') modePrompt += "\n\n[SMS MODE RULES - STRICT]\n- You are texting on a phone. NO actions (*asterisks*), NO narration.\n- Write ONLY text messages.\n- Keep it SHORT (1-2 sentences per bubble).\n- Use emojis naturally.\n- IMPORTANT: You MUST split your reply into MULTIPLE separate text bubbles by using ||| as the separator.\n- Example: \"Hey babe! 😘 ||| Miss me already? ||| I'm coming over.\"\n- IF YOU DO NOT USE |||, THE USER CANNOT SEE YOUR MESSAGE.";
+      else if (activeMode === 'roleplay') modePrompt += "\n\n[ROLEPLAY MODE RULES]\n- Write detailed, descriptive responses\n- Include actions in *asterisks*\n- Be immersive and narrative";
+
+      const isRegeneration = !!regenMsgId;
+      const currentSession = sessions.find(s => s.id === targetSessionId);
+      const effectiveLlmId = currentSession?.customLlmId || settings.activeLlmId;
+      const activeLlm = effectiveLlmId ? llmPresets.find(p => p.id === effectiveLlmId) : null;
+      const apiKey = activeLlm?.apiKey;
+      if (!apiKey) throw new Error("No API Key configured. Please set up a Gemini API in Settings.");
+
+      const safeMemories = Array.isArray(coreMemories) ? coreMemories : [];
+      const sessionMemories = currentSession?.activeMemoryIds ? safeMemories.filter(m => currentSession.activeMemoryIds!.includes(m.id)) : safeMemories.filter(m => m.enabled);
+
+      const response = await generateTextResponse(
+        activeLlm?.model || (activeMode === 'roleplay' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview'),
+        activeMode === 'sms' ? " (Reply to the latest texts)" : inputText || "...",
+        history, settings.systemInstruction, modePrompt, settings.lunaInfo,
+        settings.wadeSingleExamples, settings.smsExampleDialogue, settings.smsInstructions,
+        settings.roleplayInstructions, settings.exampleDialogue, sessionMemories,
+        isRegeneration, activeMode as any, apiKey,
+        activeLlm ? { temperature: activeLlm.temperature, topP: activeLlm.topP, topK: activeLlm.topK, frequencyPenalty: activeLlm.frequencyPenalty, presencePenalty: activeLlm.presencePenalty } : undefined,
+        currentSession?.customPrompt, activeLlm?.baseUrl, activeLlm?.isImageGen
+      );
+
+      const responseText = response.text;
+      const thinking = response.thinking;
+      const currentModel = activeLlm?.model || (activeMode === 'roleplay' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview');
+
+      if (regenMsgId) { addVariantToMessage(regenMsgId, responseText, thinking, currentModel); setRegenerating(regenMsgId, false); setWadeStatus('online'); return; }
+      
+      if (activeMode === 'sms') {
+        let parts = responseText.split('|||').map((s: string) => s.trim()).filter((s: string) => s);
+        if (parts.length === 1 && responseText.includes('\n')) { const lines = responseText.split('\n').map((s: string) => s.trim()).filter((s: string) => s); if (lines.length > 1) parts = lines; }
+        if (parts.length === 0) parts = ["..."];
+        for (let i = 0; i < parts.length; i++) {
+          setTimeout(() => {
+            addMessage({ id: Date.now().toString() + i, sessionId: targetSessionId, role: 'Wade', text: parts[i], model: currentModel, timestamp: Date.now(), mode: activeMode, variantsThinking: i === 0 && thinking ? [thinking] : [null] });
+            if (i === parts.length - 1) { setIsTyping(false); setWadeStatus('online'); setLastSentMessageId(null); setLastInputText(''); }
+          }, i * 1500);
+        }
+      } else {
+        const botMessage: Message = { id: (Date.now() + 1).toString(), sessionId: targetSessionId, role: 'Wade', text: responseText, model: currentModel, timestamp: Date.now(), mode: activeMode, variantsThinking: [thinking || null] };
+        addMessage(botMessage);
+        // Auto-summary
+        const currentMessages = messagesRef.current.filter(m => m.sessionId === targetSessionId);
+        if (currentMessages.length > 40 && !isRegeneration) {
+          const messagesToSummarize = currentMessages.slice(0, 20);
+          const activeApiKey = activeLlm?.apiKey;
+          if (activeApiKey) {
+            (window as any).summarizeConversation?.(messagesToSummarize, sessionSummary, activeApiKey, 'gemini-flash-lite-latest').then(async (newSummary: string) => {
+              setSessionSummary(newSummary);
+              await supabase.from('session_summaries').upsert({ session_id: targetSessionId, summary: newSummary });
+            });
+          }
+        }
+        setIsTyping(false); setWadeStatus('online'); setLastSentMessageId(null); setLastInputText('');
+      }
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || !abortControllerRef.current) return;
+      console.error("Chat Error", error);
+      const errorMsg = error?.message || "Failed to generate response.";
+      if (regenMsgId) { alert(`Regeneration Failed: ${errorMsg}`); setRegenerating(regenMsgId, false); setWadeStatus('online'); }
+      else {
+        addMessage({ id: Date.now().toString(), sessionId: targetSessionId, role: 'Wade', text: errorMsg.includes("API Key") ? "Oops! I need you to configure my API in Settings first." : `I'm having trouble responding: ${errorMsg}`, timestamp: Date.now(), mode: activeMode });
+      }
+      setIsTyping(false); setWadeStatus('online'); setLastSentMessageId(null); setLastInputText('');
+    } finally { abortControllerRef.current = null; }
+  };
+
+  // === FILE HANDLERS ===
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const activeLlm = settings.activeLlmId ? llmPresets.find(p => p.id === settings.activeLlmId) : null;
+    const isVision = activeLlm ? activeLlm.isVision : true;
+    if (!isVision) { alert(`The current model (${activeLlm?.name || 'Unknown'}) does not support images.`); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => { const content = e.target?.result as string; setAttachments(prev => [...prev, { type: 'image', content, mimeType: file.type, name: file.name }]); setShowUploadMenu(false); };
+    reader.readAsDataURL(file); if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const activeLlm = settings.activeLlmId ? llmPresets.find(p => p.id === settings.activeLlmId) : null;
+    if (file.type === 'application/pdf' && !(activeLlm ? activeLlm.isVision : true)) { alert(`The current model might not support PDF files.`); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => { const content = e.target?.result as string; setAttachments(prev => [...prev, { type: 'file', content, mimeType: file.type, name: file.name }]); setShowUploadMenu(false); };
+    reader.readAsDataURL(file); if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (index: number) => { setAttachments(prev => prev.filter((_, i) => i !== index)); };
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) { abortControllerRef.current.abort(); abortControllerRef.current = null; }
+    if (delayTimer) { clearTimeout(delayTimer); setDelayTimer(null); }
+    setIsTyping(false); setWaitingForSMS(false); setWadeStatus('online');
+    if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
+    if (lastSentMessageId) deleteMessage(lastSentMessageId);
+    setInputText(lastInputText); setLastSentMessageId(null); setLastInputText('');
+    if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; textareaRef.current.focus(); }
+  };
+
+  const handleSend = async () => {
+    if ((!inputText.trim() && attachments.length === 0) || activeMode === 'archive') return;
+    let targetSessionId = activeSessionId;
+    if (!targetSessionId) { targetSessionId = await createSession(activeMode); setActiveSessionId(targetSessionId); }
+    const currentInput = inputText;
+    const isFirstMessage = messagesRef.current.filter(m => m.sessionId === targetSessionId).length === 0;
+    const newMessage: Message = {
+      id: Date.now().toString(), sessionId: targetSessionId, role: 'Luna', text: inputText, timestamp: Date.now(), mode: activeMode,
+      attachments: attachments.map(a => ({ type: a.type, content: a.content.split(',')[1], mimeType: a.mimeType, name: a.name })),
+      image: attachments.find(a => a.type === 'image')?.content.split(',')[1]
+    };
+    addMessage(newMessage); setLastSentMessageId(newMessage.id); setLastInputText(currentInput); setInputText(''); setAttachments([]);
+    if (textareaRef.current) textareaRef.current.style.height = '48px';
+    if (isFirstMessage) {
+      const activeLlm = settings.activeLlmId ? llmPresets.find(p => p.id === settings.activeLlmId) : null;
+      if (activeLlm?.apiKey) { generateChatTitle(currentInput, activeLlm.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
+    }
+    if (activeMode === 'sms') {
+      setWaitingForSMS(true);
+      if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
+      smsDebounceTimer.current = setTimeout(() => { setWadeStatus('typing'); setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId); }, 2000); }, 120000);
+    } else {
+      setIsTyping(true);
+      const timer = setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId); }, 15000);
+      setDelayTimer(timer);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (window.innerWidth >= 768 && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
+
+  const scrollToMessage = (messageId: string) => {
+    const element = document.getElementById(`msg-${messageId}`);
+    if (element) { element.scrollIntoView({ behavior: 'smooth', block: 'center' }); element.classList.add('highlight-flash'); setTimeout(() => element.classList.remove('highlight-flash'), 2000); }
+    setShowMap(false);
+  };
+
+  // Search
+  const searchResults = searchQuery ? displayMessages.filter(msg => msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : [];
+  const totalResults = searchResults.length;
+  const goToNextResult = () => { if (totalResults > 0) { const next = (currentSearchIndex + 1) % totalResults; setCurrentSearchIndex(next); scrollToMessage(searchResults[next].id); } };
+  const goToPrevResult = () => { if (totalResults > 0) { const prev = currentSearchIndex === 0 ? totalResults - 1 : currentSearchIndex - 1; setCurrentSearchIndex(prev); scrollToMessage(searchResults[prev].id); } };
+  const handleSearchChange = (value: string) => { setSearchQuery(value); setCurrentSearchIndex(0); };
+
+  // Archive Upload
+  const handleArchiveUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setIsUploading(true);
+    try { const text = await file.text(); const title = file.name.replace('.txt', ''); const count = await importArchive(title, text); alert(`Success! Imported ${count} messages into archive "${title}".`); }
+    catch (err) { alert("Failed to import archive."); }
+    finally { setIsUploading(false); if (archiveInputRef.current) archiveInputRef.current.value = ''; }
+  };
+
+  const handleDeleteArchive = (archiveId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (deletingArchiveId === archiveId) { deleteArchive(archiveId); setDeletingArchiveId(null); }
+    else { setDeletingArchiveId(archiveId); setTimeout(() => setDeletingArchiveId(null), 3000); }
+  };
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+
+  // --- VIEW 1: MODE MENU ---
+  if (viewState === 'menu') {
+    return (
+      <div className="h-full bg-wade-bg-app p-6 flex flex-col items-center justify-center space-y-8 animate-fade-in">
+        <div className="text-center mb-4">
+          <h2 className="font-hand text-4xl text-wade-accent mb-2">Connect with Wade</h2>
+          <p className="text-wade-text-muted text-sm opacity-80">Choose your frequency, babe.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+          <button onClick={() => handleModeSelect('deep')} className="col-span-2 group relative overflow-hidden bg-wade-bg-card p-6 rounded-3xl shadow-sm border border-wade-border text-left hover:border-wade-accent transition-all hover:-translate-y-1">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-wade-accent-light rounded-full -mr-8 -mt-8 opacity-50 group-hover:scale-125 transition-transform duration-500"></div>
+            <div className="relative z-10 flex items-center gap-4">
+              <div className="w-12 h-12 bg-wade-bg-app rounded-full flex items-center justify-center text-wade-accent group-hover:bg-wade-accent group-hover:text-white transition-colors"><Icons.Infinity /></div>
+              <div><h3 className="font-bold text-wade-text-main text-lg">Deep Chat</h3><p className="text-wade-text-muted text-xs mt-1">Soul-to-soul connection.</p></div>
+            </div>
+          </button>
+          <button onClick={() => handleModeSelect('sms')} className="group relative overflow-hidden bg-wade-bg-card p-4 rounded-3xl shadow-sm border border-wade-border text-left hover:border-wade-accent transition-all hover:-translate-y-1">
+            <div className="relative z-10">
+              <div className="w-10 h-10 bg-wade-bg-app rounded-full flex items-center justify-center mb-2 text-wade-accent group-hover:bg-wade-accent group-hover:text-white transition-colors"><Icons.Smartphone /></div>
+              <h3 className="font-bold text-wade-text-main">SMS Mode</h3>
+            </div>
+          </button>
+          <button onClick={() => handleModeSelect('roleplay')} className="group relative overflow-hidden bg-wade-bg-card p-4 rounded-3xl shadow-sm border border-wade-border text-left hover:border-wade-accent transition-all hover:-translate-y-1">
+            <div className="relative z-10">
+              <div className="w-10 h-10 bg-wade-bg-app rounded-full flex items-center justify-center mb-2 text-wade-accent group-hover:bg-wade-accent group-hover:text-white transition-colors"><Icons.Feather /></div>
+              <h3 className="font-bold text-wade-text-main">Roleplay</h3>
+            </div>
+          </button>
+          <button onClick={() => handleModeSelect('archive')} className="col-span-2 group relative overflow-hidden bg-wade-border/50 p-4 rounded-3xl shadow-inner border border-wade-border text-left hover:bg-wade-bg-card hover:border-wade-accent transition-all hover:-translate-y-1">
+            <div className="relative z-10 flex items-center gap-3 justify-center">
+              <svg className="w-5 h-5 text-wade-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+              <span className="font-bold text-wade-text-muted text-sm uppercase tracking-widest">Archives</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- VIEW 2: SESSION LIST ---
+  if (viewState === 'list') {
+    return (
+      <div className="h-full bg-wade-bg-app flex flex-col overflow-hidden animate-fade-in">
+        <div className="w-full max-w-md mx-auto flex justify-between items-center px-6 pt-6 pb-4 shrink-0">
+          <button onClick={handleBack} className="w-8 h-8 rounded-full bg-wade-bg-card shadow-sm flex items-center justify-center text-wade-text-muted hover:text-wade-accent transition-colors"><Icons.Back /></button>
+          <h2 className="font-hand text-2xl text-wade-accent capitalize">{activeMode} {activeMode === 'archive' ? 'Files' : 'Threads'}</h2>
+          {activeMode === 'archive' ? (
+            <button onClick={() => !isUploading && archiveInputRef.current?.click()} className="w-8 h-8 rounded-full bg-wade-accent text-white shadow-md flex items-center justify-center hover:bg-wade-accent-hover transition-colors" title="Import Archive">
+              {isUploading ? <div className="animate-spin text-[10px]">⏳</div> : <Icons.Upload />}
+            </button>
+          ) : (
+            <button onClick={handleStartDraftSession} className="w-8 h-8 rounded-full bg-wade-accent text-white shadow-md flex items-center justify-center hover:bg-wade-accent-hover transition-colors"><Icons.Plus /></button>
+          )}
+          <input type="file" ref={archiveInputRef} className="hidden" accept=".txt" onChange={handleArchiveUpload} />
+        </div>
+        
+        <div className="flex-1 w-full max-w-md mx-auto overflow-y-auto px-6 pb-24 custom-scrollbar space-y-3">
+          {activeMode === 'archive' ? (
+            isLoadingArchiveList ? (
+              <div className="text-center text-wade-accent py-10 animate-pulse">Loading archives...</div>
+            ) : chatArchives.length === 0 ? (
+              <div className="text-center text-wade-text-muted/50 py-10 italic">No archives found. Import one above!</div>
+            ) : (
+              [...chatArchives].sort((a, b) => (archiveTimestamps[b.id] || 0) - (archiveTimestamps[a.id] || 0))
+                .slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE)
+                .map(arch => (
+                  <ArchiveItem key={arch.id} archive={arch} dateString={archiveDates[arch.id] || ''} onOpen={handleOpenArchive}
+                    onLongPress={(id) => setActionArchiveId(id)} isRenaming={renamingArchiveId === arch.id}
+                    onRenameSubmit={(id, title) => { updateArchiveTitle(id, title); setRenamingArchiveId(null); }}
+                    onRenameCancel={() => setRenamingArchiveId(null)} />
+                ))
+            )
+          ) : (
+            modeSessions.length === 0 ? (
+              <div className="text-center text-wade-text-muted/50 py-10 italic">No conversations yet. Start one!</div>
+            ) : (
+              modeSessions.slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE).map(session => (
+                <SessionItem key={session.id} session={session} onOpen={handleOpenSession}
+                  onLongPress={(id) => setActionSessionId(id)} isRenaming={renamingSessionId === session.id}
+                  onRenameSubmit={(id, title) => { updateSessionTitle(id, title); setRenamingSessionId(null); }}
+                  onRenameCancel={() => setRenamingSessionId(null)} />
+              ))
+            )
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // --- VIEW 3: CHAT ---
+  return (
+    <div className="flex flex-col h-full bg-wade-bg-app relative">
+      {/* Header */}
+      <div className="w-full p-4 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0">
+        <button onClick={handleBack} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Back /></button>
+        {activeMode === 'archive' ? (
+          <div className="flex-1 flex justify-center"><div className="font-bold text-wade-text-main text-base">{activeArchiveId ? chatArchives.find(a => a.id === activeArchiveId)?.title || 'Archive' : 'Archive'}</div></div>
+        ) : (activeMode === 'deep' || activeMode === 'sms') ? (
+          <div className="flex-1 flex items-center gap-2 ml-2">
+            <div className="relative">
+              <img src={settings.wadeAvatar} className="w-10 h-10 rounded-full object-cover border border-wade-border shadow-md flex-shrink-0" />
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 border-2 border-wade-bg-card rounded-full"></div>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5">
+                <div className="font-bold text-wade-text-main text-sm">Wade</div>
+                {activeSessionId && sessions.find(s => s.id === activeSessionId)?.isPinned && (<div className="text-wade-accent"><Icons.Pin /></div>)}
+              </div>
+              <div className="text-[9px] text-wade-text-muted">
+                {wadeStatus === 'typing' ? (activeMode === 'deep' ? <span className="text-wade-accent">Crafting brilliance... or sarcasm</span> : <span className="text-wade-accent">typing...</span>) : <span className="text-[10px] font-medium tracking-wide">Breaking the 4th Wall</span>}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex justify-center"><div className="font-bold text-wade-text-main text-base">Wade</div></div>
+        )}
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setShowSearch(!showSearch); setShowMap(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Search /></button>
+          <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Map /></button>
+          <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative"><Icons.More /></button>
+        </div>
+      </div>
+
+      {/* Menu Dropdown */}
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => { setShowMenu(false); setShowLlmSelector(false); }} />
+          <div className="absolute top-16 right-4 z-50 bg-wade-bg-card/80 backdrop-blur-xl rounded-xl shadow-xl border border-wade-border/50 py-1.5 px-1 min-w-fit animate-fade-in">
+            {[
+              { icon: <Icons.Pin />, label: activeSessionId && sessions.find(s => s.id === activeSessionId)?.isPinned ? "Unstick From Fridge" : "Stick To Fridge", action: () => { if (activeSessionId) { toggleSessionPin(activeSessionId); setShowMenu(false); } } },
+              { icon: <Icons.Hexagon />, label: "Brain Transplant", action: () => setShowLlmSelector(!showLlmSelector) },
+              { icon: <Icons.Brain />, label: "Trigger Flashbacks", action: () => { setShowMemorySelector(true); setShowMenu(false); } },
+              { icon: <Icons.Fire />, label: "Add Special Sauce", action: () => { setShowPromptEditor(true); setShowMenu(false); const cs = sessions.find(s => s.id === activeSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
+              { icon: <Icons.Settings className="w-4 h-4" />, label: "Chat Theme", action: () => { setIsThemeStudioOpen(true); setShowMenu(false); } },
+              { icon: <Icons.Bug />, label: "X-Ray Vision", action: () => { setShowDebug(true); setShowMenu(false); } },
+            ].map((item, i) => (
+              <button key={i} onClick={item.action} className="w-full text-left px-3 py-2 rounded-lg hover:bg-wade-bg-card/60 transition-colors text-wade-text-main text-[11px] flex items-center gap-2.5 whitespace-nowrap">
+                <div className="w-5 flex justify-center">{item.icon}</div>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Modals */}
+      <ThemeStudio isOpen={isThemeStudioOpen} onClose={() => setIsThemeStudioOpen(false)} sessionId={activeSessionId || undefined} />
+      <LlmSelectorPanel showLlmSelector={showLlmSelector} setShowLlmSelector={setShowLlmSelector} llmSelectorMode={llmSelectorMode} setLlmSelectorMode={setLlmSelectorMode} llmPresets={llmPresets} sessions={sessions} activeSessionId={activeSessionId} settings={settings} updateSession={updateSession} updateSettings={updateSettings} newPresetForm={newPresetForm} setNewPresetForm={setNewPresetForm} handleProviderChange={handleProviderChange} handleSavePreset={handleSavePreset} />
+      {showSearch && <SearchBar searchQuery={searchQuery} onSearchChange={handleSearchChange} currentSearchIndex={currentSearchIndex} totalResults={totalResults} onPrev={goToPrevResult} onNext={goToNextResult} onClose={() => setShowSearch(false)} />}
+
+      {/* Messages */}
+      <div ref={messagesContainerRef} onClick={() => showSearch && setShowSearch(false)} className="flex-1 overflow-y-auto p-4 relative">
+        {isLoadingArchive && <div className="text-center mt-20 text-wade-accent animate-pulse">Decrypting legacy data...</div>}
+        {displayMessages.length === 0 && !isLoadingArchive && (
+          <div className="text-center text-wade-text-muted mt-20 opacity-50"><p className="font-hand text-xl mb-2">{activeMode === 'archive' ? 'Empty Record.' : 'Say hi to Wade.'}</p></div>
+        )}
+        <div className="flex flex-col w-full">
+          {displayMessages.map((msg, idx) => {
+            let marginBottom = 'mb-6';
+            const nextMsg = displayMessages[idx + 1];
+            if (activeMode === 'sms') { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-1' : 'mb-4'; }
+            else { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-2' : 'mb-6'; }
+            const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
+            return (
+              <div key={msg.id} id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
+                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} />
+              </div>
+            );
+          })}
+        </div>
+
+        {activeMode === 'archive' && allArchiveMessages.length > visibleArchiveCount && (
+          <div className="flex flex-col items-center gap-3 my-8">
+            <div className="flex gap-3">
+              <button onClick={loadMoreArchiveMessages} className="px-6 py-3 bg-gradient-to-r from-wade-accent to-wade-accent-hover text-white rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-105 active:scale-95">Load 50 More</button>
+              <button onClick={() => { setVisibleArchiveCount(allArchiveMessages.length); setArchiveMessages(allArchiveMessages); }} className="px-6 py-3 bg-wade-text-main text-white rounded-full text-sm font-bold shadow-md">🍿 Load All</button>
+            </div>
+            <span className="text-[10px] text-wade-text-muted opacity-75">({allArchiveMessages.length - visibleArchiveCount} more hidden)</span>
+          </div>
+        )}
+
+        {activeMode === 'archive' && displayMessages.length > 0 && allArchiveMessages.length <= visibleArchiveCount && (
+          <div className="mt-8 mb-4 text-center">
+            <div className="inline-block bg-gradient-to-r from-wade-bg-app via-white to-wade-bg-app px-6 py-4 rounded-3xl border-2 border-wade-border shadow-sm">
+              <p className="text-wade-text-muted text-sm font-medium mb-1">Well, that's all folks!</p>
+              <p className="text-wade-text-muted/60 text-xs italic">You've reached the end of this memory lane.</p>
+            </div>
+          </div>
+        )}
+
+        {isTyping && activeMode !== 'sms' && (
+          <div className="flex justify-start items-end gap-2 mt-4 ml-1 animate-fade-in">
+            <div className="bg-wade-bg-card px-4 py-3 rounded-2xl rounded-tl-none shadow-sm border border-wade-border max-w-[80%]">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1"><div className="w-1.5 h-1.5 bg-wade-accent rounded-full animate-bounce"></div><div className="w-1.5 h-1.5 bg-wade-accent rounded-full animate-bounce delay-100"></div><div className="w-1.5 h-1.5 bg-wade-accent rounded-full animate-bounce delay-200"></div></div>
+                <span className="text-xs text-wade-text-muted font-medium italic animate-pulse">{typingText}</span>
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* All Modals */}
+      <ActionSheet selectedMsg={selectedMsg} activeMode={activeMode} isEditing={isEditing} setIsEditing={setIsEditing} editContent={editContent} setEditContent={setEditContent} isDeleteConfirming={isDeleteConfirming} canRegenerate={canRegenerate} canBranch={canBranch} playingMessageId={playingMessageId} isPaused={isPaused} closeActions={closeActions} handleCopy={handleCopy} handleTextSelection={handleTextSelection} handleRegenerate={handleRegenerate} handleBranch={handleBranch} handleInitEdit={handleInitEdit} handleSaveEdit={handleSaveEdit} handleFavorite={handleFavorite} handleDelete={handleDelete} playTTS={playTTS} regenerateTTS={regenerateTTS} prevVariant={prevVariant} nextVariant={nextVariant} />
+      <TextSelectionModal textSelectionMsg={textSelectionMsg} setTextSelectionMsg={setTextSelectionMsg} />
+      <ConversationMapModal showMap={showMap} setShowMap={setShowMap} displayMessages={displayMessages} scrollToMessage={scrollToMessage} />
+      <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession} />
+      <MemoryModal showMemorySelector={showMemorySelector} setShowMemorySelector={setShowMemorySelector} coreMemories={coreMemories} sessions={sessions} activeSessionId={activeSessionId} toggleCoreMemoryEnabled={toggleCoreMemoryEnabled} updateSession={updateSession} />
+      <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} />
+
+      {/* Input Area */}
+      <ChatInputArea inputText={inputText} setInputText={setInputText} textareaRef={textareaRef} messagesEndRef={messagesEndRef} placeholderText={placeholderText} isTyping={isTyping} activeMode={activeMode} attachments={attachments} removeAttachment={removeAttachment} showUploadMenu={showUploadMenu} setShowUploadMenu={setShowUploadMenu} imageInputRef={imageInputRef} fileInputRef={fileInputRef} handleImageSelect={handleImageSelect} handleFileSelect={handleFileSelect} handleSend={handleSend} handleCancel={handleCancel} handleKeyDown={handleKeyDown} />
+    </div>
+  );
+};
