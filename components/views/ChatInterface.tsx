@@ -639,7 +639,7 @@ export const ChatInterface: React.FC = () => {
   // --- VIEW 2: SESSION LIST ---
   if (viewState === 'list') {
     return (
-      <div className="h-full bg-wade-bg-app flex flex-col overflow-hidden animate-fade-in">
+      <div className="h-full bg-wade-bg-app flex flex-col overflow-hidden animate-fade-in relative">
         <div className="w-full max-w-md mx-auto flex justify-between items-center px-6 pt-6 pb-4 shrink-0">
           <button onClick={handleBack} className="w-8 h-8 rounded-full bg-wade-bg-card shadow-sm flex items-center justify-center text-wade-text-muted hover:text-wade-accent transition-colors"><Icons.Back /></button>
           <h2 className="font-hand text-2xl text-wade-accent capitalize">{activeMode} {activeMode === 'archive' ? 'Files' : 'Threads'}</h2>
@@ -848,8 +848,9 @@ export const ChatInterface: React.FC = () => {
         </button>
       </div>
     </div>
-  </div>
-)}
-</div>
-);
-};
+    </div>
+        )}
+        
+      </div>
+    );
+  }
