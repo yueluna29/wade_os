@@ -814,9 +814,7 @@ export const ChatInterface: React.FC = () => {
 
       {/* Input Area */}
       <ChatInputArea inputText={inputText} setInputText={setInputText} textareaRef={textareaRef} messagesEndRef={messagesEndRef} placeholderText={placeholderText} isTyping={isTyping} activeMode={activeMode} attachments={attachments} removeAttachment={removeAttachment} showUploadMenu={showUploadMenu} setShowUploadMenu={setShowUploadMenu} imageInputRef={imageInputRef} fileInputRef={fileInputRef} handleImageSelect={handleImageSelect} handleFileSelect={handleFileSelect} handleSend={handleSend} handleCancel={handleCancel} handleKeyDown={handleKeyDown} />
-    </div>
-  );
-};
+    
 
 {/* Long Press Action Sheet */}
 {(actionSessionId || actionArchiveId) && (
@@ -852,3 +850,6 @@ export const ChatInterface: React.FC = () => {
     </div>
   </div>
 )}
+</div>
+);
+};
