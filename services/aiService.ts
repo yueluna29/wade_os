@@ -80,7 +80,7 @@ const generateOpenAICompatibleResponse = async (
        fullSystemPrompt += `\n\n${smsInstructions}`;
     } else {
        // Minimal Fallback just in case settings are empty
-       fullSystemPrompt += `\n\n[SMS FORMAT: Internal monologue in <think> tags first. Then split texts with |||. Short & casual.]`;
+       fullSystemPrompt += `\n\n[SMS FORMAT: Split texts with |||. Short & casual. Do NOT use <think> or <status> tags.]`;
     }
   } else {
     if (roleplayInstructions) {
@@ -287,7 +287,7 @@ export const generateTextResponse = async (
        fullSystemPrompt += `\n\n${smsInstructions}`;
     } else {
        // Minimal Fallback
-       fullSystemPrompt += `\n\n[SMS FORMAT: Internal monologue in <think> tags first. Then split texts with |||. Short & casual.]`;
+       fullSystemPrompt += `\n\n[SMS FORMAT: Split texts with |||. Short & casual. Do NOT use <think> or <status> tags.]`;
     }
   } else {
     if (roleplayInstructions) {
