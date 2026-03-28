@@ -555,7 +555,7 @@ export const ChatInterface: React.FC = () => {
     if (activeMode === 'sms') {
       setWaitingForSMS(true);
       if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
-      smsDebounceTimer.current = setTimeout(() => { setWadeStatus('typing'); setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId); }, 2000); }, 60000);
+      smsDebounceTimer.current = setTimeout(() => { setWadeStatus('typing'); setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId); }, 2000); }, 30000);
     } else {
       setIsTyping(true);
       const timer = setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId); }, 15000);
