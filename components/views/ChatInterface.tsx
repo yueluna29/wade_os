@@ -817,3 +817,38 @@ export const ChatInterface: React.FC = () => {
     </div>
   );
 };
+
+{/* Long Press Action Sheet */}
+{(actionSessionId || actionArchiveId) && (
+  <div className="absolute inset-0 z-50 flex items-end justify-center">
+    <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px] animate-fade-in" onClick={() => { setActionSessionId(null); setActionArchiveId(null); setSessionDeleteConfirm(false); setArchiveDeleteConfirm(false); }} />
+    <div className="relative w-full max-w-4xl mx-auto bg-wade-bg-card/70 backdrop-blur-2xl rounded-t-[32px] shadow-2xl border-t border-wade-accent/20 p-6 animate-slide-up">
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 bg-wade-border rounded-full opacity-50" />
+      <div className="grid grid-cols-3 gap-4 justify-items-center">
+        <button onClick={() => { if (actionSessionId) setRenamingSessionId(actionSessionId); if (actionArchiveId) setRenamingArchiveId(actionArchiveId); setActionSessionId(null); setActionArchiveId(null); }} className="flex flex-col items-center gap-2 group">
+          <div className="w-12 h-12 bg-wade-bg-app rounded-full flex items-center justify-center text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white transition-colors shadow-sm"><Icons.Edit /></div>
+          <span className="text-[10px] text-wade-text-muted">Edit Title</span>
+        </button>
+        {actionSessionId && (
+          <button onClick={() => { toggleSessionPin(actionSessionId); setActionSessionId(null); }} className="flex flex-col items-center gap-2 group">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors shadow-sm ${sessions.find(s => s.id === actionSessionId)?.isPinned ? 'bg-wade-accent text-white' : 'bg-wade-bg-app text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white'}`}><Icons.Pin /></div>
+            <span className="text-[10px] text-wade-text-muted">{sessions.find(s => s.id === actionSessionId)?.isPinned ? 'Unpin' : 'Pin'}</span>
+          </button>
+        )}
+        {actionArchiveId && (
+          <button onClick={() => { setActionArchiveId(null); }} className="flex flex-col items-center gap-2 group">
+            <div className="w-12 h-12 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white transition-colors shadow-sm"><Icons.Heart filled={false} /></div>
+            <span className="text-[10px] text-wade-text-muted">Favorite</span>
+          </button>
+        )}
+        <button onClick={() => {
+          if (actionSessionId) { if (sessionDeleteConfirm) { deleteSession(actionSessionId); setActionSessionId(null); setSessionDeleteConfirm(false); } else { setSessionDeleteConfirm(true); } }
+          if (actionArchiveId) { if (archiveDeleteConfirm) { deleteArchive(actionArchiveId); setActionArchiveId(null); setArchiveDeleteConfirm(false); } else { setArchiveDeleteConfirm(true); } }
+        }} className="flex flex-col items-center gap-2 group">
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors shadow-sm ${(sessionDeleteConfirm || archiveDeleteConfirm) ? 'bg-red-500 text-white animate-pulse' : 'bg-wade-bg-app text-red-400 group-hover:bg-red-400 group-hover:text-white'}`}>{(sessionDeleteConfirm || archiveDeleteConfirm) ? <Icons.Check /> : <Icons.Trash />}</div>
+          <span className={`text-[10px] ${(sessionDeleteConfirm || archiveDeleteConfirm) ? 'text-red-500 font-bold' : 'text-wade-text-muted'}`}>{(sessionDeleteConfirm || archiveDeleteConfirm) ? 'Confirm?' : 'Delete'}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+)}
