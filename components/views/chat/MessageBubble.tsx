@@ -85,7 +85,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const isBase64Image = msg.text.startsWith('data:image/');
 
-  const displayContent = msg.text.replace(/\|\|\|/g, '\n\n');
+  // think标签和status标签的正则
+  const displayContent = msg.text.replace(/\|\|\|/g, '\n\n').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*<status>[\s\S]*?<\/status>/gi, '').trim();
 
   const renderAttachments = () => {
     const attachments = msg.attachments || [];
@@ -119,7 +120,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               const parts = node.split(regex);
               return parts.map((part: string, i: number) =>
                 part.toLowerCase() === query.toLowerCase()
-                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', padding: '2px 4px', borderRadius: '4px', fontWeight: 'inherit' }}>{part}</mark>
+                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', padding: '2px 4px', borderRadius: '4px', fontWeight: 'inherit', color: 'inherit' }}>{part}</mark>
                   : part
               );
             }
@@ -138,7 +139,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               const parts = node.split(regex);
               return parts.map((part: string, i: number) =>
                 part.toLowerCase() === query.toLowerCase()
-                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', padding: '2px 4px', borderRadius: '4px', fontWeight: 'inherit' }}>{part}</mark>
+                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', padding: '2px 4px', borderRadius: '4px', fontWeight: 'inherit', color: 'inherit' }}>{part}</mark>
                   : part
               );
             }
@@ -251,7 +252,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 <span className="opacity-70">{formatTime(msg.timestamp)}</span>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={(e) => { e.stopPropagation(); onPlayTTS(msg.text, msg.id); }}
+                    onClick={(e) => { e.stopPropagation(); onPlayTTS(displayContent, msg.id); }}
                     className={`w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 ${
                       playingMessageId === msg.id
                         ? isPaused
@@ -266,7 +267,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   </button>
                   {msg.audioCache && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); onRegenerateTTS(msg.text, msg.id); }}
+                      onClick={(e) => { e.stopPropagation(); onRegenerateTTS(displayContent, msg.id); }}
                       className="w-5 h-5 rounded-full flex items-center justify-center text-wade-text-muted hover:bg-wade-accent-light hover:text-wade-accent hover:scale-110 transition-all duration-200"
                       title="Regenerate voice"
                     >

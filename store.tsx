@@ -51,7 +51,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     Luna: { user_type: 'Luna', display_name: 'Luna', username: 'meowgicluna', bio: '' }
   });
   
-  const [currentTab, setTab] = useState('home');
+  const [currentTab, setTabRaw] = useState(() => localStorage.getItem('wadeOS_currentTab') || 'home');
+  const setTab = (tab: string) => { localStorage.setItem('wadeOS_currentTab', tab); setTabRaw(tab); };
   const [activeMode, setMode] = useState<ChatMode>('deep');
   const [isNavHidden, setNavHidden] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);

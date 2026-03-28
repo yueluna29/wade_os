@@ -14,8 +14,8 @@ export const ConversationMapModal: React.FC<ConversationMapModalProps> = ({ show
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/20" onClick={() => setShowMap(false)} />
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-wade-bg-card/90 backdrop-blur-xl rounded-t-3xl shadow-2xl border-t border-wade-border/50 max-h-[70vh] overflow-hidden animate-slide-up">
+      <div className="absolute inset-0 z-40 bg-black/20" onClick={() => setShowMap(false)} />
+      <div className="absolute bottom-0 left-0 right-0 z-50 bg-wade-bg-card/90 backdrop-blur-xl rounded-t-3xl shadow-2xl border-t border-wade-border/50 max-h-[70vh] overflow-hidden animate-slide-up">
         <div className="p-4 border-b border-wade-border/50 flex items-center justify-between">
           <h3 className="font-bold text-wade-text-main text-sm">Conversation GPS</h3>
           <button onClick={() => setShowMap(false)} className="w-7 h-7 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors">

@@ -31,7 +31,7 @@ export const generateMinimaxTTS = async (
   config: MinimaxTTSConfig
 ): Promise<string> => {
   try {
-    const response = await fetch('https://wadeos.vercel.app/api/minimax-tts', {
+    const response = await fetch('/api/minimax-tts', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

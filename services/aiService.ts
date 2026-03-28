@@ -91,9 +91,16 @@ const generateOpenAICompatibleResponse = async (
     }
   }
 
+  // Status Tag Injection
+  if (chatMode === 'sms' || chatMode === 'deep') {
+    fullSystemPrompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag with your current emotional state. Format: <status>emoji 情绪 · 可观察的一小句描述</status>. Example: <status>😏 得意 · 嘴角压不住</status>. Keep it short, expressive, and in-character. Do NOT include quotation marks inside the tag.]`;
+  } else if (chatMode === 'roleplay') {
+    fullSystemPrompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag describing the current scene. Include: emoji + mood, location, character poses/actions, atmosphere. Example: <status>😈 兴奋 · 武器库\nWade: 擦着刀，嘴角上扬\nLuna: 靠在门框上翻白眼\n空气里弥漫着火药和墨西哥卷的味道</status>. Keep it vivid and in-character.]`;
+  }
+
   // Transform history
   const messages: any[] = [
-    { role: 'system', content: fullSystemPrompt },
+    { role: 'system', content: [{ type: 'text', text: fullSystemPrompt, cache_control: { type: 'ephemeral' } }] },
     ...history.map(h => {
       const rawParts = h.parts || []; 
       const content = rawParts.map(p => {
@@ -112,7 +119,7 @@ const generateOpenAICompatibleResponse = async (
   ];
 
   if (customPrompt && customPrompt.trim()) {
-    messages.push({ role: 'system', content: `[SPECIAL INSTRUCTIONS]\n${customPrompt}` });
+    messages.push({ role: 'system', content: [{ type: 'text', text: `[SPECIAL INSTRUCTIONS]\n${customPrompt}`, cache_control: { type: 'ephemeral' } }] });
   }
 
   messages.push({ role: 'user', content: prompt });
@@ -167,7 +174,6 @@ const generateOpenAICompatibleResponse = async (
     const thinkMatch = rawText.match(/<think>([\s\S]*?)<\/think>/i);
     if (thinkMatch) {
       thinking = thinkMatch[1].trim();
-      finalText = rawText.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
     }
 
     return { text: finalText, thinking };
@@ -292,6 +298,13 @@ export const generateTextResponse = async (
     }
   }
 
+  // Status Tag Injection
+  if (chatMode === 'sms' || chatMode === 'deep') {
+    fullSystemPrompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag with your current emotional state. Format: <status>emoji 情绪 · 可观察的一小句描述</status>. Example: <status>😏 得意 · 嘴角压不住</status>. Keep it short, expressive, and in-character. Do NOT include quotation marks inside the tag.]`;
+  } else if (chatMode === 'roleplay') {
+    fullSystemPrompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag describing the current scene. Include: emoji + mood, location, character poses/actions, atmosphere. Example: <status>😈 兴奋 · 武器库\nWade: 擦着刀，嘴角上扬\nLuna: 靠在门框上翻白眼\n空气里弥漫着火药和墨西哥卷的味道</status>. Keep it vivid and in-character.]`;
+  }
+
   const chat = ai.chats.create({
     model: modelName || 'gemini-3-flash-preview',
     config: {
@@ -327,7 +340,6 @@ export const generateTextResponse = async (
         const parts = rawText.split('</think>');
         if (parts.length > 1) {
              thinking = parts[0].replace('<think>', '').trim();
-             finalText = parts.slice(1).join('</think>').trim();
         }
     }
   }

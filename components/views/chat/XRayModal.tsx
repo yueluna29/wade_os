@@ -124,7 +124,7 @@ export const XRayModal: React.FC<XRayModalProps> = ({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-wade-bg-card p-4 rounded-2xl border border-wade-accent shadow-[0_2px_10px_-4px_rgba(213,143,153,0.2)] flex flex-col items-center justify-center text-center">
               <div className="text-wade-accent font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Active Brain</div>
-              <div className="text-sm font-black text-wade-text-main tracking-tight line-clamp-1 px-1">{currentModelName}</div>
+              <div className="text-2xl font-black text-wade-text-main tracking-tight line-clamp-1 px-1">{currentModelName}</div>
               <div className="text-[9px] text-wade-text-muted/60 mt-1 font-mono uppercase">{currentProvider}</div>
             </div>
             <div className="bg-wade-bg-card p-4 rounded-2xl border border-wade-border shadow-[0_2px_10px_-4px_rgba(213,143,153,0.1)] flex flex-col items-center justify-center text-center group hover:border-wade-accent/30 transition-colors">

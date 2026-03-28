@@ -8,6 +8,12 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/minimax-tts': {
+            target: 'https://wadeos.vercel.app',
+            changeOrigin: true,
+          }
+        }
       },
       plugins: [react()],
       define: {

@@ -23,6 +23,7 @@ import { ConversationMapModal } from './chat/ConversationMapModal';
 import { PromptEditorModal } from './chat/PromptEditorModal';
 import { MemoryModal } from './chat/MemoryModal';
 import { XRayModal } from './chat/XRayModal';
+import { ChatStatusBar } from './chat/ChatStatusBar';
 
 export const ChatInterface: React.FC = () => {
   const {
@@ -245,6 +246,14 @@ export const ChatInterface: React.FC = () => {
     displayMessages = activeSessionId ? messages.filter(m => m.sessionId === activeSessionId) : [];
   }
 
+  // 提取Wade最新状态
+  const lastWadeMsg = [...displayMessages].reverse().find(m => m.role === 'Wade');
+  let wadeStatusPanel: string | null = null;
+  if (lastWadeMsg?.text) {
+    const match = lastWadeMsg.text.match(/<status>([\s\S]*?)<\/status>/);
+    if (match) wadeStatusPanel = match[1].trim();
+  }
+
   displayMessages.sort((a, b) => {
     const timeA = Math.floor(a.timestamp / 1000);
     const timeB = Math.floor(b.timestamp / 1000);
@@ -299,7 +308,7 @@ export const ChatInterface: React.FC = () => {
     if (selectedMsg) {
       let textToCopy = selectedMsg.text;
       const idx = selectedMsg.selectedIndex || 0;
-      const thinking = selectedMsg.variantsThinking?.[idx];
+      const thinking = selectedMsg.variants?.[idx]?.thinking;
       if (thinking) textToCopy = `[Thinking]\n${thinking}\n\n[Response]\n${selectedMsg.text}`;
       navigator.clipboard.writeText(textToCopy); closeActions();
     }
@@ -414,7 +423,7 @@ export const ChatInterface: React.FC = () => {
 
       const history = historyMsgs.map(m => {
         let content = m.text;
-        if (m.role === 'Wade') { const idx = m.selectedIndex || 0; const thought = m.variantsThinking?.[idx]; if (thought) content = `<think>${thought}</think>\n${content}`; }
+        if (m.role === 'Wade') { const idx = m.selectedIndex || 0; const thought = m.variants?.[idx]?.thinking; if (thought) content = `<think>${thought}</think>\n${content}`; }
         const parts: any[] = [];
         if (content) parts.push({ text: content });
         if (m.attachments && m.attachments.length > 0) { m.attachments.forEach(att => { parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } }); }); }
@@ -461,12 +470,12 @@ export const ChatInterface: React.FC = () => {
         if (parts.length === 0) parts = ["..."];
         for (let i = 0; i < parts.length; i++) {
           setTimeout(() => {
-            addMessage({ id: Date.now().toString() + i, sessionId: targetSessionId, role: 'Wade', text: parts[i], model: currentModel, timestamp: Date.now(), mode: activeMode, variantsThinking: i === 0 && thinking ? [thinking] : [null] });
+            addMessage({ id: Date.now().toString() + i, sessionId: targetSessionId, role: 'Wade', text: parts[i], model: currentModel, timestamp: Date.now(), mode: activeMode, variants: i === 0 && thinking ? [{ text: parts[i], thinking, model: currentModel }] : [{ text: parts[i] }] });
             if (i === parts.length - 1) { setIsTyping(false); setWadeStatus('online'); setLastSentMessageId(null); setLastInputText(''); }
           }, i * 1500);
         }
       } else {
-        const botMessage: Message = { id: (Date.now() + 1).toString(), sessionId: targetSessionId, role: 'Wade', text: responseText, model: currentModel, timestamp: Date.now(), mode: activeMode, variantsThinking: [thinking || null] };
+        const botMessage: Message = { id: (Date.now() + 1).toString(), sessionId: targetSessionId, role: 'Wade', text: responseText, model: currentModel, timestamp: Date.now(), mode: activeMode, variants: [{ text: responseText, thinking: thinking || null, model: currentModel }] };
         addMessage(botMessage);
         // Auto-summary
         const currentMessages = messagesRef.current.filter(m => m.sessionId === targetSessionId);
@@ -681,16 +690,18 @@ export const ChatInterface: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-wade-bg-app relative">
       {/* Header */}
-      <div className="w-full p-4 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0">
+      <div className="w-full p-4 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0 relative">
         <button onClick={handleBack} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Back /></button>
         {activeMode === 'archive' ? (
           <div className="flex-1 flex justify-center"><div className="font-bold text-wade-text-main text-base">{activeArchiveId ? chatArchives.find(a => a.id === activeArchiveId)?.title || 'Archive' : 'Archive'}</div></div>
         ) : (activeMode === 'deep' || activeMode === 'sms') ? (
           <div className="flex-1 flex items-center gap-2 ml-2">
-            <div className="relative">
-              <img src={settings.wadeAvatar} className="w-10 h-10 rounded-full object-cover border border-wade-border shadow-md flex-shrink-0" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 border-2 border-wade-bg-card rounded-full"></div>
-            </div>
+            {activeMode === 'sms' && (
+              <div className="relative">
+                <img src={settings.wadeAvatar} className="w-10 h-10 rounded-full object-cover border border-wade-border shadow-md flex-shrink-0" />
+                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 border-2 border-wade-bg-card rounded-full"></div>
+              </div>
+            )}
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
                 <div className="font-bold text-wade-text-main text-sm">Wade</div>
@@ -709,6 +720,7 @@ export const ChatInterface: React.FC = () => {
           <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Map /></button>
           <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative"><Icons.More /></button>
         </div>
+      <ChatStatusBar statusText={wadeStatusPanel} activeMode={activeMode} />
       </div>
 
       {/* Menu Dropdown */}
@@ -721,7 +733,7 @@ export const ChatInterface: React.FC = () => {
               { icon: <Icons.Hexagon />, label: "Brain Transplant", action: () => setShowLlmSelector(!showLlmSelector) },
               { icon: <Icons.Brain />, label: "Trigger Flashbacks", action: () => { setShowMemorySelector(true); setShowMenu(false); } },
               { icon: <Icons.Fire />, label: "Add Special Sauce", action: () => { setShowPromptEditor(true); setShowMenu(false); const cs = sessions.find(s => s.id === activeSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
-              { icon: <Icons.Settings className="w-4 h-4" />, label: "Chat Theme", action: () => { setIsThemeStudioOpen(true); setShowMenu(false); } },
+              { icon: <Icons.Skin />, label: "Chat Theme", action: () => { setIsThemeStudioOpen(true); setShowMenu(false); } },
               { icon: <Icons.Bug />, label: "X-Ray Vision", action: () => { setShowDebug(true); setShowMenu(false); } },
             ].map((item, i) => (
               <button key={i} onClick={item.action} className="w-full text-left px-3 py-2 rounded-lg hover:bg-wade-bg-card/60 transition-colors text-wade-text-main text-[11px] flex items-center gap-2.5 whitespace-nowrap">
@@ -748,8 +760,9 @@ export const ChatInterface: React.FC = () => {
           {displayMessages.map((msg, idx) => {
             let marginBottom = 'mb-6';
             const nextMsg = displayMessages[idx + 1];
-            if (activeMode === 'sms') { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-1' : 'mb-4'; }
-            else { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-2' : 'mb-6'; }
+            // 控制气泡间距
+            if (activeMode === 'sms') { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-0' : 'mb-2'; }
+            else { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-1' : 'mb-0.5'; }
             const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
             return (
               <div key={msg.id} id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
