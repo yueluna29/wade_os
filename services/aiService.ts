@@ -282,7 +282,7 @@ export const generateTextResponse = async (
   }
 
   // CoT Injection (Clean Version - No Duplicate Text)
-  if (chatMode === 'sms') {
+  if (chatMode === 'deep') {
     if (smsInstructions) {
        fullSystemPrompt += `\n\n${smsInstructions}`;
     } else {
@@ -299,7 +299,7 @@ export const generateTextResponse = async (
   }
 
   // Status Tag Injection
-  if (chatMode === 'sms' || chatMode === 'deep') {
+  if (chatMode === 'deep') {
     fullSystemPrompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag with your current emotional state. Format: <status>emoji 情绪 · 可观察的一小句描述</status>. Example: <status>😏 得意 · 嘴角压不住</status>. Keep it short, expressive, and in-character. Do NOT include quotation marks inside the tag.]`;
   } else if (chatMode === 'roleplay') {
     fullSystemPrompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag describing the current scene. Include: emoji + mood, location, character poses/actions, atmosphere. Example: <status>😈 兴奋 · 武器库\nWade: 擦着刀，嘴角上扬\nLuna: 靠在门框上翻白眼\n空气里弥漫着火药和墨西哥卷的味道</status>. Keep it vivid and in-character.]`;
