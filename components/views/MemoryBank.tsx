@@ -297,7 +297,7 @@ export const MemoryBank: React.FC = () => {
                          </h4>
                       </div>
                       <div className="flex flex-wrap gap-1 mb-2">
-                        {mem.tags && mem.tags.map(tag => (
+                        {mem.tags && (Array.isArray(mem.tags) ? mem.tags : []).map(tag => (
                           <span key={tag} className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-wade-accent-light text-wade-accent">
                             #{tag}
                           </span>
