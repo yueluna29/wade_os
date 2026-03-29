@@ -1,5 +1,3 @@
-
-
 export type ChatMode = 'deep' | 'sms' | 'roleplay' | 'archive'; // Added 'archive' for UI routing
 
 export interface UserPersona {
@@ -247,6 +245,49 @@ export interface AppSettings {
   contextLimit?: number; // Added for configurable context length
 }
 
+// --- 角色卡仓库 ---
+export interface PersonaCardData {
+  // Wade 专属字段
+  global_directives?: string;
+  core_identity?: string;
+  appearance?: string;
+  clothing?: string;
+  likes?: string;
+  dislikes?: string;
+  hobbies?: string;
+  birthday?: string;
+  mbti?: string;
+  height?: string;
+  avatar_url?: string;
+  example_dialogue_general?: string;
+  example_punchlines?: string;
+  example_dialogue_sms?: string;
+  sms_mode_rules?: string;
+  rp_mode_rules?: string;
+  // 可以随时加新字段，jsonb 不需要改表结构
+  [key: string]: string | undefined;
+}
+ 
+export interface PersonaCard {
+  id: string;
+  name: string;
+  character: 'Wade' | 'Luna';
+  description: string;
+  cardData: PersonaCardData;
+  isDefault: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+ 
+// --- 功能绑定 ---
+export interface FunctionBinding {
+  id: string;
+  functionKey: string;
+  label: string;
+  personaCardId?: string;
+  llmPresetId?: string;
+}
+
 // Global State Context Interface
 export interface GlobalState {
   currentTab: string;
@@ -338,4 +379,20 @@ export interface GlobalState {
   // 参谋新增：获取和更新身份卡
   profiles: { Wade: UserProfile; Luna: UserProfile };
   updateProfile: (user: 'Wade' | 'Luna', data: Partial<UserProfile>) => Promise<void>;
+
+// --- 角色卡仓库 ---
+personaCards: PersonaCard[];
+addPersonaCard: (card: Omit<PersonaCard, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+updatePersonaCard: (id: string, updates: Partial<Omit<PersonaCard, 'id' | 'createdAt'>>) => Promise<void>;
+deletePersonaCard: (id: string) => Promise<void>;
+duplicatePersonaCard: (id: string) => Promise<string>;
+setDefaultPersonaCard: (id: string) => Promise<void>;
+getDefaultPersonaCard: (character: 'Wade' | 'Luna') => PersonaCard | undefined;
+
+// --- 功能绑定 ---
+functionBindings: FunctionBinding[];
+updateFunctionBinding: (functionKey: string, updates: Partial<FunctionBinding>) => Promise<void>;
+addFunctionBinding: (functionKey: string, label: string) => Promise<void>;
+deleteFunctionBinding: (functionKey: string) => Promise<void>;
+getBinding: (functionKey: string) => { personaCard?: PersonaCard; llmPreset?: LlmPreset } | null;
 }

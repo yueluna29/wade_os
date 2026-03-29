@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AppSettings, GlobalState, Message, SocialPost, Memo, TimeCapsuleItem, Recommendation, ChatMode, LlmPreset, TtsPreset, ChatSession, CoreMemory, ChatArchive, ArchiveMessage, UserProfile } from './types';
+import { AppSettings, GlobalState, Message, SocialPost, Memo, TimeCapsuleItem, Recommendation, ChatMode, LlmPreset, TtsPreset, ChatSession, CoreMemory, ChatArchive, ArchiveMessage, UserProfile, PersonaCard, PersonaCardData, FunctionBinding } from './types';
 import { supabase } from './services/supabase';
 
 const defaultSettings: AppSettings = {
@@ -50,6 +50,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     Wade: { user_type: 'Wade', display_name: 'Wade Wilson', username: 'chimichangapapi', bio: '' },
     Luna: { user_type: 'Luna', display_name: 'Luna', username: 'meowgicluna', bio: '' }
   });
+
+  const [personaCards, setPersonaCards] = useState<PersonaCard[]>([]);
+  const [functionBindings, setFunctionBindings] = useState<FunctionBinding[]>([]);
   
   const [currentTab, setTabRaw] = useState(() => localStorage.getItem('wadeOS_currentTab') || 'home');
   const setTab = (tab: string) => { localStorage.setItem('wadeOS_currentTab', tab); setTabRaw(tab); };
@@ -415,6 +418,43 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             }
         };
         fetchProfiles();
+
+        const fetchPersonaCards = async () => {
+          const { data, error } = await supabase
+            .from('persona_cards')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (data && !error) {
+            setPersonaCards(data.map(c => ({
+              id: c.id,
+              name: c.name,
+              character: c.character as 'Wade' | 'Luna',
+              description: c.description || '',
+              cardData: (typeof c.card_data === 'string' ? JSON.parse(c.card_data) : c.card_data) || {},
+              isDefault: c.is_default || false,
+              createdAt: new Date(c.created_at).getTime(),
+              updatedAt: new Date(c.updated_at).getTime()
+            })));
+          }
+        };
+        fetchPersonaCards();
+ 
+        const fetchFunctionBindings = async () => {
+          const { data, error } = await supabase
+            .from('function_bindings')
+            .select('*')
+            .order('created_at', { ascending: true });
+          if (data && !error) {
+            setFunctionBindings(data.map(b => ({
+              id: b.id,
+              functionKey: b.function_key,
+              label: b.label || b.function_key,
+              personaCardId: b.persona_card_id,
+              llmPresetId: b.llm_preset_id
+            })));
+          }
+        };
+        fetchFunctionBindings();
 
       } catch (err: any) {
         console.error("Supabase Sync Failed:", err);
@@ -999,6 +1039,141 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     await supabase.from('recommendations').delete().eq('id', id);
   };
 
+    // ========== 角色卡 CRUD ==========
+ 
+    const addPersonaCard = async (card: Omit<PersonaCard, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+      const { data, error } = await supabase.from('persona_cards').insert({
+        name: card.name,
+        character: card.character,
+        description: card.description,
+        card_data: card.cardData,
+        is_default: card.isDefault
+      }).select().single();
+   
+      if (error || !data) {
+        console.error("角色卡创建失败:", error);
+        return '';
+      }
+   
+      const newCard: PersonaCard = {
+        id: data.id,
+        name: data.name,
+        character: data.character,
+        description: data.description || '',
+        cardData: data.card_data || {},
+        isDefault: data.is_default,
+        createdAt: new Date(data.created_at).getTime(),
+        updatedAt: new Date(data.updated_at).getTime()
+      };
+      setPersonaCards(prev => [newCard, ...prev]);
+      return data.id;
+    };
+   
+    const updatePersonaCard = async (id: string, updates: Partial<Omit<PersonaCard, 'id' | 'createdAt'>>) => {
+      const dbUpdates: any = { updated_at: new Date().toISOString() };
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.character !== undefined) dbUpdates.character = updates.character;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.cardData !== undefined) dbUpdates.card_data = updates.cardData;
+      if (updates.isDefault !== undefined) dbUpdates.is_default = updates.isDefault;
+   
+      await supabase.from('persona_cards').update(dbUpdates).eq('id', id);
+      setPersonaCards(prev => prev.map(c => c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c));
+    };
+   
+    const deletePersonaCard = async (id: string) => {
+      await supabase.from('persona_cards').delete().eq('id', id);
+      setPersonaCards(prev => prev.filter(c => c.id !== id));
+    };
+   
+    const duplicatePersonaCard = async (id: string): Promise<string> => {
+      const original = personaCards.find(c => c.id === id);
+      if (!original) return '';
+      return addPersonaCard({
+        name: `${original.name} (Copy)`,
+        character: original.character,
+        description: original.description,
+        cardData: { ...original.cardData },
+        isDefault: false
+      });
+    };
+   
+    const setDefaultPersonaCard = async (id: string) => {
+      const card = personaCards.find(c => c.id === id);
+      if (!card) return;
+   
+      // 先把同角色的其他卡都取消默认
+      const sameCharCards = personaCards.filter(c => c.character === card.character && c.id !== id);
+      for (const c of sameCharCards) {
+        if (c.isDefault) {
+          await supabase.from('persona_cards').update({ is_default: false }).eq('id', c.id);
+        }
+      }
+      // 再把目标卡设为默认
+      await supabase.from('persona_cards').update({ is_default: true }).eq('id', id);
+      
+      setPersonaCards(prev => prev.map(c => {
+        if (c.character === card.character) {
+          return { ...c, isDefault: c.id === id };
+        }
+        return c;
+      }));
+    };
+   
+    const getDefaultPersonaCard = (character: 'Wade' | 'Luna'): PersonaCard | undefined => {
+      return personaCards.find(c => c.character === character && c.isDefault);
+    };
+   
+    // ========== 功能绑定 CRUD ==========
+   
+    const updateFunctionBinding = async (functionKey: string, updates: Partial<FunctionBinding>) => {
+      const dbUpdates: any = { updated_at: new Date().toISOString() };
+      if (updates.label !== undefined) dbUpdates.label = updates.label;
+      if (updates.personaCardId !== undefined) dbUpdates.persona_card_id = updates.personaCardId || null;
+      if (updates.llmPresetId !== undefined) dbUpdates.llm_preset_id = updates.llmPresetId || null;
+   
+      await supabase.from('function_bindings').update(dbUpdates).eq('function_key', functionKey);
+      setFunctionBindings(prev => prev.map(b => b.functionKey === functionKey ? { ...b, ...updates } : b));
+    };
+   
+    const addFunctionBinding = async (functionKey: string, label: string) => {
+      const { data, error } = await supabase.from('function_bindings').insert({
+        function_key: functionKey,
+        label: label
+      }).select().single();
+   
+      if (data && !error) {
+        setFunctionBindings(prev => [...prev, {
+          id: data.id,
+          functionKey: data.function_key,
+          label: data.label,
+          personaCardId: data.persona_card_id,
+          llmPresetId: data.llm_preset_id
+        }]);
+      }
+    };
+   
+    const deleteFunctionBinding = async (functionKey: string) => {
+      await supabase.from('function_bindings').delete().eq('function_key', functionKey);
+      setFunctionBindings(prev => prev.filter(b => b.functionKey !== functionKey));
+    };
+   
+    // 🔥 这个是最关键的函数：根据功能名查绑定，返回角色卡+LLM配置
+    const getBinding = (functionKey: string): { personaCard?: PersonaCard; llmPreset?: LlmPreset } | null => {
+      const binding = functionBindings.find(b => b.functionKey === functionKey);
+      if (!binding) return null;
+   
+      const personaCard = binding.personaCardId 
+        ? personaCards.find(c => c.id === binding.personaCardId)
+        : getDefaultPersonaCard('Wade'); // fallback 到默认卡
+   
+      const llmPreset = binding.llmPresetId
+        ? llmPresets.find(p => p.id === binding.llmPresetId)
+        : llmPresets.find(p => p.id === settings.activeLlmId); // fallback 到当前激活的LLM
+   
+      return { personaCard, llmPreset };
+    };
+
   return (
     <StoreContext.Provider value={{
       currentTab, setTab, settings, updateSettings,
@@ -1012,7 +1187,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       recommendations, addRecommendation, updateRecommendation, deleteRecommendation,
       coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled,
       chatArchives, importArchive, loadArchiveMessages, updateArchiveTitle, updateArchiveMessage, deleteArchive, deleteArchiveMessage, toggleArchiveFavorite,
-      activeMode, setMode, isNavHidden, setNavHidden, syncError, profiles, updateProfile
+      activeMode, setMode, isNavHidden, setNavHidden, syncError, profiles, updateProfile,
+      personaCards, addPersonaCard, updatePersonaCard, deletePersonaCard, 
+      duplicatePersonaCard, setDefaultPersonaCard, getDefaultPersonaCard,
+      functionBindings, updateFunctionBinding, addFunctionBinding, deleteFunctionBinding, getBinding,
     }}>
       {children}
     </StoreContext.Provider>

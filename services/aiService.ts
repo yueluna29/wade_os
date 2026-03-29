@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
-import { CoreMemory } from "../types";
+import { CoreMemory, PersonaCardData } from "../types";
 
 const getClient = (apiKey?: string) => {
   const key = apiKey || process.env.VITE_GEMINI_API_KEY;
@@ -7,6 +7,332 @@ const getClient = (apiKey?: string) => {
     throw new Error("Gemini API Key not found. Please set VITE_GEMINI_API_KEY or provide apiKey parameter.");
   }
   return new GoogleGenAI({ apiKey: key });
+};
+
+// =============================================
+// 🔥 角色卡 → XML Prompt 构建器
+// =============================================
+ 
+/**
+ * 把角色卡的 jsonb 数据转换成 XML 格式的 prompt 片段
+ * 这是 AI 最容易理解的格式
+ */
+export const cardDataToXML = (cardData: PersonaCardData, character: 'Wade' | 'Luna'): string => {
+  const tag = character.toLowerCase();
+  const lines: string[] = [];
+ 
+  lines.push(`<${tag}_identity>`);
+ 
+  // 遍历 cardData 里所有非空字段，自动生成 XML 标签
+  const fieldLabels: Record<string, string> = {
+    core_identity: 'core_identity',
+    appearance: 'appearance',
+    clothing: 'clothing',
+    likes: 'likes',
+    dislikes: 'dislikes',
+    hobbies: 'hobbies',
+    birthday: 'birthday',
+    mbti: 'mbti',
+    height: 'height',
+  };
+ 
+  for (const [key, xmlTag] of Object.entries(fieldLabels)) {
+    const value = cardData[key];
+    if (value && value.trim()) {
+      lines.push(`  <${xmlTag}>${value.trim()}</${xmlTag}>`);
+    }
+  }
+ 
+  lines.push(`</${tag}_identity>`);
+ 
+  return lines.join('\n');
+};
+ 
+/**
+ * 从角色卡构建完整的 system prompt
+ * 替代之前的十几个散装参数拼接
+ */
+export const buildSystemPromptFromCard = (options: {
+  wadeCard?: PersonaCardData;
+  lunaCard?: PersonaCardData;
+  chatMode: 'deep' | 'sms' | 'roleplay';
+  coreMemories?: CoreMemory[];
+  isRetry?: boolean;
+  customPrompt?: string;
+  formattedHistory?: any[]; // 只有 sms retry 时需要
+}): string => {
+  const { wadeCard, lunaCard, chatMode, coreMemories, isRetry, formattedHistory } = options;
+ 
+  let prompt = '';
+ 
+  // 1. 全局系统指令（如果角色卡里有）
+  if (wadeCard?.global_directives?.trim()) {
+    prompt += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${wadeCard.global_directives.trim()}`;
+  }
+ 
+  // 2. Wade 的身份（XML 格式）
+  if (wadeCard?.core_identity?.trim()) {
+    prompt += `\n\n[CHARACTER PERSONA]\n`;
+    prompt += cardDataToXML(wadeCard, 'Wade');
+  }
+ 
+  // 3. Luna 的身份（XML 格式）
+  if (lunaCard?.core_identity?.trim()) {
+    prompt += `\n\n[USER IDENTITY]\n`;
+    prompt += cardDataToXML(lunaCard, 'Luna');
+  }
+ 
+  // 4. 示例对话（根据模式选择）
+  if (wadeCard?.example_punchlines?.trim()) {
+    prompt += `\n\n[WADE'S STYLE - SINGLE LINE EXAMPLES]\n${wadeCard.example_punchlines.trim()}`;
+  }
+ 
+  if (chatMode === 'sms' && wadeCard?.example_dialogue_sms?.trim()) {
+    prompt += `\n\n[SMS MODE EXAMPLES - MIMIC THIS FORMAT EXACTLY]\n${wadeCard.example_dialogue_sms.trim()}`;
+  } else if (wadeCard?.example_dialogue_general?.trim()) {
+    prompt += `\n\n[EXAMPLE DIALOGUE - MIMIC THIS STYLE]\n${wadeCard.example_dialogue_general.trim()}`;
+  }
+ 
+  // 5. 长期记忆
+  if (coreMemories && coreMemories.length > 0) {
+    const activeMemories = coreMemories.filter(m => m.isActive).map(m => `- ${m.content}`).join('\n');
+    if (activeMemories) {
+      prompt += `\n\n[LONG TERM MEMORY BANK - FACTS YOU MUST REMEMBER]\n${activeMemories}\n[END MEMORIES]`;
+    }
+  }
+ 
+  // 6. 重试提示
+  if (isRetry) {
+    if (chatMode === 'sms') {
+      prompt += `\n\n[SYSTEM UPDATE: The user hit 'Regenerate' on your last text. Try again. SHORT response.]`;
+      
+      // SMS 重试时的上下文提取
+      if (formattedHistory) {
+        let recentContext = "";
+        for (let i = formattedHistory.length - 1; i >= 0; i--) {
+          if (formattedHistory[i].role === 'model' || formattedHistory[i].role === 'assistant') {
+            const text = formattedHistory[i].parts?.[0]?.text || formattedHistory[i].content || '';
+            recentContext = text + " ||| " + recentContext;
+          } else {
+            break;
+          }
+        }
+        if (recentContext) {
+          prompt += `\n\n[CONTEXT: You have just sent this sequence of texts: "${recentContext}". Regenerate the FINAL part only.]`;
+        }
+      }
+    } else {
+      prompt += `\n\n[SYSTEM UPDATE: The user REJECTED your last response. Provide a NEW, better response.]`;
+    }
+  }
+ 
+  // 7. 模式专属规则
+  if (chatMode === 'sms') {
+    const smsRules = wadeCard?.sms_mode_rules?.trim();
+    prompt += smsRules
+      ? `\n\n${smsRules}`
+      : `\n\n[SMS FORMAT: Split texts with |||. Short & casual.]`;
+  } else if (chatMode === 'roleplay') {
+    const rpRules = wadeCard?.rp_mode_rules?.trim();
+    prompt += rpRules
+      ? `\n\n${rpRules}`
+      : `\n\n[OUTPUT FORMAT: Internal monologue in <think> tags first. Then immersive response.]`;
+  } else {
+    // deep 模式：如果有 RP 规则也加上（因为 deep 模式也需要 CoT）
+    const rpRules = wadeCard?.rp_mode_rules?.trim();
+    if (rpRules) {
+      prompt += `\n\n${rpRules}`;
+    }
+  }
+ 
+  // 8. 状态栏注入
+  if (chatMode === 'sms' || chatMode === 'deep') {
+    prompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag with your current emotional state. Format: <status>emoji 情绪 · 可观察的一小句描述</status>. Example: <status>😏 得意 · 嘴角压不住</status>. Keep it short, expressive, and in-character. Do NOT include quotation marks inside the tag.]`;
+  } else if (chatMode === 'roleplay') {
+    prompt += `\n\n[STATUS FORMAT: Before your response, add a <status> tag describing the current scene. Include: emoji + mood, location, character poses/actions, atmosphere. Example: <status>😈 兴奋 · 武器库\nWade: 擦着刀，嘴角上扬\nLuna: 靠在门框上翻白眼\n空气里弥漫着火药和墨西哥卷的味道</status>. Keep it vivid and in-character.]`;
+  }
+ 
+  return prompt;
+};
+ 
+/**
+ * 🔥 新的统一入口：用角色卡 + LLM 配置发送请求
+ * 
+ * 用法示例（在 ChatInterface 里）：
+ * 
+ *   const binding = getBinding('chat_deep');
+ *   const result = await generateFromCard({
+ *     wadeCard: binding.personaCard?.cardData,
+ *     lunaCard: getDefaultPersonaCard('Luna')?.cardData,
+ *     chatMode: 'deep',
+ *     prompt: userMessage,
+ *     history: conversationHistory,
+ *     coreMemories: activeCoreMemories,
+ *     llmPreset: binding.llmPreset,
+ *     customPrompt: session.customPrompt,
+ *   });
+ */
+export const generateFromCard = async (config: {
+  wadeCard?: PersonaCardData;
+  lunaCard?: PersonaCardData;
+  chatMode: 'deep' | 'sms' | 'roleplay';
+  prompt: string;
+  history: { role: string; parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] }[];
+  coreMemories?: CoreMemory[];
+  isRetry?: boolean;
+  customPrompt?: string;
+  llmPreset?: {
+    provider: string;
+    model: string;
+    apiKey: string;
+    baseUrl: string;
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    isVision?: boolean;
+    isImageGen?: boolean;
+  };
+}): Promise<GeminiResponse> => {
+ 
+  const { wadeCard, lunaCard, chatMode, prompt, history, coreMemories, isRetry, customPrompt, llmPreset } = config;
+ 
+  if (!llmPreset) {
+    throw new Error("No LLM preset provided. Configure a brain in Mission Control!");
+  }
+ 
+  // 用新的构建器生成 system prompt
+  const systemPrompt = buildSystemPromptFromCard({
+    wadeCard,
+    lunaCard,
+    chatMode,
+    coreMemories,
+    isRetry,
+    customPrompt,
+  });
+ 
+  const isGemini = !llmPreset.baseUrl || llmPreset.baseUrl.includes('google');
+ 
+  if (isGemini) {
+    // === Gemini 路径 ===
+    const ai = getClient(llmPreset.apiKey);
+    
+    const formattedHistory = history.map(h => ({
+      role: h.role === 'Luna' ? 'user' : (h.role === 'Wade' ? 'model' : 'user'),
+      parts: h.parts
+    }));
+ 
+    const chat = ai.chats.create({
+      model: llmPreset.model || 'gemini-3-flash-preview',
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: llmPreset.temperature,
+        topP: llmPreset.topP,
+        topK: llmPreset.topK,
+        frequencyPenalty: llmPreset.frequencyPenalty,
+        presencePenalty: llmPreset.presencePenalty,
+      },
+      history: formattedHistory
+    });
+ 
+    let finalPrompt = prompt;
+    if (customPrompt?.trim()) {
+      finalPrompt = `[SPECIAL INSTRUCTIONS FOR THIS CONVERSATION - HIGHEST PRIORITY]\n${customPrompt}\n[FOLLOW THESE INSTRUCTIONS CAREFULLY]\n\n${prompt}`;
+    }
+ 
+    const result = await chat.sendMessage({ message: finalPrompt });
+    const rawText = result.text || "";
+ 
+    return parseThinking(rawText);
+ 
+  } else {
+    // === OpenAI 兼容路径 (OpenRouter, DeepSeek, Claude 等) ===
+    const messages: any[] = [
+      { role: 'system', content: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }] },
+      ...history.map(h => {
+        const rawParts = h.parts || [];
+        const content = rawParts.map(p => {
+          if (!p) return null;
+          if (typeof p === 'string') return { type: 'text', text: p };
+          if ('text' in p) return { type: 'text', text: p.text || "..." };
+          if ('inlineData' in p) return { type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } };
+          return null;
+        }).filter(Boolean);
+ 
+        if (content.length === 0) return { role: h.role === 'Luna' ? 'user' : 'assistant', content: "..." };
+        if (content.length === 1 && content[0]?.type === 'text') return { role: h.role === 'Luna' ? 'user' : 'assistant', content: content[0].text };
+        return { role: h.role === 'Luna' ? 'user' : 'assistant', content };
+      })
+    ];
+ 
+    if (customPrompt?.trim()) {
+      messages.push({ role: 'system', content: [{ type: 'text', text: `[SPECIAL INSTRUCTIONS]\n${customPrompt}`, cache_control: { type: 'ephemeral' } }] });
+    }
+ 
+    messages.push({ role: 'user', content: prompt });
+ 
+    const requestBody: any = {
+      model: llmPreset.model,
+      messages,
+    };
+ 
+    if (llmPreset.isImageGen) requestBody.modalities = ["image", "text"];
+ 
+    if (!llmPreset.isImageGen) {
+      if (llmPreset.temperature !== undefined) requestBody.temperature = llmPreset.temperature;
+      if (llmPreset.topP !== undefined) requestBody.top_p = llmPreset.topP;
+      if (llmPreset.frequencyPenalty !== undefined) requestBody.frequency_penalty = llmPreset.frequencyPenalty;
+      if (llmPreset.presencePenalty !== undefined) requestBody.presence_penalty = llmPreset.presencePenalty;
+    }
+ 
+    const url = `${llmPreset.baseUrl}/chat/completions`;
+ 
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${llmPreset.apiKey}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+ 
+    if (!response.ok) {
+      let errorDetails = `Status ${response.status}`;
+      try { const errorData = await response.json(); errorDetails = errorData.error?.message || JSON.stringify(errorData); } catch (e) {}
+      throw new Error(`API Error: ${errorDetails}`);
+    }
+ 
+    const data = await response.json();
+    const message = data.choices?.[0]?.message;
+ 
+    if (llmPreset.isImageGen && message?.images?.length > 0) {
+      const imageUrl = message.images[0].image_url?.url;
+      if (imageUrl) return { text: imageUrl, thinking: undefined };
+    }
+ 
+    return parseThinking(message?.content || "");
+  }
+};
+ 
+/** 通用的 thinking 标签解析 */
+const parseThinking = (rawText: string): GeminiResponse => {
+  let thinking: string | undefined = undefined;
+  let finalText = rawText;
+ 
+  const thinkMatch = rawText.match(/<think>([\s\S]*?)<\/think>/i);
+  if (thinkMatch) {
+    thinking = thinkMatch[1].trim();
+    finalText = rawText.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+  } else if (rawText.trim().startsWith('<think>')) {
+    const parts = rawText.split('</think>');
+    if (parts.length > 1) {
+      thinking = parts[0].replace('<think>', '').trim();
+      finalText = parts.slice(1).join('</think>').trim();
+    }
+  }
+ 
+  return { text: finalText, thinking };
 };
 
 // Response interface to handle both text and thinking

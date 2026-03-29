@@ -3,6 +3,7 @@ import { useStore } from '../../store';
 import { GoogleGenAI } from "@google/genai";
 import { generateMinimaxTTS } from "../../services/minimaxService";
 import { Icons } from '../ui/Icons';
+import { FunctionBindings } from '../views/persona/FunctionBindings';
 
 // Provider Presets
 const PROVIDERS = [
@@ -419,6 +420,8 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             <p className="text-[9px] text-wade-text-muted/60 mt-2 text-right">0s = Instant reply</p>
           </div>
         </div>
+
+        <FunctionBindings />
 
         {/* Network Status */}
         <div className="mt-8 border-t border-wade-border pt-6 text-center">
