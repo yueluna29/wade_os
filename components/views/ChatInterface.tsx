@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { Button } from '../ui/Button';
 import { Icons } from '../ui/Icons';
-import { generateTextResponse, generateTTS, generateChatTitle } from '../../services/aiService';
+import { generateTextResponse, generateTTS, generateChatTitle, generateFromCard } from '../../services/aiService';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
 import { ThemeStudio } from '../views/ThemeStudio';
@@ -32,7 +32,8 @@ export const ChatInterface: React.FC = () => {
     addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
     coreMemories, toggleCoreMemoryEnabled, llmPresets, ttsPresets,
     chatArchives, loadArchiveMessages, deleteArchiveMessage, toggleArchiveFavorite, updateArchiveMessage,
-    importArchive, deleteArchive, updateArchiveTitle
+    importArchive, deleteArchive, updateArchiveTitle,
+    getBinding, getDefaultPersonaCard, personaCards,
   } = useStore();
 
   // Session Summary
@@ -410,7 +411,7 @@ export const ChatInterface: React.FC = () => {
   const canBranch = !!selectedMsg && activeMode !== 'sms' && activeMode !== 'archive';
 
   // === TRIGGER AI RESPONSE (原版忠实保留) ===
-  const triggerAIResponse = async (targetSessionId: string, regenMsgId?: string) => {
+  const triggerAIResponse = async (targetSessionId: string, regenMsgId?: string, savedPrompt?: string) => {
     abortControllerRef.current = new AbortController();
     if (regenMsgId) { setRegenerating(regenMsgId, true); setWadeStatus('typing'); }
     else { setIsTyping(true); setWaitingForSMS(false); if (activeMode === 'deep' || activeMode === 'roleplay') setWadeStatus('typing'); }
@@ -432,31 +433,41 @@ export const ChatInterface: React.FC = () => {
         return { role: m.role, parts: parts };
       }).slice(-(settings.contextLimit || 50));
 
-      let modePrompt = settings.wadePersonality;
-      if (sessionSummary) modePrompt = `[PREVIOUS CONVERSATION SUMMARY]\n${sessionSummary}\n[END SUMMARY]\n\n${modePrompt}`;
-      if (activeMode === 'sms') modePrompt += "\n\n[SMS MODE RULES - STRICT]\n- You are texting on a phone. NO actions (*asterisks*), NO narration.\n- Write ONLY text messages.\n- Keep it SHORT (1-2 sentences per bubble).\n- Use emojis naturally.\n- IMPORTANT: You MUST split your reply into MULTIPLE separate text bubbles by using ||| as the separator.\n- Example: \"Hey babe! 😘 ||| Miss me already? ||| I'm coming over.\"\n- IF YOU DO NOT USE |||, THE USER CANNOT SEE YOUR MESSAGE.";
-      else if (activeMode === 'roleplay') modePrompt += "\n\n[ROLEPLAY MODE RULES]\n- Write detailed, descriptive responses\n- Include actions in *asterisks*\n- Be immersive and narrative";
-
       const isRegeneration = !!regenMsgId;
       const currentSession = sessions.find(s => s.id === targetSessionId);
-      const effectiveLlmId = currentSession?.customLlmId || settings.activeLlmId;
+ 
+      // 🔥 新：通过 function_bindings 查角色卡 + LLM
+      const modeKey = activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep';
+      const binding = getBinding(modeKey);
+      
+      // LLM：优先用 session 自定义的 > binding 绑定的 > 全局默认的
+      const effectiveLlmId = currentSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
       const activeLlm = effectiveLlmId ? llmPresets.find(p => p.id === effectiveLlmId) : null;
-      const apiKey = activeLlm?.apiKey;
-      if (!apiKey) throw new Error("No API Key configured. Please set up a Gemini API in Settings.");
-
+      if (!activeLlm?.apiKey) throw new Error("No API Key configured. Please set up an API in Settings.");
+ 
+      // 记忆
       const safeMemories = Array.isArray(coreMemories) ? coreMemories : [];
-      const sessionMemories = currentSession?.activeMemoryIds ? safeMemories.filter(m => currentSession.activeMemoryIds!.includes(m.id)) : safeMemories.filter(m => m.enabled);
-
-      const response = await generateTextResponse(
-        activeLlm?.model || (activeMode === 'roleplay' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview'),
-        activeMode === 'sms' ? " (Reply to the latest texts)" : inputText || "...",
-        history, settings.systemInstruction, modePrompt, settings.lunaInfo,
-        settings.wadeSingleExamples, settings.smsExampleDialogue, settings.smsInstructions,
-        settings.roleplayInstructions, settings.exampleDialogue, sessionMemories,
-        isRegeneration, activeMode as any, apiKey,
-        activeLlm ? { temperature: activeLlm.temperature, topP: activeLlm.topP, topK: activeLlm.topK, frequencyPenalty: activeLlm.frequencyPenalty, presencePenalty: activeLlm.presencePenalty } : undefined,
-        currentSession?.customPrompt, activeLlm?.baseUrl, activeLlm?.isImageGen
-      );
+      const sessionMemories = currentSession?.activeMemoryIds 
+        ? safeMemories.filter(m => currentSession.activeMemoryIds!.includes(m.id)) 
+        : safeMemories.filter(m => m.enabled);
+ 
+      // 角色卡：优先用 binding 绑定的，fallback 到默认卡
+      const wadeCard = binding?.personaCard?.cardData || getDefaultPersonaCard('Wade')?.cardData;
+      const lunaCard = getDefaultPersonaCard('Luna')?.cardData;
+ 
+      // 🔥 用新的 generateFromCard 统一入口！
+      const response = await generateFromCard({
+        wadeCard,
+        lunaCard,
+        chatMode: activeMode as 'deep' | 'sms' | 'roleplay',
+        prompt: activeMode === 'sms' ? " (Reply to the latest texts)" : savedPrompt || inputText || "...",
+        history,
+        coreMemories: sessionMemories,
+        isRetry: isRegeneration,
+        sessionSummary,
+        customPrompt: currentSession?.customPrompt,
+        llmPreset: activeLlm,
+      });
 
       const responseText = response.text;
       const thinking = response.thinking;
@@ -555,10 +566,10 @@ export const ChatInterface: React.FC = () => {
     if (activeMode === 'sms') {
       setWaitingForSMS(true);
       if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
-      smsDebounceTimer.current = setTimeout(() => { setWadeStatus('typing'); setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId); }, 2000); }, 30000);
+      smsDebounceTimer.current = setTimeout(() => { setWadeStatus('typing'); setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput); }, 2000); }, 30000);
     } else {
       setIsTyping(true);
-      const timer = setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId); }, 15000);
+      const timer = setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput); }, 15000);
       setDelayTimer(timer);
     }
   };

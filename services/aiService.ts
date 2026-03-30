@@ -58,6 +58,7 @@ export const buildSystemPromptFromCard = (options: {
   chatMode: 'deep' | 'sms' | 'roleplay';
   coreMemories?: CoreMemory[];
   isRetry?: boolean;
+  sessionSummary?: string;      // ← 加这一行，buildSystemPromptFromCard 也需要接收这个参数。
   customPrompt?: string;
   formattedHistory?: any[]; // 只有 sms retry 时需要
 }): string => {
@@ -80,6 +81,11 @@ export const buildSystemPromptFromCard = (options: {
   if (lunaCard?.core_identity?.trim()) {
     prompt += `\n\n[USER IDENTITY]\n`;
     prompt += cardDataToXML(lunaCard, 'Luna');
+  }
+
+  // 3.5 对话摘要
+  if (options.sessionSummary) {
+    prompt += `\n\n[PREVIOUS CONVERSATION SUMMARY]\n${options.sessionSummary}\n[END SUMMARY]`;
   }
  
   // 4. 示例对话（根据模式选择）
@@ -180,6 +186,7 @@ export const generateFromCard = async (config: {
   history: { role: string; parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] }[];
   coreMemories?: CoreMemory[];
   isRetry?: boolean;
+  sessionSummary?: string;      // ← 加这一行
   customPrompt?: string;
   llmPreset?: {
     provider: string;
@@ -196,7 +203,7 @@ export const generateFromCard = async (config: {
   };
 }): Promise<GeminiResponse> => {
  
-  const { wadeCard, lunaCard, chatMode, prompt, history, coreMemories, isRetry, customPrompt, llmPreset } = config;
+  const { wadeCard, lunaCard, chatMode, prompt, history, coreMemories, isRetry, sessionSummary, customPrompt, llmPreset } = config;
  
   if (!llmPreset) {
     throw new Error("No LLM preset provided. Configure a brain in Mission Control!");
@@ -209,6 +216,7 @@ export const generateFromCard = async (config: {
     chatMode,
     coreMemories,
     isRetry,
+    sessionSummary,              // ← 加这一行
     customPrompt,
   });
  
