@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { Button } from '../ui/Button';
@@ -30,7 +29,7 @@ export const ChatInterface: React.FC = () => {
     messages, addMessage, updateMessage, updateMessageAudioCache, deleteMessage, settings, updateSettings, activeMode, setMode, toggleFavorite, setNavHidden,
     sessions, createSession, updateSession, updateSessionTitle, deleteSession, toggleSessionPin, activeSessionId, setActiveSessionId,
     addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
-    coreMemories, toggleCoreMemoryEnabled, llmPresets, ttsPresets,
+    coreMemories, toggleCoreMemoryEnabled, llmPresets, addLlmPreset, ttsPresets,
     chatArchives, loadArchiveMessages, deleteArchiveMessage, toggleArchiveFavorite, updateArchiveMessage,
     importArchive, deleteArchive, updateArchiveTitle,
     getBinding, getDefaultPersonaCard, personaCards,
@@ -143,7 +142,7 @@ export const ChatInterface: React.FC = () => {
 
   const handleSavePreset = async () => {
     if (!newPresetForm.name || !newPresetForm.apiKey) return alert("Missing required fields.");
-    await (useStore.getState() as any).addLlmPreset({
+    await addLlmPreset({
       provider: newPresetForm.provider, name: newPresetForm.name, model: newPresetForm.model,
       apiKey: newPresetForm.apiKey, baseUrl: newPresetForm.baseUrl.replace(/\/$/, ''), apiPath: '',
       temperature: 1.0, topP: 0.95, topK: 40, frequencyPenalty: 0, presencePenalty: 0, isVision: false, isImageGen: false
@@ -241,7 +240,7 @@ export const ChatInterface: React.FC = () => {
   if (activeMode === 'archive') {
     displayMessages = archiveMessages.map(am => ({
       id: am.id, role: am.role === 'user' ? 'Luna' : 'Wade', text: am.content,
-      timestamp: am.timestamp, mode: 'archive', variants: [am.content], isFavorite: am.isFavorite
+      timestamp: am.timestamp, mode: 'archive', variants: [{ text: am.content }] as any, isFavorite: am.isFavorite
     }));
   } else {
     displayMessages = activeSessionId ? messages.filter(m => m.sessionId === activeSessionId) : [];
@@ -792,7 +791,7 @@ export const ChatInterface: React.FC = () => {
 
       {/* Modals */}
       <ThemeStudio isOpen={isThemeStudioOpen} onClose={() => setIsThemeStudioOpen(false)} sessionId={activeSessionId || undefined} />
-      <LlmSelectorPanel showLlmSelector={showLlmSelector} setShowLlmSelector={setShowLlmSelector} llmSelectorMode={llmSelectorMode} setLlmSelectorMode={setLlmSelectorMode} llmPresets={llmPresets} sessions={sessions} activeSessionId={activeSessionId} settings={settings} updateSession={updateSession} updateSettings={updateSettings} newPresetForm={newPresetForm} setNewPresetForm={setNewPresetForm} handleProviderChange={handleProviderChange} handleSavePreset={handleSavePreset} />
+      <LlmSelectorPanel showLlmSelector={showLlmSelector} setShowLlmSelector={setShowLlmSelector} llmSelectorMode={llmSelectorMode} setLlmSelectorMode={setLlmSelectorMode} llmPresets={llmPresets} sessions={sessions} activeSessionId={activeSessionId} settings={settings} updateSession={updateSession as any} updateSettings={updateSettings as any} newPresetForm={newPresetForm} setNewPresetForm={setNewPresetForm} handleProviderChange={handleProviderChange} handleSavePreset={handleSavePreset} />
       {showSearch && <SearchBar searchQuery={searchQuery} onSearchChange={handleSearchChange} currentSearchIndex={currentSearchIndex} totalResults={totalResults} onPrev={goToPrevResult} onNext={goToNextResult} onClose={() => setShowSearch(false)} />}
 
       {/* Messages */}
@@ -853,8 +852,8 @@ export const ChatInterface: React.FC = () => {
       <ActionSheet selectedMsg={selectedMsg} activeMode={activeMode} isEditing={isEditing} setIsEditing={setIsEditing} editContent={editContent} setEditContent={setEditContent} isDeleteConfirming={isDeleteConfirming} canRegenerate={canRegenerate} canBranch={canBranch} playingMessageId={playingMessageId} isPaused={isPaused} closeActions={closeActions} handleCopy={handleCopy} handleTextSelection={handleTextSelection} handleRegenerate={handleRegenerate} handleBranch={handleBranch} handleInitEdit={handleInitEdit} handleSaveEdit={handleSaveEdit} handleFavorite={handleFavorite} handleDelete={handleDelete} playTTS={playTTS} regenerateTTS={regenerateTTS} prevVariant={prevVariant} nextVariant={nextVariant} />
       <TextSelectionModal textSelectionMsg={textSelectionMsg} setTextSelectionMsg={setTextSelectionMsg} />
       <ConversationMapModal showMap={showMap} setShowMap={setShowMap} displayMessages={displayMessages} scrollToMessage={scrollToMessage} />
-      <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession} />
-      <MemoryModal showMemorySelector={showMemorySelector} setShowMemorySelector={setShowMemorySelector} coreMemories={coreMemories} sessions={sessions} activeSessionId={activeSessionId} toggleCoreMemoryEnabled={toggleCoreMemoryEnabled} updateSession={updateSession} />
+      <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession as any} />
+      <MemoryModal showMemorySelector={showMemorySelector} setShowMemorySelector={setShowMemorySelector} coreMemories={coreMemories} sessions={sessions} activeSessionId={activeSessionId} toggleCoreMemoryEnabled={toggleCoreMemoryEnabled} updateSession={updateSession as any} />
       <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} />
 
       {/* Input Area */}
