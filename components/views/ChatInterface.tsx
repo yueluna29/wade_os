@@ -32,7 +32,7 @@ export const ChatInterface: React.FC = () => {
     coreMemories, toggleCoreMemoryEnabled, llmPresets, addLlmPreset, ttsPresets,
     chatArchives, loadArchiveMessages, deleteArchiveMessage, toggleArchiveFavorite, updateArchiveMessage,
     importArchive, deleteArchive, updateArchiveTitle,
-    getBinding, getDefaultPersonaCard, personaCards,
+    getBinding, getDefaultPersonaCard, personaCards, functionBindings,
   } = useStore();
 
   // Session Summary
@@ -854,7 +854,7 @@ export const ChatInterface: React.FC = () => {
       <ConversationMapModal showMap={showMap} setShowMap={setShowMap} displayMessages={displayMessages} scrollToMessage={scrollToMessage} />
       <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession as any} />
       <MemoryModal showMemorySelector={showMemorySelector} setShowMemorySelector={setShowMemorySelector} coreMemories={coreMemories} sessions={sessions} activeSessionId={activeSessionId} toggleCoreMemoryEnabled={toggleCoreMemoryEnabled} updateSession={updateSession as any} />
-      <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} />
+      <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} personaCards={personaCards} functionBindings={functionBindings} getBinding={getBinding} getDefaultPersonaCard={getDefaultPersonaCard} />
 
       {/* Input Area */}
       <ChatInputArea inputText={inputText} setInputText={setInputText} textareaRef={textareaRef} messagesEndRef={messagesEndRef} placeholderText={placeholderText} isTyping={isTyping} activeMode={activeMode} attachments={attachments} removeAttachment={removeAttachment} showUploadMenu={showUploadMenu} setShowUploadMenu={setShowUploadMenu} imageInputRef={imageInputRef} fileInputRef={fileInputRef} handleImageSelect={handleImageSelect} handleFileSelect={handleFileSelect} handleSend={handleSend} handleCancel={handleCancel} handleKeyDown={handleKeyDown} />

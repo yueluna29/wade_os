@@ -39,7 +39,7 @@ export const cardDataToXML = (cardData: PersonaCardData, character: 'Wade' | 'Lu
   for (const [key, xmlTag] of Object.entries(fieldLabels)) {
     const value = cardData[key];
     if (value && value.trim()) {
-      lines.push(`  <${xmlTag}>${value.trim()}</${xmlTag}>`);
+      lines.push(`  <${xmlTag}>\n${value.trim()}\n  </${xmlTag}>`);
     }
   }
  
