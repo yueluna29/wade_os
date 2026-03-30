@@ -468,3 +468,7 @@ div.markdown-content blockquote p,
   overflow-x: auto !important;
   position: relative !important;
 }
+
+.fixed {
+  overscroll-behavior: contain;
+}

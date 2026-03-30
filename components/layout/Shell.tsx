@@ -43,7 +43,6 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       if (window.visualViewport) {
         setViewportHeight(`${window.visualViewport.height}px`);
         setViewportTop(window.visualViewport.offsetTop);
-        window.scrollTo(0, 0);
       }
     };
 
