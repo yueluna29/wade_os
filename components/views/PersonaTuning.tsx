@@ -10,7 +10,7 @@ import { SystemPersonaTab } from './persona/SystemPersonaTab';
 type TabState = 'archives' | 'system';
 
 export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
-  const { settings, updateSettings } = useStore();
+  const { settings, updateSettings, personaCards, updatePersonaCard } = useStore();
   
   const [activeTab, setActiveTab] = useState<TabState>('archives');
   const [isSaving, setIsSaving] = useState(false);
@@ -24,56 +24,35 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
   // System tab 的数据还是从 core_identity_config 拉
   useEffect(() => {
-    const fetchSystemData = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('core_identity_config')
-          .select('global_directives, sms_mode_rules, rp_mode_rules')
-          .eq('id', 1)
-          .single();
-
-        if (error && error.code !== 'PGRST116') throw error;
-
-        if (data) {
-          if (data.global_directives) setSystemInstruction(data.global_directives);
-          if (data.sms_mode_rules) setSmsInstructions(data.sms_mode_rules);
-          if (data.rp_mode_rules) setRoleplayInstructions(data.rp_mode_rules);
-        }
-      } catch (error) {
-        console.error("Failed to fetch system data:", error);
-      }
-    };
-    fetchSystemData();
-  }, []);
+    const defaultWade = personaCards.find(c => c.character === 'Wade' && c.isDefault);
+    if (defaultWade?.cardData) {
+      if (defaultWade.cardData.global_directives) setSystemInstruction(defaultWade.cardData.global_directives);
+      if (defaultWade.cardData.sms_mode_rules) setSmsInstructions(defaultWade.cardData.sms_mode_rules);
+      if (defaultWade.cardData.rp_mode_rules) setRoleplayInstructions(defaultWade.cardData.rp_mode_rules);
+    }
+  }, [personaCards]);
 
   // System tab 的保存
   const saveSystemChanges = async () => {
     setIsSaving(true);
     
-    await updateSettings({ systemInstruction, smsInstructions, roleplayInstructions });
-
-    try {
-      const { error } = await supabase
-        .from('core_identity_config')
-        .upsert({
-          id: 1,
+    // 找到当前默认的 Wade 角色卡，把 system 字段写进去
+    const defaultWade = personaCards.find(c => c.character === 'Wade' && c.isDefault);
+    if (defaultWade) {
+      await updatePersonaCard(defaultWade.id, {
+        cardData: {
+          ...defaultWade.cardData,
           global_directives: systemInstruction,
           sms_mode_rules: smsInstructions,
           rp_mode_rules: roleplayInstructions,
-        });
-
-      if (error) throw error;
-
-      setTimeout(() => {
-        setIsSaving(false);
-        alert("System directives saved! 🌮");
-      }, 600);
-
-    } catch (error) {
-      console.error("Failed to save system data:", error);
-      setIsSaving(false);
-      alert("Error saving to database. Check the console, Architect.");
+        }
+      });
     }
+
+    setTimeout(() => {
+      setIsSaving(false);
+      alert("System directives saved to active persona card! 🌮");
+    }, 600);
   };
 
   // 头像上传处理（给 PersonaCardLibrary 用）
