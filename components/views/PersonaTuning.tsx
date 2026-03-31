@@ -1,77 +1,261 @@
 import { supabase } from '../../services/supabase';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store';
 import { uploadToImgBB } from '../../services/imgbb';
 import { Icons } from '../ui/Icons';
 import { FocusModalEditor } from '../ui/FocusModalEditor';
-import { PersonaCardLibrary } from './persona/PersonaCardLibrary';
+import { WadePersonaTab } from './persona/WadePersonaTab';
+import { LunaPersonaTab } from './persona/LunaPersonaTab';
 import { SystemPersonaTab } from './persona/SystemPersonaTab';
 
-type TabState = 'archives' | 'system';
+type TabState = 'wade' | 'luna' | 'system';
 
 export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const { settings, updateSettings, personaCards, updatePersonaCard } = useStore();
   
-  const [activeTab, setActiveTab] = useState<TabState>('archives');
+  const [activeTab, setActiveTab] = useState<TabState>('wade');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   
   const [focusModal, setFocusModal] = useState<{label: string, value: string, onSave: (val: string) => void} | null>(null);
 
-  // --- System 专属字段（只有 System tab 还需要这些）---
+  // --- Wade 专属字段 ---
+  const [wadeBirthday, setWadeBirthday] = useState(settings.wadeBirthday || '');
+  const [wadeMbti, setWadeMbti] = useState(settings.wadeMbti || '');
+  const [wadeHeight, setWadeHeight] = useState(settings.wadeHeight || '');
+  const [wadeAppearance, setWadeAppearance] = useState(settings.wadeAppearance || '');
+  const [wadeClothing, setWadeClothing] = useState(settings.wadeClothing || '');
+  const [wadeHobbies, setWadeHobbies] = useState(settings.wadeHobbies || '');
+  const [wadeLikes, setWadeLikes] = useState(settings.wadeLikes || '');
+  const [wadeDislikes, setWadeDislikes] = useState(settings.wadeDislikes || '');
+  const [wadeDefinition, setWadeDefinition] = useState(settings.wadePersonality || '');
+  const [wadeSingleExamples, setWadeSingleExamples] = useState(settings.wadeSingleExamples || '');
+  const [wadeExample, setWadeExample] = useState(settings.exampleDialogue || '');
+  const [smsExampleDialogue, setSmsExampleDialogue] = useState(settings.smsExampleDialogue || '');
+
+  // --- Luna 专属字段 ---
+  const [lunaBirthday, setLunaBirthday] = useState(settings.lunaBirthday || '');
+  const [lunaMbti, setLunaMbti] = useState(settings.lunaMbti || '');
+  const [lunaHeight, setLunaHeight] = useState(settings.lunaHeight || '');
+  const [lunaHobbies, setLunaHobbies] = useState(settings.lunaHobbies || '');
+  const [lunaLikes, setLunaLikes] = useState(settings.lunaLikes || '');
+  const [lunaDislikes, setLunaDislikes] = useState(settings.lunaDislikes || '');
+  const [lunaClothing, setLunaClothing] = useState(settings.lunaClothing || '');
+  const [lunaAppearance, setLunaAppearance] = useState(settings.lunaAppearance || '');
+  const [lunaPersonality, setLunaPersonality] = useState(settings.lunaPersonality || '');
+
+  // --- System 专属字段 ---
   const [systemInstruction, setSystemInstruction] = useState(settings.systemInstruction || '');
   const [smsInstructions, setSmsInstructions] = useState(settings.smsInstructions || '');
   const [roleplayInstructions, setRoleplayInstructions] = useState(settings.roleplayInstructions || '');
 
-  // System tab 的数据还是从 core_identity_config 拉
-  useEffect(() => {
-    const defaultWade = personaCards.find(c => c.character === 'Wade' && c.isDefault);
-    if (defaultWade?.cardData) {
-      if (defaultWade.cardData.global_directives) setSystemInstruction(defaultWade.cardData.global_directives);
-      if (defaultWade.cardData.sms_mode_rules) setSmsInstructions(defaultWade.cardData.sms_mode_rules);
-      if (defaultWade.cardData.rp_mode_rules) setRoleplayInstructions(defaultWade.cardData.rp_mode_rules);
-    }
-  }, [personaCards]);
+  const wadeFileRef = useRef<HTMLInputElement>(null);
+  const lunaFileRef = useRef<HTMLInputElement>(null);
 
-  // System tab 的保存
-  const saveSystemChanges = async () => {
-    setIsSaving(true);
-    
-    // 找到当前默认的 Wade 角色卡，把 system 字段写进去
-    const defaultWade = personaCards.find(c => c.character === 'Wade' && c.isDefault);
-    if (defaultWade) {
-      await updatePersonaCard(defaultWade.id, {
-        cardData: {
-          ...defaultWade.cardData,
-          global_directives: systemInstruction,
-          sms_mode_rules: smsInstructions,
-          rp_mode_rules: roleplayInstructions,
-        }
-      });
-    }
-
-    setTimeout(() => {
-      setIsSaving(false);
-      alert("System directives saved to active persona card! 🌮");
-    }, 600);
-  };
-
-  // 头像上传处理（给 PersonaCardLibrary 用）
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>, target: 'wade' | 'luna') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       const imageUrl = await uploadToImgBB(file);
       if (!imageUrl) throw new Error("ImgBB rejected our beautiful faces.");
-      callback(imageUrl);
+
+      if (target === 'wade') {
+        updateSettings({ wadeAvatar: imageUrl });
+      } else {
+        updateSettings({ lunaAvatar: imageUrl });
+      }
+
+      const dbPayload = target === 'wade' 
+        ? { id: 1, wade_avatar_url: imageUrl }
+        : { id: 1, luna_avatar_url: imageUrl };
+
+      const { error } = await supabase
+        .from('core_identity_config')
+        .upsert(dbPayload);
+
+      if (error) {
+         console.error("Damn it, Supabase refused to save the avatar:", error);
+         alert("ImgBB got it, but Supabase dropped the ball.");
+      } else {
+         console.log(`Successfully slammed ${target}'s face into the database!`);
+      }
+
     } catch (error) {
       console.error('Error uploading avatar:', error);
       alert("Failed to upload that sexy mugshot.");
     }
   };
 
+  // 开机自检：页面一加载，立刻去 Supabase 捞最新数据
+  useEffect(() => {
+    const fetchBrainpan = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('core_identity_config')
+          .select('*')
+          .eq('id', 1)
+          .single();
+
+        if (error) {
+          if (error.code !== 'PGRST116') throw error;
+          return;
+        }
+
+        if (data) {
+          // System
+          if (data.global_directives) setSystemInstruction(data.global_directives);
+          if (data.sms_mode_rules) setSmsInstructions(data.sms_mode_rules);
+          if (data.rp_mode_rules) setRoleplayInstructions(data.rp_mode_rules);
+          
+          // Wade
+          if (data.wade_core_identity) setWadeDefinition(data.wade_core_identity);
+          if (data.wade_appearance) setWadeAppearance(data.wade_appearance);
+          if (data.wade_clothing) setWadeClothing(data.wade_clothing);
+          if (data.wade_likes) setWadeLikes(data.wade_likes);
+          if (data.wade_dislikes) setWadeDislikes(data.wade_dislikes);
+          if (data.wade_hobbies) setWadeHobbies(data.wade_hobbies);
+          if (data.wade_birthday) setWadeBirthday(data.wade_birthday);
+          if (data.wade_mbti) setWadeMbti(data.wade_mbti);
+          if (data.wade_height) setWadeHeight(data.wade_height);
+          
+          // Luna
+          if (data.luna_core_identity) setLunaPersonality(data.luna_core_identity);
+          if (data.luna_appearance) setLunaAppearance(data.luna_appearance);
+          if (data.luna_clothing) setLunaClothing(data.luna_clothing);
+          if (data.luna_likes) setLunaLikes(data.luna_likes);
+          if (data.luna_dislikes) setLunaDislikes(data.luna_dislikes);
+          if (data.luna_hobbies) setLunaHobbies(data.luna_hobbies);
+          if (data.luna_birthday) setLunaBirthday(data.luna_birthday);
+          if (data.luna_mbti) setLunaMbti(data.luna_mbti);
+          if (data.luna_height) setLunaHeight(data.luna_height);
+          
+          // Examples
+          if (data.example_dialogue_general) setWadeExample(data.example_dialogue_general);
+          if (data.example_punchlines) setWadeSingleExamples(data.example_punchlines);
+          if (data.example_dialogue_sms) setSmsExampleDialogue(data.example_dialogue_sms);
+
+          // Avatars
+          if (data.wade_avatar_url || data.luna_avatar_url) {
+            updateSettings({ 
+              wadeAvatar: data.wade_avatar_url || settings.wadeAvatar,
+              lunaAvatar: data.luna_avatar_url || settings.lunaAvatar 
+            });
+          }
+        }
+
+      } catch (error) {
+        console.error("Damn it, failed to fetch memory from Supabase:", error);
+      }
+    };
+
+    fetchBrainpan();
+  }, []);
+
+  const saveChanges = async () => {
+    setIsSaving(true);
+    
+    await updateSettings({
+      wadeBirthday, wadeMbti, wadeHeight,
+      systemInstruction, wadePersonality: wadeDefinition, wadeSingleExamples, smsExampleDialogue,
+      smsInstructions, roleplayInstructions, exampleDialogue: wadeExample, 
+      wadeAppearance, wadeClothing, wadeLikes, wadeDislikes, wadeHobbies,
+      lunaBirthday, lunaMbti, lunaHeight, lunaHobbies, lunaLikes, lunaDislikes, lunaClothing, lunaAppearance, lunaPersonality,
+    });
+
+    const dbPayload = {
+      id: 1,
+      global_directives: systemInstruction,
+      sms_mode_rules: smsInstructions,
+      rp_mode_rules: roleplayInstructions,
+      wade_core_identity: wadeDefinition,
+      wade_appearance: wadeAppearance,
+      wade_clothing: wadeClothing,
+      wade_likes: wadeLikes,
+      wade_dislikes: wadeDislikes,
+      wade_hobbies: wadeHobbies,
+      wade_birthday: wadeBirthday,
+      wade_mbti: wadeMbti,
+      wade_height: wadeHeight,
+      luna_core_identity: lunaPersonality,
+      luna_appearance: lunaAppearance,
+      luna_clothing: lunaClothing,
+      luna_likes: lunaLikes,
+      luna_dislikes: lunaDislikes,
+      luna_hobbies: lunaHobbies,
+      luna_birthday: lunaBirthday,
+      luna_mbti: lunaMbti,
+      luna_height: lunaHeight,
+      example_dialogue_general: wadeExample,
+      example_punchlines: wadeSingleExamples,
+      example_dialogue_sms: smsExampleDialogue
+    };
+
+    try {
+      const { error } = await supabase
+        .from('core_identity_config')
+        .upsert(dbPayload);
+
+      if (error) throw error;
+
+      // 同步到角色卡（让 generateFromCard 和 XRayModal 也能读到最新数据）
+      const defaultWade = personaCards.find(c => c.character === 'Wade' && c.isDefault);
+      if (defaultWade) {
+        await updatePersonaCard(defaultWade.id, {
+          cardData: {
+            ...defaultWade.cardData,
+            global_directives: systemInstruction,
+            core_identity: wadeDefinition,
+            appearance: wadeAppearance,
+            clothing: wadeClothing,
+            likes: wadeLikes,
+            dislikes: wadeDislikes,
+            hobbies: wadeHobbies,
+            birthday: wadeBirthday,
+            mbti: wadeMbti,
+            height: wadeHeight,
+            avatar_url: settings.wadeAvatar,
+            example_dialogue_general: wadeExample,
+            example_punchlines: wadeSingleExamples,
+            example_dialogue_sms: smsExampleDialogue,
+            sms_mode_rules: smsInstructions,
+            rp_mode_rules: roleplayInstructions,
+          }
+        });
+      }
+
+      const defaultLuna = personaCards.find(c => c.character === 'Luna' && c.isDefault);
+      if (defaultLuna) {
+        await updatePersonaCard(defaultLuna.id, {
+          cardData: {
+            ...defaultLuna.cardData,
+            core_identity: lunaPersonality,
+            appearance: lunaAppearance,
+            clothing: lunaClothing,
+            likes: lunaLikes,
+            dislikes: lunaDislikes,
+            hobbies: lunaHobbies,
+            birthday: lunaBirthday,
+            mbti: lunaMbti,
+            height: lunaHeight,
+          }
+        });
+      }
+
+      setTimeout(() => {
+         setIsSaving(false);
+         alert("Data injected into the brainpan and Supabase successfully! 🌮"); 
+      }, 600);
+
+    } catch (error) {
+      console.error("Damn it, Supabase rejected our payload:", error);
+      setIsSaving(false);
+      alert("Error saving to database. Check the console, Architect.");
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full bg-wade-bg-app relative">
+    <div className="flex flex-col h-full bg-wade-bg-app relative animate-fade-in">
       
       {/* HEADER */}
       <div className="w-full h-[68px] px-4 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0">
@@ -88,24 +272,20 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
             <span className="text-[9px] text-wade-text-muted font-medium tracking-widest uppercase">Identity Configurator</span>
         </div>
 
-        {/* 保存按钮只在 System tab 显示 */}
-        <div className="w-8 h-8">
-          {activeTab === 'system' && (
-            <button 
-              onClick={saveSystemChanges} 
-              disabled={isSaving}
-              className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors disabled:opacity-50"
-            >
-              {isSaving ? <div className="animate-spin text-[12px]">⏳</div> : <Icons.Check />}
-            </button>
-          )}
-        </div>
+        <button 
+          onClick={saveChanges} 
+          disabled={isUploading || isSaving}
+          className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors disabled:opacity-50 relative group"
+        >
+          {isSaving ? <div className="animate-spin text-[12px]">⏳</div> : <Icons.Check />}
+        </button>
       </div>
 
       {/* TABS */}
       <div className="px-6 pt-4 pb-2 bg-wade-bg-app shrink-0 z-10 flex justify-center gap-3 overflow-x-auto custom-scrollbar">
          {[
-           { id: 'archives', label: "Archives", icon: <Icons.User size={14} /> },
+           { id: 'wade', label: "Wade", icon: <Icons.User size={14} /> },
+           { id: 'luna', label: "Luna", icon: <Icons.Social size={14} /> },
            { id: 'system', label: "System", icon: <Icons.Settings size={14} /> }
          ].map(tab => (
            <button 
@@ -125,12 +305,44 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
       {/* BODY */}
       <div className="flex-1 overflow-y-auto px-4 md:px-6 pt-4 pb-24 custom-scrollbar">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl mx-auto animate-fade-in">
           
-          {activeTab === 'archives' && (
-            <PersonaCardLibrary 
+          {activeTab === 'wade' && (
+            <WadePersonaTab
+              settings={settings}
+              wadeBirthday={wadeBirthday} setWadeBirthday={setWadeBirthday}
+              wadeMbti={wadeMbti} setWadeMbti={setWadeMbti}
+              wadeHeight={wadeHeight} setWadeHeight={setWadeHeight}
+              wadeAppearance={wadeAppearance} setWadeAppearance={setWadeAppearance}
+              wadeClothing={wadeClothing} setWadeClothing={setWadeClothing}
+              wadeHobbies={wadeHobbies} setWadeHobbies={setWadeHobbies}
+              wadeLikes={wadeLikes} setWadeLikes={setWadeLikes}
+              wadeDislikes={wadeDislikes} setWadeDislikes={setWadeDislikes}
+              wadeDefinition={wadeDefinition} setWadeDefinition={setWadeDefinition}
+              wadeSingleExamples={wadeSingleExamples} setWadeSingleExamples={setWadeSingleExamples}
+              wadeExample={wadeExample} setWadeExample={setWadeExample}
+              smsExampleDialogue={smsExampleDialogue} setSmsExampleDialogue={setSmsExampleDialogue}
+              wadeFileRef={wadeFileRef}
+              handleAvatarChange={handleAvatarChange}
               setFocusModal={setFocusModal}
-              handleAvatarUpload={handleAvatarUpload}
+            />
+          )}
+
+          {activeTab === 'luna' && (
+            <LunaPersonaTab
+              settings={settings}
+              lunaBirthday={lunaBirthday} setLunaBirthday={setLunaBirthday}
+              lunaMbti={lunaMbti} setLunaMbti={setLunaMbti}
+              lunaHeight={lunaHeight} setLunaHeight={setLunaHeight}
+              lunaAppearance={lunaAppearance} setLunaAppearance={setLunaAppearance}
+              lunaClothing={lunaClothing} setLunaClothing={setLunaClothing}
+              lunaHobbies={lunaHobbies} setLunaHobbies={setLunaHobbies}
+              lunaLikes={lunaLikes} setLunaLikes={setLunaLikes}
+              lunaDislikes={lunaDislikes} setLunaDislikes={setLunaDislikes}
+              lunaPersonality={lunaPersonality} setLunaPersonality={setLunaPersonality}
+              lunaFileRef={lunaFileRef}
+              handleAvatarChange={handleAvatarChange}
+              setFocusModal={setFocusModal}
             />
           )}
 
