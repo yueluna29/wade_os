@@ -282,8 +282,8 @@ export const SocialFeed: React.FC = () => {
             onEdit={() => { handleEditPost(currentDetailPost!); }}
             onDelete={() => handleDeletePost(currentDetailPost!.id)}
             deletingPostId={deletingPostId}
-            onEditComment={(commentId) => handleEditComment(commentId)}
-            onDeleteComment={(commentId) => handleDeleteComment(commentId)}
+            onEditComment={(commentId) => console.log('edit', commentId)}
+            onDeleteComment={(commentId) => console.log('delete', commentId)}
           />
         );
       })()}
