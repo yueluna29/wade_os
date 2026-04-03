@@ -27,7 +27,7 @@ export const PostCaption: React.FC<PostCaptionProps> = ({ content, authorName, h
           components={{ 
             p: ({children}) => <span className="inline">{children}</span>,
             strong: ({children}) => <span className="font-bold text-wade-text-main mr-1">{children}</span>, 
-            a: ({children}) => <span className="text-[#1d9bf0] cursor-pointer hover:underline">{children}</span>
+            a: ({children}) => <span className="text-wade-accent cursor-pointer hover:underline">{children}</span>
           }}
         >
           {processedContent}
