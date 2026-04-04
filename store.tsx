@@ -353,7 +353,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                         images: imgs,
                         timestamp: new Date(p.created_at).getTime(),
                         likes: p.like !== undefined ? p.like : (p.likes || 0),
-                        comments: typeof p.comments === 'string' ? JSON.parse(p.comments) : (p.comments || [])
+                        comments: typeof p.comments === 'string' ? JSON.parse(p.comments) : (p.comments || []),
+                        isBookmarked: p.is_bookmarked || false,
                      };
                  }));
              }
@@ -982,7 +983,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const updatePost = async (p: SocialPost) => {
     setSocialPosts(prev => prev.map(post => post.id === p.id ? p : post));
-    await supabase.from('social_posts').update({ content: p.content, images: p.images, like: p.likes, comments: p.comments }).eq('id', p.id);
+    const { error } = await supabase.from('social_posts').update({
+      content: p.content,
+      images: p.images,
+      likes: p.likes,
+      comments: p.comments,
+      is_bookmarked: p.isBookmarked
+    }).eq('id', p.id);
+    if (error) console.error('updatePost failed:', error);
   };
 
   const deletePost = async (id: string) => {

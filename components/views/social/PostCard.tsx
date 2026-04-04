@@ -39,6 +39,7 @@ interface PostCardProps {
   onCloseMenu: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onGenerateReply: () => void;
   onZoomImage: (images: string[], index: number) => void;
   formatTime: (ts: number) => string;
 }
@@ -47,7 +48,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   post, avatar, displayName, username, isExpanded,
   menuOpen, deletingPostId,
   onClickPost, onLike, onBookmark, onProfileClick, onOpenDetail,
-  onOpenMenu, onCloseMenu, onEdit, onDelete,
+  onOpenMenu, onCloseMenu, onEdit, onDelete, onGenerateReply,
   onZoomImage, formatTime,
 }) => {
   return (
@@ -67,13 +68,14 @@ export const PostCard: React.FC<PostCardProps> = ({
             </div>
             <div className="flex flex-col justify-center">
               <span
-                className="text-[13px] font-bold text-wade-text-main leading-none cursor-pointer hover:underline"
+                className="text-[13px] font-bold text-wade-text-main leading-none cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); onProfileClick(); }}
               >
                 {displayName}
               </span>
-              <span className="text-[9px] font-mono text-wade-text-muted uppercase tracking-[0.05em] mt-1.5 opacity-80">
-                @{username} · {formatTime(post.timestamp)}
+              <span className="text-[10px] font-mono uppercase tracking-[0.05em] mt-0.5 opacity-80">
+                <span className="text-wade-accent">@{username}</span>
+                <span className="text-wade-text-muted"> · {formatTime(post.timestamp)}</span>
               </span>
             </div>
           </div>
@@ -84,6 +86,10 @@ export const PostCard: React.FC<PostCardProps> = ({
               <>
                 <div className="fixed inset-0 z-[45]" onClick={(e) => { e.stopPropagation(); onCloseMenu(); }} />
                 <div className="flex items-center gap-0.5 bg-wade-bg-app rounded-full px-1 py-0.5 border border-wade-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] relative z-50 origin-right">
+                <button onClick={(e) => { e.stopPropagation(); onGenerateReply(); onCloseMenu(); }} className="p-1.5 text-wade-accent hover:text-white hover:bg-wade-accent rounded-full transition-all" title="Generate Wade Reply">
+                  <Icons.Sparkles size={13} />
+                </button>
+                <div className="w-[1px] h-3 bg-wade-border/80 mx-0.5" />
                   <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="p-1.5 text-wade-text-muted hover:text-wade-text-main hover:bg-black/5 rounded-full transition-colors" title="Edit">
                     <Icons.Edit size={13} />
                   </button>
@@ -151,7 +157,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         </div>
 
         {/* Action bar */}
-        <div className="flex items-center gap-6 mt-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-0 mt-1" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onLike}
             className={`flex items-center gap-1.5 transition-colors ${

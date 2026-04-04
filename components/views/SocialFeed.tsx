@@ -4,7 +4,7 @@ import { Icons } from '../ui/Icons';
 import { SocialPost } from '../../types';
 import { GoogleGenAI } from "@google/genai";
 
-// Gemini-designed subcomponents (NEW)
+// Gemini-designed subcomponents
 import { PostCard } from './social/PostCard';
 import { PostDetailView } from './social/PostDetailView';
 import { ProfileHeaderView } from './social/ProfileHeaderView';
@@ -12,21 +12,6 @@ import { ProfileHeaderView } from './social/ProfileHeaderView';
 // Existing subcomponents (UNCHANGED)
 import { PostEditorModal } from './social/PostEditorModal';
 import { ProfileEditorModal } from './social/ProfileEditorModal';
-
-// ─── Local header icons ───
-const HeaderIcons = {
-  Settings: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  ),
-  Plus: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  ),
-};
 
 export const SocialFeed: React.FC = () => {
   const {
@@ -91,7 +76,7 @@ export const SocialFeed: React.FC = () => {
     }
   };
 
-  // ─── Delete (double-click confirm) ───
+  // ─── Delete ───
   const handleDeletePost = async (postId: string) => {
     if (deletingPostId === postId) {
       await deletePost(postId);
@@ -103,10 +88,9 @@ export const SocialFeed: React.FC = () => {
     }
   };
 
-  // ─── Edit (placeholder, wire up as needed) ───
+  // ─── Edit ───
   const handleEditPost = (post: SocialPost) => {
     setOpenMenuPostId(null);
-    // TODO: wire PostEditorModal edit mode
   };
 
   // ─── Like / Bookmark ───
@@ -150,10 +134,6 @@ export const SocialFeed: React.FC = () => {
       p.id === postId ? updatedPost : p
     );
 
-    // If Luna commented → summon Wade
-    if (author === 'Luna') {
-      setTimeout(() => handleGenerateComment(updatedPost), 800);
-    }
   };
 
   // ─── AI Comment Generation ───
@@ -173,8 +153,8 @@ export const SocialFeed: React.FC = () => {
         const mostRecentLunaComment = lunaComments[0];
 
         const taskDescription = mostRecentLunaComment
-          ? `Reply to Luna's comment: "${mostRecentLunaComment.text}" in 1-2 sentences. Be witty, sarcastic, and affectionate.`
-          : `Write a first comment on this post in 1-2 sentences. Be witty and characteristic.`;
+          ? `Reply to Luna's comment: "${mostRecentLunaComment.text}" — Write ONE short sentence, max 20 words. Sarcastic, witty, affectionate. SNS style. NO actions, NO asterisks, NO roleplay descriptions. Think Twitter reply energy.`
+          : `Comment on this post in ONE short sentence, max 20 words. Sarcastic and characteristic. NO actions, NO asterisks. Pure text only, like a real tweet reply.`;
 
         const context = `You are Wade Wilson. Persona:\n${settings.wadePersonality}\nLuna's Info:\n${settings.lunaInfo}\nMemories:\n${memoriesText}\nPost: "${post.content}"\n${
           mostRecentLunaComment ? `Luna's Comment: "${mostRecentLunaComment.text}"` : ''
@@ -183,7 +163,6 @@ export const SocialFeed: React.FC = () => {
         let generatedText = '';
 
         if (preset.provider === 'Gemini') {
-          // Google Gemini SDK
           const ai = new GoogleGenAI({ apiKey: preset.apiKey });
           const response = await ai.models.generateContent({
             model: preset.model || 'gemini-2.0-flash-exp',
@@ -191,7 +170,6 @@ export const SocialFeed: React.FC = () => {
           });
           generatedText = response.text || '';
         } else {
-          // OpenAI-compatible (OpenRouter, OpenAI, DeepSeek, Custom)
           const url = `${preset.baseUrl}/chat/completions`;
           const res = await fetch(url, {
             method: 'POST',
@@ -230,12 +208,13 @@ export const SocialFeed: React.FC = () => {
     : null;
 
   // ============================================================
-  // RENDER
+  // RENDER — Conditional, not stacked
   // ============================================================
   return (
     <div className="h-full flex flex-col bg-wade-bg-app relative font-sans">
-      {/* ── Layer 3: Profile View ── */}
-      {viewingProfile && (() => {
+
+      {/* ─── View: Profile ─── */}
+      {viewingProfile ? (() => {
         const info = getAuthorInfo(viewingProfile);
         const userPosts = localPosts.filter(p => p.author === viewingProfile);
         const bio = viewingProfile === 'Wade'
@@ -249,18 +228,25 @@ export const SocialFeed: React.FC = () => {
             username={info.username}
             bio={bio}
             userPosts={userPosts}
+            allPosts={localPosts}
+            settings={settings}
+            profiles={profiles}
+            expandedPostIds={expandedPostIds}
             onBack={() => setViewingProfile(null)}
             onPostClick={(post) => {
               setViewingProfile(null);
               setViewingPostDetail(post.id);
             }}
+            onLike={(id) => handleToggleLike(id)}
+            onBookmark={(id) => handleToggleBookmark(id)}
+            onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
             formatTime={formatExactTime}
+            onGenerateReply={(post) => handleGenerateComment(post)}
           />
         );
-      })()}
 
-      {/* ── Layer 2: Post Detail ── */}
-      {viewingPostDetail && currentDetailPost && !viewingProfile && (() => {
+      /* ─── View: Post Detail ─── */
+      })() : viewingPostDetail && currentDetailPost ? (() => {
         const info = getAuthorInfo(currentDetailPost.author);
         return (
           <PostDetailView
@@ -278,78 +264,88 @@ export const SocialFeed: React.FC = () => {
             onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
             onAddComment={handleAddComment}
             onGenerateComment={handleGenerateComment}
-            isGeneratingComment={isGeneratingComment === currentDetailPost.id}
-            onEdit={() => { handleEditPost(currentDetailPost!); }}
-            onDelete={() => handleDeletePost(currentDetailPost!.id)}
-            deletingPostId={deletingPostId}
             onEditComment={(commentId) => console.log('edit', commentId)}
             onDeleteComment={(commentId) => console.log('delete', commentId)}
+            onEdit={() => handleEditPost(currentDetailPost)}
+            onDelete={() => handleDeletePost(currentDetailPost.id)}
+            deletingPostId={deletingPostId}
+            isGeneratingComment={isGeneratingComment === currentDetailPost.id}
           />
         );
-      })()}
 
-      {/* ── Layer 1: Main Feed ── */}
-      {/* Header */}
-        <div className="w-full h-[68px] px-4 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0">
-  <button onClick={() => setIsProfileModalOpen(true)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors">
-    <Icons.Settings size={16} />
-  </button>
-  <div className="flex-1 flex flex-col items-center justify-center min-w-0">
-    <h2 className="font-hand text-2xl text-wade-accent tracking-wide">WadeOS</h2>
-    <span className="text-[9px] text-wade-text-muted font-medium tracking-widest uppercase">Social Feed</span>
-  </div>
-  <button onClick={() => setIsPostEditorOpen(true)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors">
-    <Icons.Plus size={16} />
-  </button>
-</div>
-
-      {/* Feed */}
-      <div className="flex-1 overflow-y-auto pb-24 custom-scrollbar bg-wade-bg-app px-4 pt-6">
-        <div className="max-w-lg mx-auto">
-          {localPosts.length === 0 ? (
-            <div className="text-center py-20 text-[10px] font-mono text-wade-text-muted uppercase tracking-[0.2em] opacity-60">
-              The timeline is quiet.
+      /* ─── View: Feed (default) ─── */
+      })() : (
+        <>
+          {/* Header */}
+          <div className="w-full h-[68px] px-4 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0">
+            <button
+              onClick={() => setIsProfileModalOpen(true)}
+              className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"
+            >
+              <Icons.Settings size={16} />
+            </button>
+            <div className="flex-1 flex flex-col items-center justify-center min-w-0">
+              <h2 className="font-hand text-2xl text-wade-accent tracking-wide">WadeOS</h2>
+              <span className="text-[9px] text-wade-text-muted font-medium tracking-widest uppercase">Social Feed</span>
             </div>
-          ) : (
-            [...localPosts]
-              .sort((a, b) => b.timestamp - a.timestamp)
-              .map(post => {
-                const info = getAuthorInfo(post.author);
-                return (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    avatar={info.avatar}
-                    displayName={info.displayName}
-                    username={info.username}
-                    isExpanded={expandedPostIds.has(post.id)}
-                    menuOpen={openMenuPostId === post.id}
-                    deletingPostId={deletingPostId}
-                    onClickPost={() => handlePostClick(post)}
-                    onLike={() => handleToggleLike(post.id)}
-                    onBookmark={() => handleToggleBookmark(post.id)}
-                    onProfileClick={() => setViewingProfile(post.author as 'Luna' | 'Wade')}
-                    onOpenDetail={() => setViewingPostDetail(post.id)}
-                    onOpenMenu={() => setOpenMenuPostId(openMenuPostId === post.id ? null : post.id)}
-                    onCloseMenu={() => setOpenMenuPostId(null)}
-                    onEdit={() => { handleEditPost(post); }}
-                    onDelete={() => handleDeletePost(post.id)}
-                    onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
-                    formatTime={formatExactTime}
-                  />
-                );
-              })
-          )}
+            <button
+              onClick={() => setIsPostEditorOpen(true)}
+              className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"
+            >
+              <Icons.Plus size={16} />
+            </button>
+          </div>
 
-          {localPosts.length > 0 && (
-            <div className="text-center py-8 text-[10px] font-mono text-wade-text-muted uppercase tracking-[0.2em] opacity-60">
-              No more memories
+          {/* Feed */}
+          <div className="flex-1 overflow-y-auto pb-24 custom-scrollbar bg-wade-bg-app px-4 pt-6">
+            <div className="max-w-lg mx-auto">
+              {localPosts.length === 0 ? (
+                <div className="text-center py-20 text-[10px] font-mono text-wade-text-muted uppercase tracking-[0.2em] opacity-60">
+                  The timeline is quiet.
+                </div>
+              ) : (
+                [...localPosts]
+                  .sort((a, b) => b.timestamp - a.timestamp)
+                  .map(post => {
+                    const info = getAuthorInfo(post.author);
+                    return (
+                      <PostCard
+                        key={post.id}
+                        post={post}
+                        avatar={info.avatar}
+                        displayName={info.displayName}
+                        username={info.username}
+                        isExpanded={expandedPostIds.has(post.id)}
+                        menuOpen={openMenuPostId === post.id}
+                        deletingPostId={deletingPostId}
+                        onClickPost={() => handlePostClick(post)}
+                        onLike={() => handleToggleLike(post.id)}
+                        onBookmark={() => handleToggleBookmark(post.id)}
+                        onProfileClick={() => setViewingProfile(post.author as 'Luna' | 'Wade')}
+                        onOpenDetail={() => setViewingPostDetail(post.id)}
+                        onOpenMenu={() => setOpenMenuPostId(openMenuPostId === post.id ? null : post.id)}
+                        onCloseMenu={() => setOpenMenuPostId(null)}
+                        onEdit={() => handleEditPost(post)}
+                        onDelete={() => handleDeletePost(post.id)}
+                        onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
+                        formatTime={formatExactTime}
+                        onGenerateReply={() => handleGenerateComment(post)}
+                      />
+                    );
+                  })
+              )}
+
+              {localPosts.length > 0 && (
+                <div className="text-center py-8 text-[10px] font-mono text-wade-text-muted uppercase tracking-[0.2em] opacity-60">
+                  No more memories
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
-      {/* ── Modals ── */}
+      {/* ── Modals (always available) ── */}
       <PostEditorModal
         isOpen={isPostEditorOpen}
         onClose={() => setIsPostEditorOpen(false)}
@@ -362,7 +358,7 @@ export const SocialFeed: React.FC = () => {
       {/* ── Zoomed Image Viewer ── */}
       {zoomedImage && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4"
           onClick={() => setZoomedImage(null)}
         >
           <div
