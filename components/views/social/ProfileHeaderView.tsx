@@ -164,21 +164,21 @@ export const ProfileHeaderView: React.FC<ProfileHeaderViewProps> = ({
           <div className="flex items-center gap-6 mt-1.5" onClick={e => e.stopPropagation()}>
             <button onClick={() => onLike(post.id)} className={`flex items-center gap-1.5 transition-colors ${post.likes > 0 ? 'text-wade-accent' : 'text-wade-text-muted hover:text-wade-accent'}`}>
               <div className={`p-1.5 rounded-full ${post.likes > 0 ? 'bg-wade-accent-light' : 'hover:bg-wade-accent-light'}`}>
-                <SocialIcons.Heart filled={post.likes > 0} />
+                <Icons.Heart size={15} filled={post.likes > 0} />
               </div>
               <span className={`text-[10px] font-mono min-w-[16px] ${post.likes > 0 ? '' : 'invisible'}`}>{post.likes || 0}</span>
             </button>
 
             <button onClick={() => onPostClick(post)} className="flex items-center gap-1.5 text-wade-text-muted hover:text-wade-accent transition-colors">
               <div className="p-1.5 rounded-full hover:bg-wade-accent-light transition-colors">
-                <SocialIcons.Message />
+                <Icons.Chat size={15} />
               </div>
               {post.comments?.length > 0 && <span className="text-[10px] font-mono">{post.comments.length}</span>}
             </button>
 
             <button onClick={() => onBookmark(post.id)} className={`flex items-center gap-1.5 transition-colors ml-auto mr-2 ${post.isBookmarked ? 'text-wade-accent' : 'text-wade-text-muted hover:text-wade-accent'}`}>
               <div className={`p-1.5 rounded-full ${post.isBookmarked ? 'bg-wade-accent-light' : 'hover:bg-wade-accent-light'}`}>
-                <SocialIcons.Bookmark filled={post.isBookmarked} />
+              <Icons.Bookmark size={15} filled={post.isBookmarked} />
               </div>
             </button>
           </div>
