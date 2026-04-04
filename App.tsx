@@ -68,9 +68,9 @@ const AppContent = () => {
       
       root.style.setProperty('--wade-shadow-glow', activeCustomTheme.shadowGlow);
       
-      // Apply bubble colors as CSS variables
-      if (activeCustomTheme.bubbleLuna) root.style.setProperty('--wade-bubble-luna', activeCustomTheme.bubbleLuna);
-      if (activeCustomTheme.bubbleWade) root.style.setProperty('--wade-bubble-wade', activeCustomTheme.bubbleWade);
+      // Apply bubble colors as CSS variables (always set — data-theme="custom" has no CSS fallback)
+      root.style.setProperty('--wade-bubble-luna', activeCustomTheme.bubbleLuna || activeCustomTheme.accent);
+      root.style.setProperty('--wade-bubble-wade', activeCustomTheme.bubbleWade || activeCustomTheme.bgCard);
 
       // Handle custom font injection
       let customFontCss = '';
