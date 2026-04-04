@@ -127,9 +127,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           }
 
           const remoteSettings: AppSettings = {
-            activeLlmId: sData?.active_llm_id || settings.activeLlmId,
-            activeTtsId: sData?.active_tts_id || settings.activeTtsId,
-            homeLlmId: sData?.home_llm_id || settings.homeLlmId,
+            activeLlmId: settings.activeLlmId || sData?.active_llm_id,
+            activeTtsId: settings.activeTtsId || sData?.active_tts_id,
+            homeLlmId: settings.homeLlmId || sData?.home_llm_id,
             themeColor: settings.themeColor,
             fontSize: settings.fontSize,
             customTheme: activeTheme,
@@ -232,6 +232,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             console.error("Failed to load pinned sessions from localStorage", e);
           }
 
+          let localLlmCache: Record<string, string> = {};
+          try { localLlmCache = JSON.parse(localStorage.getItem('wadeOS_sessionLlm') || '{}'); } catch (e) {}
+
           const mappedSessions = sessData.map(s => ({
             id: s.id,
             mode: s.mode as ChatMode,
@@ -240,7 +243,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             updatedAt: new Date(s.updated_at).getTime(),
             activeMemoryIds: s.active_memory_ids || [],
             isPinned: (s.is_pinned ?? s.pinned ?? false) || localPinnedIds.includes(s.id),
-            customLlmId: s.custom_llm_id,
+            customLlmId: localLlmCache[s.id] || s.custom_llm_id,
             customPrompt: s.custom_prompt,
             customTheme: s.custom_theme ? (typeof s.custom_theme === 'string' ? JSON.parse(s.custom_theme) : s.custom_theme) : undefined
           }));
@@ -623,6 +626,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const updateSession = async (id: string, updates: Partial<ChatSession>) => {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates, updatedAt: Date.now() } : s));
+    // Cache per-session LLM choice locally so it survives even if Supabase write fails
+    if (updates.customLlmId !== undefined) {
+      try {
+        const cache = JSON.parse(localStorage.getItem('wadeOS_sessionLlm') || '{}');
+        if (updates.customLlmId) cache[id] = updates.customLlmId;
+        else delete cache[id];
+        localStorage.setItem('wadeOS_sessionLlm', JSON.stringify(cache));
+      } catch (e) {}
+    }
     const dbUpdates: any = {};
     if (updates.customLlmId !== undefined) dbUpdates.custom_llm_id = updates.customLlmId;
     if (updates.customPrompt !== undefined) dbUpdates.custom_prompt = updates.customPrompt;
