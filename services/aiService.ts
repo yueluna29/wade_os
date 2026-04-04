@@ -135,9 +135,13 @@ export const buildSystemPromptFromCard = (options: {
   // 7. 模式专属规则
   if (chatMode === 'sms') {
     const smsRules = wadeCard?.sms_mode_rules?.trim();
-    prompt += smsRules
-      ? `\n\n${smsRules}`
-      : `\n\n[SMS FORMAT: Split texts with |||. Short & casual.]`;
+    if (smsRules) prompt += `\n\n${smsRules}`;
+    prompt += `\n\n[SMS MODE — HARD RULES]
+- You are texting on a phone. Dialogue ONLY. No action narration, no asterisks (*action*), no stage directions.
+- Split separate texts with |||. Each segment must contain actual spoken words.
+- To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
+- Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
+- Keep the vibe casual and natural, like real phone texting.`;
   } else if (chatMode === 'roleplay') {
     const rpRules = wadeCard?.rp_mode_rules?.trim();
     prompt += rpRules
@@ -412,10 +416,13 @@ const generateOpenAICompatibleResponse = async (
   if (chatMode === 'sms') {
     if (smsInstructions) {
        fullSystemPrompt += `\n\n${smsInstructions}`;
-    } else {
-       // Minimal Fallback just in case settings are empty
-       fullSystemPrompt += `\n\n[SMS FORMAT: Split texts with |||. Short & casual.]`;
     }
+    fullSystemPrompt += `\n\n[SMS MODE — HARD RULES]
+- You are texting on a phone. Dialogue ONLY. No action narration, no asterisks (*action*), no stage directions.
+- Split separate texts with |||. Each segment must contain actual spoken words.
+- To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
+- Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
+- Keep the vibe casual and natural, like real phone texting.`;
   } else {
     if (roleplayInstructions) {
        fullSystemPrompt += `\n\n${roleplayInstructions}`;

@@ -372,11 +372,15 @@ export const ChatInterface: React.FC = () => {
         base64Audio = message.audioCache;
       } else if (!forceRegenerate && message) {
         // Lazy-load audio_cache from Supabase (not loaded at startup to save bandwidth)
-        const tableName = message.mode === 'sms' ? 'messages_sms' : message.mode === 'roleplay' ? 'messages_roleplay' : 'messages_deep';
-        const { data } = await supabase.from(tableName).select('audio_cache').eq('id', messageId).single();
-        if (data?.audio_cache) {
-          base64Audio = data.audio_cache;
-          updateMessageAudioCache(messageId, data.audio_cache);
+        try {
+          const tableName = message.mode === 'sms' ? 'messages_sms' : message.mode === 'roleplay' ? 'messages_roleplay' : 'messages_deep';
+          const { data } = await supabase.from(tableName).select('audio_cache').eq('id', messageId).maybeSingle();
+          if (data?.audio_cache) {
+            base64Audio = data.audio_cache;
+            updateMessageAudioCache(messageId, data.audio_cache);
+          }
+        } catch (e) {
+          console.warn('Failed to lazy-load audio cache, will generate new TTS', e);
         }
       }
       if (!base64Audio) {
@@ -493,6 +497,17 @@ export const ChatInterface: React.FC = () => {
         // Kill ghost bubbles: strip parts that are nothing but <status> tags
         parts = parts.filter(p => p.replace(/<status>[\s\S]*?<\/status>/gi, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().length > 0);
         if (parts.length === 0) parts = ["..."];
+        // Fix [VOICE] split: if a part is just [VOICE] with no text, merge it with the next part
+        const merged: string[] = [];
+        for (let i = 0; i < parts.length; i++) {
+          if (/^\[VOICE\]\s*$/i.test(parts[i]) && i + 1 < parts.length) {
+            merged.push(`[VOICE] ${parts[i + 1]}`);
+            i++; // skip the next part since we merged it
+          } else {
+            merged.push(parts[i]);
+          }
+        }
+        parts = merged;
         for (let i = 0; i < parts.length; i++) {
           setTimeout(() => {
             addMessage({ id: Date.now().toString() + i, sessionId: targetSessionId, role: 'Wade', text: parts[i], model: currentModel, timestamp: Date.now(), mode: activeMode, variants: i === 0 && thinking ? [{ text: parts[i], thinking, model: currentModel }] : [{ text: parts[i] }] });
