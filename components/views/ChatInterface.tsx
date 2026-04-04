@@ -164,6 +164,7 @@ export const ChatInterface: React.FC = () => {
   // Audio playback state
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [audioDurations, setAudioDurations] = useState<Record<string, number>>({});
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [attachments, setAttachments] = useState<{ type: 'image' | 'file', content: string, mimeType: string, name: string }[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -358,7 +359,7 @@ export const ChatInterface: React.FC = () => {
   // === TTS ===
   const executeTTS = async (text: string, messageId: string, forceRegenerate: boolean = false) => {
     try {
-      if (playingMessageId === messageId) {
+      if (playingMessageId === messageId && !forceRegenerate) {
         if (audioRef.current) { if (isPaused) { audioRef.current.play(); setIsPaused(false); } else { audioRef.current.pause(); setIsPaused(true); } return; }
       }
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
@@ -367,8 +368,18 @@ export const ChatInterface: React.FC = () => {
 
       const message = messages.find(m => m.id === messageId);
       let base64Audio: string | undefined;
-      if (!forceRegenerate && message?.audioCache) { base64Audio = message.audioCache; }
-      else {
+      if (!forceRegenerate && message?.audioCache) {
+        base64Audio = message.audioCache;
+      } else if (!forceRegenerate && message) {
+        // Lazy-load audio_cache from Supabase (not loaded at startup to save bandwidth)
+        const tableName = message.mode === 'sms' ? 'messages_sms' : message.mode === 'roleplay' ? 'messages_roleplay' : 'messages_deep';
+        const { data } = await supabase.from(tableName).select('audio_cache').eq('id', messageId).single();
+        if (data?.audio_cache) {
+          base64Audio = data.audio_cache;
+          updateMessageAudioCache(messageId, data.audio_cache);
+        }
+      }
+      if (!base64Audio) {
         const activeTts = settings.activeTtsId ? ttsPresets.find(p => p.id === settings.activeTtsId) : null;
         if (!activeTts) throw new Error("没找到声音配置！");
         const cleanText = text.replace(/[*_~`#]/g, '');
@@ -391,6 +402,7 @@ export const ChatInterface: React.FC = () => {
       audioUrlRef.current = url;
       const audio = new Audio(url);
       audioRef.current = audio;
+      audio.onloadedmetadata = () => { setAudioDurations(prev => ({ ...prev, [messageId]: audio.duration })); };
       audio.onended = () => { setPlayingMessageId(null); setIsPaused(false); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
       audio.onerror = () => { setPlayingMessageId(null); setIsPaused(false); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
       setPlayingMessageId(messageId); setIsPaused(false); await audio.play();
@@ -478,6 +490,9 @@ export const ChatInterface: React.FC = () => {
         let parts = responseText.split('|||').map((s: string) => s.trim()).filter((s: string) => s);
         if (parts.length === 1 && responseText.includes('\n')) { const lines = responseText.split('\n').map((s: string) => s.trim()).filter((s: string) => s); if (lines.length > 1) parts = lines; }
         if (parts.length === 0) parts = ["..."];
+        // Kill ghost bubbles: strip parts that are nothing but <status> tags
+        parts = parts.filter(p => p.replace(/<status>[\s\S]*?<\/status>/gi, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().length > 0);
+        if (parts.length === 0) parts = ["..."];
         for (let i = 0; i < parts.length; i++) {
           setTimeout(() => {
             addMessage({ id: Date.now().toString() + i, sessionId: targetSessionId, role: 'Wade', text: parts[i], model: currentModel, timestamp: Date.now(), mode: activeMode, variants: i === 0 && thinking ? [{ text: parts[i], thinking, model: currentModel }] : [{ text: parts[i] }] });
@@ -563,13 +578,17 @@ export const ChatInterface: React.FC = () => {
       if (activeLlm?.apiKey) { generateChatTitle(currentInput, activeLlm.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
     }
     if (activeMode === 'sms') {
+      // SMS: 0.8s debounce so Luna can still delete & resend if she typos
       setWaitingForSMS(true);
       if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
-      smsDebounceTimer.current = setTimeout(() => { setWadeStatus('typing'); setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput); }, 2000); }, 30000);
+      setWadeStatus('typing');
+      smsDebounceTimer.current = setTimeout(() => {
+        if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput);
+      }, 800);
     } else {
+      // Deep & Roleplay: fire immediately, no reason to make Wade stand in the corner
       setIsTyping(true);
-      const timer = setTimeout(() => { if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput); }, 15000);
-      setDelayTimer(timer);
+      if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput);
     }
   };
 
@@ -810,7 +829,7 @@ export const ChatInterface: React.FC = () => {
             const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
             return (
               <div key={msg.id} id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
-                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} />
+                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} />
               </div>
             );
           })}

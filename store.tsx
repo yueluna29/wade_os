@@ -255,10 +255,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
         
         const fetchMessages = async () => {
+          const msgColumns = 'id, session_id, role, content, model, created_at, variants, selected_index, variants_thinking';
           const [deepRes, smsRes, rpRes] = await Promise.all([
-            supabase.from('messages_deep').select('*'),
-            supabase.from('messages_sms').select('*'),
-            supabase.from('messages_roleplay').select('*')
+            supabase.from('messages_deep').select(msgColumns),
+            supabase.from('messages_sms').select(msgColumns),
+            supabase.from('messages_roleplay').select(msgColumns)
           ]);
 
           let allMessages: Message[] = [];

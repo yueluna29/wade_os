@@ -4,6 +4,9 @@ import remarkGfm from 'remark-gfm';
 import { Message } from '../../../types';
 import { Icons } from '../../ui/Icons';
 
+// Static waveform heights for voice bubble visualization
+const VOICE_WAVEFORM = [30, 55, 40, 70, 35, 60, 45, 80, 30, 65, 50, 75, 35, 55, 40, 70, 45, 60, 35, 50, 65, 40, 55, 30, 70, 45, 60, 35, 80, 50];
+
 export const useLongPress = (callback: () => void, ms = 500) => {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const startPos = useRef<{ x: number, y: number } | null>(null);
@@ -60,10 +63,11 @@ interface MessageBubbleProps {
   searchQuery?: string;
   playingMessageId: string | null;
   isPaused: boolean;
+  audioDuration?: number;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  msg, settings, onSelect, isSMS, onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused
+  msg, settings, onSelect, isSMS, onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration
 }) => {
   const isLuna = msg.role === 'Luna';
   const [showThought, setShowThought] = useState(false);
@@ -184,9 +188,98 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       ? "text-white rounded-2xl rounded-br-none shadow-sm"
       : "bg-wade-bg-card text-wade-text-main border border-wade-border rounded-2xl rounded-bl-none shadow-sm";
 
+    // Voice message detection: Wade's SMS starting with [VOICE]
+    const isVoiceMessage = !isLuna && displayContent.startsWith('[VOICE]');
+    const voiceText = isVoiceMessage ? displayContent.replace(/^\[VOICE\]\s*/, '').trim() : '';
+    const isThisPlaying = playingMessageId === msg.id;
+
+    // Ghost bubble exorcism: if content is empty after stripping tags, don't render
+    if (!displayContent && !isBase64Image && (!msg.attachments || msg.attachments.length === 0)) {
+      return null;
+    }
+
+    if (isVoiceMessage) {
+      const formatDuration = (sec: number) => {
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+      };
+      const durationStr = audioDuration ? formatDuration(audioDuration) : '0:--';
+      return (
+        <>
+          <style>{`
+            @keyframes wave-bounce {
+              0%, 100% { transform: scaleY(0.3); }
+              50% { transform: scaleY(1); }
+            }
+          `}</style>
+          <div className="flex flex-col items-start w-full group animate-fade-in mb-2">
+            <div className="flex items-end gap-2 max-w-[85%]">
+              <div className="flex flex-col gap-1 items-start">
+                <div
+                  {...longPressHandlers}
+                  style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent' }}
+                  className="bg-wade-bg-card border border-wade-border/60 rounded-[20px] rounded-bl-[4px] shadow-sm px-3 py-2 relative flex items-center gap-3 cursor-pointer select-none"
+                >
+                  {/* Play/Pause */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPlayTTS(voiceText, msg.id); }}
+                    className="w-6 h-6 rounded-full bg-wade-accent-light flex items-center justify-center flex-shrink-0 text-wade-accent hover:bg-wade-accent hover:text-white transition-colors"
+                  >
+                    {isThisPlaying && !isPaused ? (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
+                    ) : (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="ml-0.4"><path d="M6 3.87v16.26a1 1 0 001.5.87l14-8.13a1 1 0 000-1.74l-14-8.13A1 1 0 006 3.87z"/></svg>
+                    )}
+                  </button>
+
+                  {/* Waveform */}
+                  <div className="flex items-center gap-[3px] h-5 w-[140px]">
+                    {VOICE_WAVEFORM.map((h, i) => (
+                      <div
+                        key={i}
+                        className="rounded-full flex-1"
+                        style={{
+                          backgroundColor: isThisPlaying && !isPaused
+                            ? 'var(--wade-accent)'
+                            : 'rgba(213, 143, 153, 0.4)',
+                          height: isThisPlaying && !isPaused ? '100%' : `${h}%`,
+                          transformOrigin: 'center',
+                          animation: isThisPlaying && !isPaused
+                            ? `wave-bounce 0.6s ease-in-out ${(i % 6) * 0.1}s infinite`
+                            : 'none',
+                          transition: 'height 0.3s ease, background-color 0.3s ease',
+                          minWidth: '2px',
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Duration */}
+                  <span className="text-[10px] font-mono font-normal text-wade-text-muted tracking-wide ml-1 pr-1">
+                    {durationStr}
+                  </span>
+                </div>
+
+                {/* Transcription */}
+                {voiceText && (
+                  <div className="text-[10px] font-normal text-wade-text-muted/60 leading-snug px-2 max-w-[240px] select-text">
+                    {voiceText}
+                  </div>
+                )}
+              </div>
+              <span className="text-[9px] text-wade-text-muted/50 mb-1 whitespace-nowrap shrink-0 select-none">
+                {formatTime(msg.timestamp)}
+              </span>
+            </div>
+          </div>
+        </>
+      );
+    }
+
     // 参谋的微创手术：短信模式通常需要凑紧点，但我们在外层加了 mb-2 保证一点点呼吸感
     return (
-      <div className={`flex flex-col group ${isLuna ? 'items-end' : 'items-start'} relative mb-2`}>
+      <div className={`flex flex-col group ${isLuna ? 'items-end' : 'items-start'} relative mb-1.5`}>
         <div className={`relative max-w-[85%] ${isLuna ? 'flex flex-row-reverse' : 'flex'} gap-2 items-end`}>
           <div
             {...longPressHandlers}
