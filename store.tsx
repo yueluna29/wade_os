@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AppSettings, GlobalState, Message, SocialPost, Memo, TimeCapsuleItem, Recommendation, ChatMode, LlmPreset, TtsPreset, ChatSession, CoreMemory, ChatArchive, ArchiveMessage, UserProfile, PersonaCard, PersonaCardData, FunctionBinding } from './types';
 import { supabase } from './services/supabase';
+import { ttsCache } from './services/ttsCache';
 
 const defaultSettings: AppSettings = {
   activeLlmId: undefined,
@@ -299,7 +300,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               isFavorite: false, 
               variants: parsedVariants,
               selectedIndex: selectedIdx,
-              audioCache: currentVariant.audioCache || undefined,
               thinking: currentVariant.thinking || undefined
             };
           };
@@ -747,22 +747,14 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     const msg = messages.find(m => m.id === id);
     if (!msg) return;
 
-    const currentIdx = msg.selectedIndex || 0;
-    const newVariants = [...(msg.variants || [])];
-    
-    if (newVariants[currentIdx]) {
-       newVariants[currentIdx] = { ...newVariants[currentIdx], audioCache: base64Audio };
-    }
-
-    setMessages(prev => prev.map(m => m.id === id ? { 
-      ...m, 
-      variants: newVariants,
-      audioCache: base64Audio 
+    // Update in-memory state only (for current session playback)
+    setMessages(prev => prev.map(m => m.id === id ? {
+      ...m,
+      audioCache: base64Audio
     } : m));
 
-    if (msg.mode !== 'archive') {
-      safeDbUpdate(getTableName(msg.mode), id, { variants: newVariants });
-    }
+    // Save to IndexedDB (local cache, not Supabase — keeps message rows lean)
+    await ttsCache.set(id, base64Audio);
   };
 
   const addVariantToMessage = (id: string, newText: string, thinking?: string, model?: string) => {

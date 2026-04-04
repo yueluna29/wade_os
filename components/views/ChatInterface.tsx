@@ -370,17 +370,12 @@ export const ChatInterface: React.FC = () => {
       let base64Audio: string | undefined;
       if (!forceRegenerate && message?.audioCache) {
         base64Audio = message.audioCache;
-      } else if (!forceRegenerate && message) {
-        // Lazy-load audio_cache from Supabase (not loaded at startup to save bandwidth)
-        try {
-          const tableName = message.mode === 'sms' ? 'messages_sms' : message.mode === 'roleplay' ? 'messages_roleplay' : 'messages_deep';
-          const { data } = await supabase.from(tableName).select('audio_cache').eq('id', messageId).maybeSingle();
-          if (data?.audio_cache) {
-            base64Audio = data.audio_cache;
-            updateMessageAudioCache(messageId, data.audio_cache);
-          }
-        } catch (e) {
-          console.warn('Failed to lazy-load audio cache, will generate new TTS', e);
+      } else if (!forceRegenerate) {
+        // Load from local IndexedDB cache
+        const { ttsCache } = await import('../../services/ttsCache');
+        const cached = await ttsCache.get(messageId);
+        if (cached) {
+          base64Audio = cached;
         }
       }
       if (!base64Audio) {
