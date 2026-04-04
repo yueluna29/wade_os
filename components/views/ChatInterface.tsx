@@ -381,7 +381,7 @@ export const ChatInterface: React.FC = () => {
       if (!base64Audio) {
         const activeTts = settings.activeTtsId ? ttsPresets.find(p => p.id === settings.activeTtsId) : null;
         if (!activeTts) throw new Error("没找到声音配置！");
-        const cleanText = text.replace(/[*_~`#]/g, '');
+        const cleanText = text.replace(/^\[VOICE\]\s*/i, '').replace(/[*_~`#]/g, '');
         base64Audio = await generateMinimaxTTS(cleanText, {
           apiKey: activeTts.apiKey, baseUrl: activeTts.baseUrl || 'https://api.minimax.io',
           model: activeTts.model || 'speech-2.8-hd', voiceId: activeTts.voiceId || 'English_expressive_narrator',
