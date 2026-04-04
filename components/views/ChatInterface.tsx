@@ -584,8 +584,9 @@ export const ChatInterface: React.FC = () => {
     addMessage(newMessage); setLastSentMessageId(newMessage.id); setLastInputText(currentInput); setInputText(''); setAttachments([]);
     if (textareaRef.current) textareaRef.current.style.height = '48px';
     if (isFirstMessage) {
-      const activeLlm = settings.activeLlmId ? llmPresets.find(p => p.id === settings.activeLlmId) : null;
-      if (activeLlm?.apiKey) { generateChatTitle(currentInput, activeLlm.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
+      const currentSession = sessions.find(s => s.id === targetSessionId);
+      const effectiveLlm = llmPresets.find(p => p.id === (currentSession?.customLlmId || settings.activeLlmId)) || llmPresets[0];
+      if (effectiveLlm?.apiKey) { generateChatTitle(currentInput, effectiveLlm.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
     }
     if (activeMode === 'sms') {
       // SMS: 0.8s debounce so Luna can still delete & resend if she typos

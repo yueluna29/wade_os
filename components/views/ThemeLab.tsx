@@ -30,10 +30,20 @@ export const deriveTheme = (base: Partial<CustomTheme>): CustomTheme => {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   };
 
+  // Mix accent with background to create a light tint
+  const mixWithBg = (hex: string, bg: string, ratio: number) => {
+    const hR = parseInt(hex.slice(1, 3), 16), hG = parseInt(hex.slice(3, 5), 16), hB = parseInt(hex.slice(5, 7), 16);
+    const bR = parseInt(bg.slice(1, 3), 16), bG = parseInt(bg.slice(3, 5), 16), bB = parseInt(bg.slice(5, 7), 16);
+    const r = Math.round(hR * ratio + bR * (1 - ratio));
+    const g = Math.round(hG * ratio + bG * (1 - ratio));
+    const b = Math.round(hB * ratio + bB * (1 - ratio));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  };
+
   return {
     accent,
     accentHover: base.accentHover || adjustHex(accent, isDark ? 30 : -20),
-    accentLight: base.accentLight || (isDark ? `${accent}20` : `${accent}18`),
+    accentLight: base.accentLight || mixWithBg(accent, bgBase, isDark ? 0.15 : 0.1),
     bgBase,
     bgCard,
     bgApp,
@@ -43,10 +53,10 @@ export const deriveTheme = (base: Partial<CustomTheme>): CustomTheme => {
     borderLight: base.borderLight || accent,
     codeBg: base.codeBg || bgApp,
     codeText: base.codeText || textMain,
-    shadowGlow: base.shadowGlow || `0 4px 12px ${accent}30`,
+    shadowGlow: base.shadowGlow || `0 4px 12px rgba(${parseInt(accent.slice(1,3),16)}, ${parseInt(accent.slice(3,5),16)}, ${parseInt(accent.slice(5,7),16)}, 0.3)`,
     fontFamily: base.fontFamily || base.fontFamilyEn || 'Nunito',
     fontSize: base.fontSize || 'medium',
-    bubbleLuna: base.bubbleLuna || (isDark ? `${accent}25` : `${accent}15`),
+    bubbleLuna: base.bubbleLuna || mixWithBg(accent, bgBase, isDark ? 0.2 : 0.08),
     bubbleWade: base.bubbleWade || bgCard,
     fontFamilyEn: base.fontFamilyEn || 'Nunito',
     fontFamilyZh: base.fontFamilyZh || '"Noto Sans SC"',
