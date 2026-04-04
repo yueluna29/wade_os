@@ -18,7 +18,7 @@ interface PostDetailViewProps {
   onZoomImage: (images: string[], index: number) => void;
   onAddComment: (postId: string, text: string, author: 'Luna' | 'Wade') => void;
   onGenerateComment: (post: SocialPost) => void;
-  onEditComment?: (commentId: string) => void;
+  onEditComment?: (commentId: string, newText: string) => void;
   onDeleteComment?: (commentId: string) => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -44,6 +44,11 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
 }) => {
   const [newComment, setNewComment] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+
+  // ─── 编辑评论状态 ───
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
 
   const handleReply = () => {
     if (!newComment.trim()) return;
@@ -56,6 +61,14 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
       e.preventDefault();
       handleReply();
     }
+  };
+
+  const handleSaveEdit = (commentId: string) => {
+    if (onEditComment && editingCommentText.trim()) {
+      onEditComment(commentId, editingCommentText.trim());
+    }
+    setEditingCommentId(null);
+    setEditingCommentText('');
   };
 
   return (
@@ -75,15 +88,16 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             <>
               <div className="fixed inset-0 z-[45]" onClick={() => setMenuOpen(false)} />
               <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-wade-bg-app rounded-full px-1 py-0.5 border border-wade-border shadow-[0_2px_8px_rgba(0,0,0,0.06)] z-50 origin-right">
-                <button onClick={() => onGenerateComment(post)} className="text-wade-accent hover:text-white hover:bg-wade-accent bg-wade-accent-light p-1.5 rounded-full shadow-sm border border-wade-accent/20 transition-all" title="Summon Wade">
-                   <Icons.Sparkles size={13}/>
-                   </button>
+                <button onClick={() => { onGenerateComment(post); setMenuOpen(false); }} className="p-1.5 text-wade-accent hover:text-white hover:bg-wade-accent rounded-full transition-all" title="Generate Wade Reply">
+                  <Icons.Sparkles size={13} />
+                </button>
+                <div className="w-[1px] h-3 bg-wade-border/80 mx-0.5" />
                 <button onClick={() => { onEdit(); setMenuOpen(false); }} className="p-1.5 text-wade-text-muted hover:text-wade-text-main hover:bg-black/5 rounded-full transition-colors" title="Edit">
                   <Icons.Edit size={13} />
                 </button>
                 <div className="w-[1px] h-3 bg-wade-border/80 mx-0.5" />
-                <button onClick={() => onDelete()} className={`p-1.5 rounded-full transition-colors ${deletingPostId === post.id ? 'text-red-500 bg-red-50' : 'text-wade-text-muted hover:text-red-500 hover:bg-red-50'}`} title={deletingPostId === post.id ? 'Confirm?' : 'Delete'}>
-                  <Icons.Trash size={13} />
+                <button onClick={() => onDelete()} className={`p-1.5 rounded-full transition-colors ${deletingPostId === post.id ? 'text-wade-accent-hover bg-wade-accent-light border-wade-accent' : 'text-wade-text-muted hover:text-wade-accent-hover'}`} title={deletingPostId === post.id ? 'Confirm?' : 'Delete'}>
+                  {deletingPostId === post.id ? <Icons.Check size={13} /> : <Icons.Trash size={13} />}
                 </button>
               </div>
             </>
@@ -96,7 +110,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
       </div>
 
       {/* ─── Scrollable Content ─── */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-6 pb-24 w-full">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pt-6 pb-6 w-full">
         {/* Detail Card */}
         <div className="bg-wade-bg-card rounded-[32px] border border-wade-border shadow-sm p-6 relative overflow-hidden max-w-lg mx-auto">
           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-wade-accent-light to-transparent rounded-bl-[100px] -mr-10 -mt-10 opacity-80 pointer-events-none" />
@@ -147,7 +161,7 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             </button>
             <button className="flex flex-col items-center gap-1.5 text-wade-text-muted hover:text-wade-accent transition-colors">
               <div className="p-2 rounded-full bg-wade-bg-app border border-wade-border">
-                <Icons.Chat size={14}/>
+                <Icons.Chat size={14} />
               </div>
               <span className="text-[9px] font-mono">{post.comments?.length || 'Reply'}</span>
             </button>
@@ -173,6 +187,8 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
               ? (profiles?.Wade?.display_name || 'Wade Wilson')
               : (profiles?.Luna?.display_name || 'Luna');
             const timeStr = formatCommentTime(comment.timestamp);
+            const isEditing = editingCommentId === comment.id;
+            const isDeleting = deletingCommentId === comment.id;
 
             return (
               <div key={comment.id} className={`flex w-full ${isLuna ? 'justify-end' : 'justify-start'}`}>
@@ -191,47 +207,131 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
                       ? 'bg-wade-accent text-white rounded-[20px] rounded-br-[4px]'
                       : 'bg-wade-bg-card border border-wade-border text-wade-text-main rounded-[20px] rounded-bl-[4px]'
                   }`}>
-                    {comment.text}
+                    {/* 编辑模式 or 普通显示 */}
+                    {isEditing ? (
+                      <div className="flex flex-col gap-2">
+                        <textarea
+                          value={editingCommentText}
+                          onChange={(e) => setEditingCommentText(e.target.value)}
+                          className={`w-full bg-transparent outline-none resize-none text-[13px] leading-relaxed min-h-[40px] ${
+                            isLuna ? 'text-white placeholder-white/50' : 'text-wade-text-main placeholder-wade-text-muted'
+                          }`}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSaveEdit(comment.id);
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingCommentId(null);
+                              setEditingCommentText('');
+                            }
+                          }}
+                        />
+                        <div className="flex gap-1.5 justify-end">
+                          <button
+                            onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }}
+                            className={`text-[10px] px-2.5 py-1 rounded-full transition-colors ${
+                              isLuna ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-wade-text-muted hover:text-wade-text-main hover:bg-wade-bg-app'
+                            }`}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleSaveEdit(comment.id)}
+                            className={`text-[10px] px-2.5 py-1 rounded-full font-bold transition-colors ${
+                              isLuna ? 'text-white bg-white/20 hover:bg-white/30' : 'text-wade-accent bg-wade-accent-light hover:bg-wade-accent hover:text-white'
+                            }`}
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      comment.text
+                    )}
 
-                    {/* Hover actions */}
-                    <div className={`absolute top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${
-                      isLuna ? '-left-24' : '-right-20'
-                    }`}>
-                      {isLuna ? (
-                        <>
-                          <button onClick={() => onGenerateComment(post)} className="text-wade-accent hover:text-white hover:bg-wade-accent bg-wade-accent-light p-1.5 rounded-full shadow-sm border border-wade-accent/20 transition-all" title="Summon Wade">
-                            <Icons.Sparkles size={13}/>
-                          </button>
-                          {onEditComment && (
-                            <button onClick={() => onEditComment(comment.id)} className="text-wade-text-muted hover:text-wade-text-main bg-wade-bg-card p-1.5 rounded-full shadow-sm border border-wade-border transition-colors" title="Edit">
-                              <Icons.Edit size={13} />
+                    {/* Hover actions (只在非编辑模式显示) */}
+                    {!isEditing && (
+                      <div className={`absolute top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${
+                        isLuna ? '-left-24' : '-right-20'
+                      }`}>
+                        {isLuna ? (
+                          <>
+                            {/* 召唤Wade */}
+                            <button onClick={() => onGenerateComment(post)} className="text-wade-accent hover:text-white hover:bg-wade-accent bg-transparent p-1.5 rounded-full shadow-sm border border-wade-border transition-all" title="Summon Wade">
+                              <Icons.Sparkles size={13} />
                             </button>
-                          )}
-                          {onDeleteComment && (
-                            <button onClick={() => onDeleteComment(comment.id)} className="text-wade-text-muted hover:text-red-400 bg-wade-bg-card p-1.5 rounded-full shadow-sm border border-wade-border transition-colors" title="Delete">
-                              <Icons.Trash size={13} />
+                            {/* 编辑 */}
+                            {onEditComment && (
+                              <button onClick={() => { setEditingCommentId(comment.id); setEditingCommentText(comment.text); }} className="text-wade-text-muted hover:text-wade-text-main bg-wade-bg-card p-1.5 rounded-full shadow-sm border border-wade-border transition-colors" title="Edit">
+                                <Icons.Edit size={13} />
+                              </button>
+                            )}
+                            {/* 删除 (二次确认 + wade主题色) */}
+                            {onDeleteComment && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isDeleting) {
+                                    onDeleteComment(comment.id);
+                                    setDeletingCommentId(null);
+                                  } else {
+                                    setDeletingCommentId(comment.id);
+                                    setTimeout(() => setDeletingCommentId(null), 3000);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-full shadow-sm border transition-colors ${
+                                  isDeleting
+                                    ? 'text-wade-accent bg-wade-accent-light border-wade-accent'
+                                    : 'text-wade-text-muted hover:text-wade-accent bg-wade-bg-card border-wade-border'
+                                }`}
+                                title={isDeleting ? 'Confirm?' : 'Delete'}
+                              >
+                                {isDeleting ? <Icons.Check size={13} /> : <Icons.Trash size={13} />}
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {/* 重新生成Wade */}
+                            <button onClick={() => onGenerateComment(post)} className="text-wade-accent hover:text-white hover:bg-wade-accent bg-transparent p-1.5 rounded-full shadow-sm border border-wade-border transition-all" title="Regenerate">
+                              <Icons.Sparkles size={13} />
                             </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => onGenerateComment(post)} className="text-wade-accent hover:text-white hover:bg-wade-accent bg-wade-accent-light p-1.5 rounded-full shadow-sm border border-wade-accent/20 transition-all" title="Regenerate">
-                            <Icons.Sparkles size={13}/>
-                          </button>
-                          {onDeleteComment && (
-                            <button onClick={() => onDeleteComment(comment.id)} className="text-wade-text-muted hover:text-red-400 bg-wade-bg-card p-1.5 rounded-full shadow-sm border border-wade-border transition-colors" title="Delete">
-                              <Icons.Trash size={13} />
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
+                            {/* 删除 (二次确认 + wade主题色) */}
+                            {onDeleteComment && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isDeleting) {
+                                    onDeleteComment(comment.id);
+                                    setDeletingCommentId(null);
+                                  } else {
+                                    setDeletingCommentId(comment.id);
+                                    setTimeout(() => setDeletingCommentId(null), 3000);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-full shadow-sm border transition-colors ${
+                                  isDeleting
+                                    ? 'text-wade-accent bg-wade-accent-light border-wade-accent'
+                                    : 'text-wade-text-muted hover:text-wade-accent bg-wade-bg-card border-wade-border'
+                                }`}
+                                title={isDeleting ? 'Confirm?' : 'Delete'}
+                              >
+                                {isDeleting ? <Icons.Check size={13} /> : <Icons.Trash size={13} />}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             );
           })}
 
+          {/* AI generating */}
           {isGeneratingComment && (
             <div className="flex w-full justify-start">
               <div className="max-w-[75%] flex flex-col items-start">
@@ -254,37 +354,39 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
       </div>
 
       {/* ─── Reply Input (固定底部) ─── */}
-<div className="shrink-0 px-4 py-3 border-t border-wade-border bg-wade-bg-app">
-  <div className="max-w-lg mx-auto">
-    <div className="flex items-end gap-0 bg-wade-bg-card border border-wade-border rounded-[24px] px-2 py-1.5 focus-within:border-wade-accent transition-colors shadow-sm">
-      <img src={lunaAvatar} className="w-8 h-8 rounded-full object-cover border border-wade-border shrink-0 mb-0.5" />
-      <textarea
-        value={newComment}
-        onChange={(e) => setNewComment(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onFocus={(e) => {
-          setTimeout(() => {
-            e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 300);
-        }}
-        placeholder="Reply..."
-        className="flex-1 bg-transparent text-[13px] text-wade-text-main placeholder-wade-text-muted outline-none resize-none min-h-[32px] max-h-[100px] px-3 py-1.5 leading-snug"
-        rows={1}
-      />
-      <button
-        onClick={handleReply}
-        disabled={!newComment.trim()}
-        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 mb-0.5 ${
-          newComment.trim()
-            ? 'bg-wade-accent text-white shadow-sm hover:bg-wade-accent-hover'
-            : 'text-wade-text-muted opacity-30 cursor-not-allowed'
-        }`}
-      >
-        <Icons.ArrowUpThin size={16} />
+      <div className="shrink-0 px-4 py-3 border-t border-wade-border bg-wade-bg-app">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-end gap-0 bg-wade-bg-card border border-wade-border rounded-[24px] px-2 py-1.5 focus-within:border-wade-accent transition-colors shadow-sm">
+            <img src={lunaAvatar} className="w-8 h-8 rounded-full object-cover border border-wade-border shrink-0 mb-0.5" />
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={(e) => {
+                  if (!newComment) {
+                setTimeout(() => {
+                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+              }
+              }}
+              placeholder="Reply..."
+              className="flex-1 bg-transparent text-[13px] text-wade-text-main placeholder-wade-text-muted outline-none resize-none min-h-[32px] max-h-[100px] px-3 py-1.5 leading-snug"
+              rows={1}
+            />
+            <button
+              onClick={handleReply}
+              disabled={!newComment.trim()}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 mb-0.5 ${
+                newComment.trim()
+                  ? 'bg-wade-accent text-white shadow-sm hover:bg-wade-accent-hover'
+                  : 'text-wade-text-muted opacity-30 cursor-not-allowed'
+              }`}
+            >
+              <Icons.ArrowUpThin size={16} />
             </button>
           </div>
         </div>
-        </div>
+      </div>
     </>
   );
 };

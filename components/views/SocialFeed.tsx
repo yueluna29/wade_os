@@ -77,7 +77,7 @@ export const SocialFeed: React.FC = () => {
     }
   };
 
-  // ─── Delete ───
+  // ─── Delete Post ───
   const handleDeletePost = async (postId: string) => {
     if (deletingPostId === postId) {
       await deletePost(postId);
@@ -89,7 +89,7 @@ export const SocialFeed: React.FC = () => {
     }
   };
 
-  // ─── Edit ───
+  // ─── Edit Post ───
   const handleEditPost = (post: SocialPost) => {
     setOpenMenuPostId(null);
   };
@@ -111,7 +111,7 @@ export const SocialFeed: React.FC = () => {
     setLocalPosts(prev => prev.map(p => p.id === postId ? updatedPost : p));
   };
 
-  // ─── Comments ───
+  // ─── Add Comment ───
   const handleAddComment = async (
     postId: string,
     text: string,
@@ -134,7 +134,35 @@ export const SocialFeed: React.FC = () => {
     localPostsRef.current = localPostsRef.current.map(p =>
       p.id === postId ? updatedPost : p
     );
+  };
 
+  // ─── Delete Comment (真的！接Supabase的！) ───
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    const post = localPostsRef.current.find(p => p.id === postId);
+    if (!post) return;
+    const updatedPost = {
+      ...post,
+      comments: post.comments.filter((c: any) => c.id !== commentId)
+    };
+    await updatePost(updatedPost);
+    setLocalPosts(prev => prev.map(p => p.id === postId ? updatedPost : p));
+    localPostsRef.current = localPostsRef.current.map(p => p.id === postId ? updatedPost : p);
+  };
+
+  // ─── Edit Comment (真的！接Supabase的！) ───
+  const handleEditComment = async (postId: string, commentId: string, newText: string) => {
+    if (!newText.trim()) return;
+    const post = localPostsRef.current.find(p => p.id === postId);
+    if (!post) return;
+    const updatedPost = {
+      ...post,
+      comments: post.comments.map((c: any) =>
+        c.id === commentId ? { ...c, text: newText.trim() } : c
+      )
+    };
+    await updatePost(updatedPost);
+    setLocalPosts(prev => prev.map(p => p.id === postId ? updatedPost : p));
+    localPostsRef.current = localPostsRef.current.map(p => p.id === postId ? updatedPost : p);
   };
 
   // ─── AI Comment Generation ───
@@ -150,7 +178,7 @@ export const SocialFeed: React.FC = () => {
           .map(m => `- ${m.content}`)
           .join('\n');
 
-        const lunaComments = post.comments.filter(c => c.author === 'Luna').reverse();
+        const lunaComments = post.comments.filter((c: any) => c.author !== 'Wade').reverse();
         const mostRecentLunaComment = lunaComments[0];
 
         const taskDescription = mostRecentLunaComment
@@ -209,7 +237,7 @@ export const SocialFeed: React.FC = () => {
     : null;
 
   // ============================================================
-  // RENDER — Conditional, not stacked
+  // RENDER
   // ============================================================
   return (
     <div className="h-full flex flex-col bg-wade-bg-app relative font-sans">
@@ -246,11 +274,7 @@ export const SocialFeed: React.FC = () => {
             onUpdateCover={async (url) => {
               const field = viewingProfile === 'Luna' ? 'luna_cover_url' : 'wade_cover_url';
               const settingsField = viewingProfile === 'Luna' ? 'lunaCoverUrl' : 'wadeCoverUrl';
-              
-              // 先更新本地
               updateSettings({ [settingsField]: url });
-              
-              // 直接存进 core_identity_config
               await supabase.from('core_identity_config').update({ [field]: url }).eq('id', 1);
             }}
           />
@@ -275,8 +299,8 @@ export const SocialFeed: React.FC = () => {
             onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
             onAddComment={handleAddComment}
             onGenerateComment={handleGenerateComment}
-            onEditComment={(commentId) => console.log('edit', commentId)}
-            onDeleteComment={(commentId) => console.log('delete', commentId)}
+            onEditComment={(commentId, newText) => handleEditComment(currentDetailPost.id, commentId, newText)}
+            onDeleteComment={(commentId) => handleDeleteComment(currentDetailPost.id, commentId)}
             onEdit={() => handleEditPost(currentDetailPost)}
             onDelete={() => handleDeletePost(currentDetailPost.id)}
             deletingPostId={deletingPostId}
@@ -338,9 +362,9 @@ export const SocialFeed: React.FC = () => {
                         onCloseMenu={() => setOpenMenuPostId(null)}
                         onEdit={() => handleEditPost(post)}
                         onDelete={() => handleDeletePost(post.id)}
+                        onGenerateReply={() => handleGenerateComment(post)}
                         onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
                         formatTime={formatExactTime}
-                        onGenerateReply={() => handleGenerateComment(post)}
                       />
                     );
                   })
@@ -356,20 +380,14 @@ export const SocialFeed: React.FC = () => {
         </>
       )}
 
-      {/* ── Modals (always available) ── */}
-      <PostEditorModal
-        isOpen={isPostEditorOpen}
-        onClose={() => setIsPostEditorOpen(false)}
-      />
-      <ProfileEditorModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-      />
+      {/* ── Modals ── */}
+      <PostEditorModal isOpen={isPostEditorOpen} onClose={() => setIsPostEditorOpen(false)} />
+      <ProfileEditorModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
 
-      {/* ── Zoomed Image Viewer ── */}
+      {/* ── Zoomed Image Viewer (毛玻璃) ── */}
       {zoomedImage && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30 backdrop-blur-xl p-4"
           onClick={() => setZoomedImage(null)}
         >
           <div
