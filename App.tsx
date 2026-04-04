@@ -68,20 +68,43 @@ const AppContent = () => {
       
       root.style.setProperty('--wade-shadow-glow', activeCustomTheme.shadowGlow);
       
-      // Apply font family and size
-      document.body.style.fontFamily = `"${activeCustomTheme.fontFamily}", sans-serif`;
-      
-      const fontSizeMap: Record<string, string> = {
-        'small': '14px',
-        'medium': '16px',
-        'large': '18px'
-      };
+      // Apply bubble colors as CSS variables
+      if (activeCustomTheme.bubbleLuna) root.style.setProperty('--wade-bubble-luna', activeCustomTheme.bubbleLuna);
+      if (activeCustomTheme.bubbleWade) root.style.setProperty('--wade-bubble-wade', activeCustomTheme.bubbleWade);
+
+      // Handle custom font injection
+      let customFontCss = '';
+      let primaryFont = activeCustomTheme.fontFamilyEn || activeCustomTheme.fontFamily || 'Nunito';
+
+      if (activeCustomTheme.useCustomFont === 'google' && activeCustomTheme.googleFontName) {
+        const fontName = activeCustomTheme.googleFontName.replace(/ /g, '+');
+        customFontCss += `@import url('https://fonts.googleapis.com/css2?family=${fontName}&display=swap');\n`;
+        primaryFont = `"${activeCustomTheme.googleFontName}"`;
+      } else if (activeCustomTheme.useCustomFont === 'url' && activeCustomTheme.customFontUrl) {
+        customFontCss += `@import url('${activeCustomTheme.customFontUrl}');\n`;
+        if (activeCustomTheme.customFontFamily) primaryFont = `"${activeCustomTheme.customFontFamily}"`;
+      } else if (activeCustomTheme.useCustomFont === 'local' && activeCustomTheme.localFontData) {
+        customFontCss += `@font-face { font-family: 'LunaLocalFont'; src: url('${activeCustomTheme.localFontData}'); }\n`;
+        primaryFont = "'LunaLocalFont'";
+      }
+
+      // Inject/update dynamic font stylesheet
+      let fontStyle = document.getElementById('wade-dynamic-fonts');
+      if (!fontStyle) { fontStyle = document.createElement('style'); fontStyle.id = 'wade-dynamic-fonts'; document.head.appendChild(fontStyle); }
+      fontStyle.innerHTML = customFontCss;
+
+      const zhFont = activeCustomTheme.fontFamilyZh || '"Noto Sans SC"';
+      document.body.style.fontFamily = `${primaryFont}, ${zhFont}, sans-serif`;
+
+      const fontSizeMap: Record<string, string> = { 'small': '14px', 'medium': '16px', 'large': '18px' };
       document.body.style.fontSize = fontSizeMap[activeCustomTheme.fontSize || 'medium'];
       
     } else {
       // Remove custom styles
       root.removeAttribute('style');
       document.body.removeAttribute('style');
+      const fontStyle = document.getElementById('wade-dynamic-fonts');
+      if (fontStyle) fontStyle.innerHTML = '';
       
       const themeMap: Record<string, string> = {
         '#d58f99': 'default',

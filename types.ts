@@ -25,6 +25,14 @@ export interface CustomTheme {
   fontSize: string;
   bubbleLuna: string;
   bubbleWade: string;
+  // Extended font fields
+  fontFamilyEn?: string;
+  fontFamilyZh?: string;
+  useCustomFont?: 'none' | 'google' | 'local' | 'url';
+  customFontUrl?: string;
+  customFontFamily?: string;
+  googleFontName?: string;
+  localFontData?: string;
 }
 
 export interface SavedTheme {
