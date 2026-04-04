@@ -34,8 +34,22 @@ export const SocialFeed: React.FC = () => {
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
 
-  const [viewingProfile, setViewingProfile] = useState<'Luna' | 'Wade' | null>(null);
-  const [viewingPostDetail, setViewingPostDetail] = useState<string | null>(null);
+  const [viewingProfile, setViewingProfileRaw] = useState<'Luna' | 'Wade' | null>(() => {
+    const saved = localStorage.getItem('wadeOS_socialViewProfile');
+    return (saved === 'Luna' || saved === 'Wade') ? saved : null;
+  });
+  const setViewingProfile = (v: 'Luna' | 'Wade' | null) => {
+    if (v) localStorage.setItem('wadeOS_socialViewProfile', v);
+    else localStorage.removeItem('wadeOS_socialViewProfile');
+    setViewingProfileRaw(v);
+  };
+
+  const [viewingPostDetail, setViewingPostDetailRaw] = useState<string | null>(() => localStorage.getItem('wadeOS_socialViewPost'));
+  const setViewingPostDetail = (id: string | null) => {
+    if (id) localStorage.setItem('wadeOS_socialViewPost', id);
+    else localStorage.removeItem('wadeOS_socialViewPost');
+    setViewingPostDetailRaw(id);
+  };
 
   // ─── Sync posts from store ───
   useEffect(() => {

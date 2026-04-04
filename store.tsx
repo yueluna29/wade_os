@@ -75,7 +75,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   const [ttsPresets, setTtsPresets] = useState<TtsPreset[]>([]);
   
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionIdRaw] = useState<string | null>(() => localStorage.getItem('wadeOS_activeSessionId'));
+  const setActiveSessionId = (id: string | null) => {
+    if (id) localStorage.setItem('wadeOS_activeSessionId', id);
+    else localStorage.removeItem('wadeOS_activeSessionId');
+    setActiveSessionIdRaw(id);
+  };
 
   const [messages, setMessages] = useState<Message[]>([]);
 
