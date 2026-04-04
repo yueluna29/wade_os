@@ -186,7 +186,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   if (isSMS) {
     const bubbleClasses = isLuna
       ? "text-white rounded-2xl rounded-br-none shadow-sm"
-      : "bg-wade-bg-card text-wade-text-main border border-wade-border rounded-2xl rounded-bl-none shadow-sm";
+      : "text-wade-text-main border border-wade-border rounded-2xl rounded-bl-none shadow-sm";
 
     // Voice message detection: Wade's SMS starting with [VOICE]
     const isVoiceMessage = !isLuna && displayContent.startsWith('[VOICE]');
@@ -219,7 +219,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 <div
                   {...longPressHandlers}
                   style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent' }}
-                  className="bg-wade-bg-card border border-wade-border/60 rounded-[20px] rounded-bl-[4px] shadow-sm px-3 py-2 relative flex items-center gap-3 cursor-pointer select-none"
+                  className="border border-wade-border/60 rounded-[20px] rounded-bl-[4px] shadow-sm px-3 py-2 relative flex items-center gap-3 cursor-pointer select-none"
+                  style={{ backgroundColor: 'var(--wade-bubble-wade, var(--wade-bg-card))' }}
                 >
                   {/* Play/Pause */}
                   <button
@@ -283,7 +284,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div className={`relative max-w-[85%] ${isLuna ? 'flex flex-row-reverse' : 'flex'} gap-2 items-end`}>
           <div
             {...longPressHandlers}
-            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...(isLuna ? { backgroundColor: 'var(--wade-bubble-luna)' } : {}) }}
+            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', backgroundColor: isLuna ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade, var(--wade-bg-card))' }}
             className={`px-4 py-2 relative ${bubbleClasses} min-w-[60px] cursor-pointer select-none`}
           >
             {thinkingContent && (
@@ -379,7 +380,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div
           {...longPressHandlers}
           style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent' }}
-          className="w-full mt-2 bg-wade-bg-card text-wade-text-main border border-wade-border rounded-2xl rounded-tl-none shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
+          className="w-full mt-2 text-wade-text-main border border-wade-border rounded-2xl rounded-tl-none shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
+          style={{ backgroundColor: 'var(--wade-bubble-wade, var(--wade-bg-card))' }}
         >
           {thinkingContent && (
             <div
