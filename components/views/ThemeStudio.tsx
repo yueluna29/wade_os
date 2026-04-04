@@ -164,7 +164,7 @@ export const ThemeStudio: React.FC<ThemeStudioProps> = ({ isOpen, onClose, sessi
           <div className="rounded-xl p-3 space-y-3 shadow-inner overflow-hidden border" style={{ backgroundColor: t.bgBase, borderColor: borderLight }}>
             <div className="flex justify-end">
               <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-3 py-2 text-sm shadow-sm"
-                style={{ backgroundColor: t.bubbleLuna, color: t.textMain, fontFamily: `${previewFont}, ${t.fontFamilyZh || '"Noto Sans SC"'}, sans-serif` }}>
+                style={{ backgroundColor: t.bubbleLuna, color: t.bubbleLunaText || '#ffffff', fontFamily: `${previewFont}, ${t.fontFamilyZh || '"Noto Sans SC"'}, sans-serif` }}>
                 Hey Wade, what do you think of this look? What about this font?
               </div>
             </div>
@@ -212,6 +212,7 @@ export const ThemeStudio: React.FC<ThemeStudioProps> = ({ isOpen, onClose, sessi
           {activeTab === 'chat' && (
             <div className="space-y-1">
               <ColorPickerRow label="Luna's Bubble" value={t.bubbleLuna} onChange={(v) => handleChange('bubbleLuna', v)} textColor={t.textMain} />
+              <ColorPickerRow label="Luna's Bubble Text" value={t.bubbleLunaText || '#ffffff'} onChange={(v) => handleChange('bubbleLunaText', v)} textColor={t.textMain} />
               <ColorPickerRow label="Wade's Bubble" value={t.bubbleWade} onChange={(v) => handleChange('bubbleWade', v)} textColor={t.textMain} />
             </div>
           )}

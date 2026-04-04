@@ -31,6 +31,7 @@
   --wade-nav-bg: var(--wade-accent-light);
   --wade-bubble-luna: var(--wade-accent);
   --wade-bubble-luna-rgb: var(--wade-accent-rgb);
+  --wade-bubble-luna-text: #ffffff;
   --wade-bubble-wade: var(--wade-bg-card);
 
   --wade-shadow-glow: 0 4px 12px rgba(var(--wade-accent-rgb), 0.4);

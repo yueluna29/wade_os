@@ -185,7 +185,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   if (isSMS) {
     const bubbleClasses = isLuna
-      ? "text-white rounded-2xl rounded-br-none shadow-sm"
+      ? "rounded-2xl rounded-br-none shadow-sm"
       : "text-wade-text-main border border-wade-border rounded-2xl rounded-bl-none shadow-sm";
 
     // Voice message detection: Wade's SMS starting with [VOICE]
@@ -284,7 +284,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div className={`relative max-w-[85%] ${isLuna ? 'flex flex-row-reverse' : 'flex'} gap-2 items-end`}>
           <div
             {...longPressHandlers}
-            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', backgroundColor: isLuna ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade, var(--wade-bg-card))' }}
+            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', backgroundColor: isLuna ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade, var(--wade-bg-card))', ...(isLuna ? { color: 'var(--wade-bubble-luna-text, #ffffff)' } : {}) }}
             className={`px-4 py-2 relative ${bubbleClasses} min-w-[60px] cursor-pointer select-none`}
           >
             {thinkingContent && (
@@ -437,8 +437,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       <div
         {...longPressHandlers}
-        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', backgroundColor: 'var(--wade-bubble-luna)' }}
-        className="max-w-[90%] mt-2 text-white rounded-2xl rounded-tr-none shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
+        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', backgroundColor: 'var(--wade-bubble-luna)', color: 'var(--wade-bubble-luna-text, #ffffff)' }}
+        className="max-w-[90%] mt-2 rounded-2xl rounded-tr-none shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
       >
         {renderAttachments()}
         {isBase64Image ? (

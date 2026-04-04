@@ -24,6 +24,7 @@ export interface CustomTheme {
   fontFamily: string;
   fontSize: string;
   bubbleLuna: string;
+  bubbleLunaText?: string;
   bubbleWade: string;
   // Extended font fields
   fontFamilyEn?: string;

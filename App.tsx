@@ -70,6 +70,7 @@ const AppContent = () => {
       
       // Apply bubble colors as CSS variables (always set — data-theme="custom" has no CSS fallback)
       root.style.setProperty('--wade-bubble-luna', activeCustomTheme.bubbleLuna || activeCustomTheme.accent);
+      root.style.setProperty('--wade-bubble-luna-text', activeCustomTheme.bubbleLunaText || '#ffffff');
       root.style.setProperty('--wade-bubble-wade', activeCustomTheme.bubbleWade || activeCustomTheme.bgCard);
 
       // Handle custom font injection
