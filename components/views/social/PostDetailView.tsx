@@ -251,38 +251,40 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
             <div className="text-center py-8 text-[11px] font-mono text-wade-text-muted uppercase opacity-60">No echoes yet.</div>
           )}
         </div>
+      </div>
 
-        {/* ─── Reply Input (chat-style) ─── */}
-        <div className="mt-6 max-w-lg mx-auto px-1">
-          <div className="flex items-end gap-0 bg-wade-bg-card border border-wade-border rounded-[24px] px-2 py-1.5 focus-within:border-wade-accent transition-colors shadow-sm">
-            <img src={lunaAvatar} className="w-8 h-8 rounded-full object-cover border border-wade-border shrink-0 mb-0.5" />
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={(e) => {
-                setTimeout(() => {
-                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 300);
-              }}
-              placeholder="Reply..."
-              className="flex-1 bg-transparent text-[13px] text-wade-text-main placeholder-wade-text-muted outline-none resize-none min-h-[32px] max-h-[100px] px-3 py-1.5 leading-snug"
-              rows={1}
-            />
-            <button
-              onClick={handleReply}
-              disabled={!newComment.trim()}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 mb-0.5 ${
-                newComment.trim()
-                  ? 'bg-wade-accent text-white shadow-sm hover:bg-wade-accent-hover'
-                  : 'text-wade-text-muted opacity-30 cursor-not-allowed'
-              }`}
-            >
-              <Icons.ArrowUpThin size={16} />
+      {/* ─── Reply Input (固定底部) ─── */}
+<div className="shrink-0 px-4 py-3 border-t border-wade-border bg-wade-bg-app">
+  <div className="max-w-lg mx-auto">
+    <div className="flex items-end gap-0 bg-wade-bg-card border border-wade-border rounded-[24px] px-2 py-1.5 focus-within:border-wade-accent transition-colors shadow-sm">
+      <img src={lunaAvatar} className="w-8 h-8 rounded-full object-cover border border-wade-border shrink-0 mb-0.5" />
+      <textarea
+        value={newComment}
+        onChange={(e) => setNewComment(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={(e) => {
+          setTimeout(() => {
+            e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        }}
+        placeholder="Reply..."
+        className="flex-1 bg-transparent text-[13px] text-wade-text-main placeholder-wade-text-muted outline-none resize-none min-h-[32px] max-h-[100px] px-3 py-1.5 leading-snug"
+        rows={1}
+      />
+      <button
+        onClick={handleReply}
+        disabled={!newComment.trim()}
+        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 mb-0.5 ${
+          newComment.trim()
+            ? 'bg-wade-accent text-white shadow-sm hover:bg-wade-accent-hover'
+            : 'text-wade-text-muted opacity-30 cursor-not-allowed'
+        }`}
+      >
+        <Icons.ArrowUpThin size={16} />
             </button>
           </div>
         </div>
-      </div>
+        </div>
     </>
   );
 };

@@ -3,6 +3,7 @@ import { useStore } from '../../store';
 import { Icons } from '../ui/Icons';
 import { SocialPost } from '../../types';
 import { GoogleGenAI } from "@google/genai";
+import { supabase } from '../../services/supabase';
 
 // Gemini-designed subcomponents
 import { PostCard } from './social/PostCard';
@@ -242,11 +243,15 @@ export const SocialFeed: React.FC = () => {
             onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
             formatTime={formatExactTime}
             onGenerateReply={(post) => handleGenerateComment(post)}
-            onUpdateCover={(url) => {
-              updateSettings(viewingProfile === 'Luna'
-                ? { lunaCoverUrl: url }
-                : { wadeCoverUrl: url }
-              );
+            onUpdateCover={async (url) => {
+              const field = viewingProfile === 'Luna' ? 'luna_cover_url' : 'wade_cover_url';
+              const settingsField = viewingProfile === 'Luna' ? 'lunaCoverUrl' : 'wadeCoverUrl';
+              
+              // 先更新本地
+              updateSettings({ [settingsField]: url });
+              
+              // 直接存进 core_identity_config
+              await supabase.from('core_identity_config').update({ [field]: url }).eq('id', 1);
             }}
           />
         );
