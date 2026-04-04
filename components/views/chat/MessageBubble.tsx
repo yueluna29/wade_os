@@ -358,15 +358,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   >
                     {playingMessageId === msg.id && !isPaused ? <Icons.Pause /> : <Icons.Wave />}
                   </button>
-                  {msg.audioCache && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onRegenerateTTS(displayContent, msg.id); }}
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-wade-text-muted hover:bg-wade-accent-light hover:text-wade-accent hover:scale-110 transition-all duration-200"
-                      title="Regenerate voice"
-                    >
-                      <Icons.RotateThin size={14} />
-                    </button>
-                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRegenerateTTS(displayContent, msg.id); }}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-wade-text-muted hover:bg-wade-accent-light hover:text-wade-accent hover:scale-110 transition-all duration-200"
+                    title="Regenerate voice"
+                  >
+                    <Icons.RotateThin size={14} />
+                  </button>
                 </div>
               </div>
               {shownModel && (

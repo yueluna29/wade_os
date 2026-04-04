@@ -379,8 +379,8 @@ export const ChatInterface: React.FC = () => {
         }
       }
       if (!base64Audio) {
-        const activeTts = settings.activeTtsId ? ttsPresets.find(p => p.id === settings.activeTtsId) : null;
-        if (!activeTts) throw new Error("没找到声音配置！");
+        const activeTts = settings.activeTtsId ? ttsPresets.find(p => p.id === settings.activeTtsId) : ttsPresets[0] || null;
+        if (!activeTts) throw new Error("No voice preset found. Set one up in Settings first!");
         const cleanText = text.replace(/^\[VOICE\]\s*/i, '').replace(/[*_~`#]/g, '');
         base64Audio = await generateMinimaxTTS(cleanText, {
           apiKey: activeTts.apiKey, baseUrl: activeTts.baseUrl || 'https://api.minimax.io',
