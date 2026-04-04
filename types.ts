@@ -240,6 +240,9 @@ export interface AppSettings {
   lunaAppearance?: string;
   lunaPersonality?: string;
 
+  lunaCoverUrl: string;
+  wadeCoverUrl: string;
+
   ttsEnabled: boolean;
   autoReplyInterval: number;
   contextLimit?: number; // Added for configurable context length

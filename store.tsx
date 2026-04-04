@@ -37,6 +37,8 @@ const defaultSettings: AppSettings = {
   lunaClothing: '',
   lunaAppearance: '',
   lunaPersonality: '',
+  lunaCoverUrl: '',
+  wadeCoverUrl: '',
 
   ttsEnabled: true,
   autoReplyInterval: 0,
@@ -158,6 +160,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             lunaMbti: idData?.luna_mbti || sData?.luna_mbti || '',
             lunaHeight: idData?.luna_height || sData?.luna_height || '',
             lunaInfo: sData?.luna_info || '',
+            lunaCoverUrl: sData?.luna_cover_url || '',
+            wadeCoverUrl: sData?.wade_cover_url || '',
             
             ttsEnabled: settings.ttsEnabled,
             autoReplyInterval: settings.autoReplyInterval
@@ -507,6 +511,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         luna_clothing: newSettings.lunaClothing,
         luna_appearance: newSettings.lunaAppearance,
         luna_personality: newSettings.lunaPersonality,
+        luna_cover_url: newSettings.lunaCoverUrl,
+        wade_cover_url: newSettings.wadeCoverUrl,
         active_llm_id: newSettings.activeLlmId,
         active_tts_id: newSettings.activeTtsId,
         home_llm_id: newSettings.homeLlmId,

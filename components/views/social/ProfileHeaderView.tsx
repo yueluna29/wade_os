@@ -40,12 +40,13 @@ interface ProfileHeaderViewProps {
   onZoomImage: (images: string[], index: number) => void;
   formatTime: (ts: number) => string;
   onGenerateReply: (post: SocialPost) => void;
+  onUpdateCover: (url: string) => void;
 }
 
 export const ProfileHeaderView: React.FC<ProfileHeaderViewProps> = ({
   who, avatar, displayName, username, bio, userPosts, allPosts,
   settings, profiles, expandedPostIds,
-  onBack, onPostClick, onLike, onBookmark, onZoomImage, formatTime, onGenerateReply,
+  onBack, onPostClick, onLike, onBookmark, onZoomImage, formatTime, onGenerateReply, onUpdateCover,
 }) => {
   const isLuna = who === 'Luna';
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
@@ -202,15 +203,44 @@ export const ProfileHeaderView: React.FC<ProfileHeaderViewProps> = ({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {/* Cover & Avatar */}
-        <div className="relative h-40 bg-gradient-to-br from-wade-accent-light to-wade-bg-card border-b border-wade-border/50">
+        <div className="relative h-40 border-b border-wade-border/50 bg-wade-bg-app">
+          {/* 封面图或默认渐变 */}
+          {(isLuna ? settings?.lunaCoverUrl : settings?.wadeCoverUrl) ? (
+            <img src={isLuna ? settings.lunaCoverUrl : settings.wadeCoverUrl} className="w-full h-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-wade-accent-light to-wade-bg-card" />
+          )}
           <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,var(--wade-accent)_0%,transparent_70%)] mix-blend-overlay" />
+          
+          {/* 隐藏式更换封面按钮 */}
+          <label className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center text-white/90 hover:text-white transition-all cursor-pointer shadow-sm group z-20">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <span className="absolute right-10 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-bold tracking-widest uppercase text-white bg-black/40 px-2 py-1 rounded-md whitespace-nowrap backdrop-blur-md pointer-events-none">
+              Edit Cover
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const { uploadToImgBB } = await import('../../../services/imgbb');
+                  const url = await uploadToImgBB(file);
+                  if (url && onUpdateCover) onUpdateCover(url);
+                } catch (err) {
+                  console.error('Cover upload failed:', err);
+                }
+              }}
+            />
+          </label>
+
           <div className="absolute -bottom-12 left-6">
             <img src={avatar} className="w-24 h-24 rounded-full ring-4 ring-wade-bg-base object-cover shadow-lg border border-wade-border/30 bg-wade-bg-card relative z-10" />
-          </div>
-          <div className="absolute bottom-4 right-6 z-10">
-            <button className="px-5 py-2 rounded-full bg-wade-bg-card/90 backdrop-blur-sm border border-wade-border shadow-sm text-[11px] font-bold text-wade-text-main hover:text-wade-accent hover:border-wade-accent/30 transition-all">
-              {isLuna ? 'Edit Profile' : 'Summon'}
-            </button>
           </div>
         </div>
 
@@ -227,7 +257,7 @@ export const ProfileHeaderView: React.FC<ProfileHeaderViewProps> = ({
               <span className="text-wade-text-muted opacity-80">Following</span>
             </div>
             <div className="flex gap-1.5 items-baseline">
-              <span className="text-sm font-bold text-wade-text-main">{isLuna ? '30.1M' : '1'}</span>
+              <span className="text-sm font-bold text-wade-text-main">{isLuna ? '1' : '351K'}</span>
               <span className="text-wade-text-muted opacity-80">Followers</span>
             </div>
           </div>

@@ -15,7 +15,7 @@ import { ProfileEditorModal } from './social/ProfileEditorModal';
 
 export const SocialFeed: React.FC = () => {
   const {
-    profiles, settings, socialPosts,
+    profiles, settings, updateSettings, socialPosts,
     addPost, updatePost, deletePost,
     llmPresets, coreMemories, messages,
   } = useStore();
@@ -242,6 +242,12 @@ export const SocialFeed: React.FC = () => {
             onZoomImage={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
             formatTime={formatExactTime}
             onGenerateReply={(post) => handleGenerateComment(post)}
+            onUpdateCover={(url) => {
+              updateSettings(viewingProfile === 'Luna'
+                ? { lunaCoverUrl: url }
+                : { wadeCoverUrl: url }
+              );
+            }}
           />
         );
 
