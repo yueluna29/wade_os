@@ -260,6 +260,11 @@ export const PostDetailView: React.FC<PostDetailViewProps> = ({
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={(e) => {
+                setTimeout(() => {
+                  e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+              }}
               placeholder="Reply..."
               className="flex-1 bg-transparent text-[13px] text-wade-text-main placeholder-wade-text-muted outline-none resize-none min-h-[32px] max-h-[100px] px-3 py-1.5 leading-snug"
               rows={1}
