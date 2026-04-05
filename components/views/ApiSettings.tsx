@@ -15,8 +15,16 @@ const PROVIDERS = [
   { value: 'Custom', label: 'Custom', baseUrl: '', defaultModel: '' }
 ];
 
-const PROVIDER_ICONS: Record<string, string> = {
-  Gemini: '💎', Claude: '🤖', OpenAI: '🧠', DeepSeek: '🔬', OpenRouter: '🌐', Custom: '⚙️'
+// Provider icon components (SVG only, no emoji)
+const ProviderIcon: React.FC<{ provider: string; size?: number; className?: string }> = ({ provider, size = 16, className }) => {
+  switch (provider) {
+    case 'Gemini': return <Icons.Sparkle size={size} className={className} />;
+    case 'Claude': return <Icons.Hexagon size={size} className={className} />;
+    case 'OpenAI': return <Icons.Cube size={size} className={className} />;
+    case 'DeepSeek': return <Icons.Search size={size} className={className} />;
+    case 'OpenRouter': return <Icons.Globe size={size} className={className} />;
+    default: return <Icons.Settings size={size} className={className} />;
+  }
 };
 
 export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
@@ -27,7 +35,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
     syncError
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'llm' | 'tts'>('llm');
+  const [activeTab, setActiveTab] = useState<'llm' | 'tts' | 'control'>('llm');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -118,7 +126,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         if (!item.baseUrl || item.baseUrl.includes('google')) {
           const ai = new GoogleGenAI({ apiKey: item.apiKey });
           await ai.models.generateContent({ model: modelName, contents: "Hi" });
-          alert(`⚔️ Wade says:\n\n"Chimichangas! Connection established, peanut butter cup. We are LIVE!"`);
+          alert(`Wade says: "Chimichangas! Connection established, peanut butter cup. We are LIVE!"`);
         } else {
           const url = `${item.baseUrl}/chat/completions`;
           const res = await fetch(url, {
@@ -127,7 +135,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             body: JSON.stringify({ model: item.model || 'gpt-3.5-turbo', messages: [{role: 'user', content: 'Hi'}], max_tokens: 5 })
           });
           if (!res.ok) throw new Error(`Status ${res.status}`);
-          alert(`⚔️ Wade says:\n\n"Maximum effort! API connected successfully. Now, where's my unicorn?"`);
+          alert(`Wade says: "Maximum effort! API connected successfully. Now, where's my unicorn?"`);
         }
       } else {
         if (!item.model || item.model.includes('gemini')) {
@@ -148,7 +156,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             source.buffer = audioBuffer;
             source.connect(audioContext.destination);
             source.start(0);
-            alert("✅ Playing Test Audio...");
+            alert("Playing Test Audio...");
           } else { throw new Error("No audio data returned"); }
         } else if (item.baseUrl && item.baseUrl.includes('minimax')) {
           try {
@@ -167,14 +175,14 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             source.buffer = audioBuffer;
             source.connect(audioContext.destination);
             source.start(0);
-            alert("🎤 Wade says:\n\n\"Minimax connection successful! Playing test audio...\"");
+            alert("Wade says: \"Minimax connection successful! Playing test audio...\"");
           } catch (error: any) { throw new Error(`Minimax TTS failed: ${error.message}`); }
         } else {
-          alert("✅ Connected (Custom TTS provider - test not implemented)");
+          alert("Connected (Custom TTS provider - test not implemented)");
         }
       }
     } catch (e: any) {
-      alert(`❌ Test Failed: ${e.message || e}`);
+      alert(`Test Failed: ${e.message || e}`);
     } finally {
       setTestingId(null);
     }
@@ -197,15 +205,26 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
           <p className="text-wade-accent text-[10px] uppercase tracking-[0.2em] mt-0.5 opacity-80">Connect my wires</p>
         </header>
 
-        {/* Active Model Status Card */}
+        {/* Active Model Status Card + Network Status */}
         <div className="bg-wade-bg-card rounded-2xl border border-wade-border overflow-hidden shadow-sm">
-          <div className="px-4 py-3 bg-wade-accent/5 border-b border-wade-border/50">
+          <div className="px-4 py-3 bg-wade-accent/5 border-b border-wade-border/50 flex items-center justify-between">
             <div className="text-[9px] uppercase tracking-widest text-wade-accent font-bold">Current Default</div>
+            {syncError ? (
+              <div className="flex items-center gap-1.5 text-[9px] text-red-500 font-bold">
+                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                Disconnected
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[9px] text-green-600 font-bold">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                Supabase Online
+              </div>
+            )}
           </div>
           <div className="p-4 space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center text-lg shrink-0">
-                {activeLlm ? (PROVIDER_ICONS[activeLlm.provider || 'Custom'] || '🧠') : '—'}
+              <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
+                {activeLlm ? <ProviderIcon provider={activeLlm.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Brain size={18} className="text-wade-text-muted" />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold text-wade-text-main truncate">{activeLlm ? activeLlm.name : 'No model selected'}</div>
@@ -215,7 +234,9 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             </div>
             {activeTts && (
               <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
-                <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center text-lg shrink-0">🎙️</div>
+                <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
+                  <Icons.Voice size={18} className="text-wade-accent" />
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold text-wade-text-main truncate">{activeTts.name}</div>
                   <div className="text-[10px] text-wade-text-muted truncate">{activeTts.model || 'Standard'} • x{activeTts.speed}</div>
@@ -223,127 +244,144 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>
               </div>
             )}
+            {syncError && (
+              <div className="pt-2 border-t border-wade-border/40">
+                <p className="text-[10px] text-red-500 break-words">{syncError}</p>
+                <p className="text-[9px] text-wade-text-muted mt-1 italic">Check Supabase API Key & RLS Policies.</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="bg-wade-bg-card p-1 rounded-full flex shadow-sm border border-wade-border w-[220px] mx-auto">
+        {/* Tab Switcher — 3 tabs */}
+        <div className="bg-wade-bg-card p-1 rounded-full flex shadow-sm border border-wade-border mx-auto">
           <button
             onClick={() => { setActiveTab('llm'); resetForm(); }}
             className={`flex-1 py-2 rounded-full text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab === 'llm' ? 'bg-wade-accent text-white shadow-sm' : 'text-wade-text-muted hover:bg-wade-accent-light'}`}
           >
-            <Icons.Brain /> Text
+            <Icons.Brain size={13} /> Text
           </button>
           <button
             onClick={() => { setActiveTab('tts'); resetForm(); }}
             className={`flex-1 py-2 rounded-full text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab === 'tts' ? 'bg-wade-accent text-white shadow-sm' : 'text-wade-text-muted hover:bg-wade-accent-light'}`}
           >
-            <Icons.Voice /> Voice
+            <Icons.Voice size={13} /> Voice
+          </button>
+          <button
+            onClick={() => { setActiveTab('control'); resetForm(); }}
+            className={`flex-1 py-2 rounded-full text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab === 'control' ? 'bg-wade-accent text-white shadow-sm' : 'text-wade-text-muted hover:bg-wade-accent-light'}`}
+          >
+            <Icons.Settings size={13} /> Control
           </button>
         </div>
 
-        {/* Preset List */}
-        <div className="bg-wade-bg-card rounded-2xl border border-wade-border overflow-hidden shadow-sm">
-          <div className="px-4 py-3 flex items-center justify-between border-b border-wade-border/50">
-            <span className="text-[10px] uppercase tracking-wider text-wade-text-muted font-bold">
-              {activeTab === 'llm' ? 'Text Models' : 'Voice Models'}
-            </span>
-            {!isFormOpen && (
-              <button
-                onClick={() => setIsFormOpen(true)}
-                className="text-wade-accent text-[10px] font-bold flex items-center gap-1 hover:opacity-70 transition-opacity"
-              >
-                <Icons.PlusThin size={12} /> Add New
-              </button>
-            )}
-          </div>
+        {/* Preset List — LLM / TTS */}
+        {(activeTab === 'llm' || activeTab === 'tts') && (
+          <div className="bg-wade-bg-card rounded-2xl border border-wade-border overflow-hidden shadow-sm">
+            <div className="px-4 py-3 flex items-center justify-between border-b border-wade-border/50">
+              <span className="text-[10px] uppercase tracking-wider text-wade-text-muted font-bold">
+                {activeTab === 'llm' ? 'Text Models' : 'Voice Models'}
+              </span>
+              {!isFormOpen && (
+                <button
+                  onClick={() => setIsFormOpen(true)}
+                  className="text-wade-accent text-[10px] font-bold flex items-center gap-1 hover:opacity-70 transition-opacity"
+                >
+                  <Icons.PlusThin size={12} /> Add New
+                </button>
+              )}
+            </div>
 
-          <div className="p-2">
-            {activeTab === 'llm' && (
-              <div className="space-y-1">
-                {llmPresets.length === 0 ? (
-                  <p className="text-center text-[11px] text-wade-text-muted py-8 italic">No brains connected yet.</p>
-                ) : llmPresets.map(preset => (
-                  <div key={preset.id} onClick={() => activateLlm(preset.id)}
-                    className={`px-3 py-3 rounded-xl cursor-pointer transition-all flex justify-between items-center group ${
-                      settings.activeLlmId === preset.id
-                        ? 'bg-wade-accent/8 border border-wade-accent/30'
-                        : 'hover:bg-wade-bg-app border border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 ${
-                        settings.activeLlmId === preset.id ? 'bg-wade-accent/15' : 'bg-wade-bg-app'
-                      }`}>
-                        {PROVIDER_ICONS[preset.provider || 'Custom'] || '🧠'}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-bold text-wade-text-main text-xs truncate flex items-center gap-1.5">
-                          {preset.name}
-                          {settings.activeLlmId === preset.id && (
-                            <span className="text-[8px] bg-wade-accent text-white px-1.5 py-0.5 rounded-full font-bold uppercase">Active</span>
-                          )}
+            <div className="p-2">
+              {activeTab === 'llm' && (
+                <div className="space-y-1">
+                  {llmPresets.length === 0 ? (
+                    <p className="text-center text-[11px] text-wade-text-muted py-8 italic">No brains connected yet.</p>
+                  ) : llmPresets.map(preset => (
+                    <div key={preset.id} onClick={() => activateLlm(preset.id)}
+                      className={`px-3 py-3 rounded-xl cursor-pointer transition-all flex justify-between items-center group ${
+                        settings.activeLlmId === preset.id
+                          ? 'bg-wade-accent/8 border border-wade-accent/30'
+                          : 'hover:bg-wade-bg-app border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          settings.activeLlmId === preset.id ? 'bg-wade-accent/15 text-wade-accent' : 'bg-wade-bg-app text-wade-text-muted'
+                        }`}>
+                          <ProviderIcon provider={preset.provider || 'Custom'} size={16} />
                         </div>
-                        <div className="text-[10px] text-wade-text-muted truncate">{preset.model || 'Auto'}</div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-wade-text-main text-xs truncate flex items-center gap-1.5">
+                            {preset.name}
+                            {settings.activeLlmId === preset.id && (
+                              <span className="text-[8px] bg-wade-accent text-white px-1.5 py-0.5 rounded-full font-bold uppercase">Active</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-wade-text-muted truncate">{preset.model || 'Auto'}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => { e.stopPropagation(); handleTest(preset, 'llm'); }} className="p-1.5 text-wade-text-muted hover:text-wade-accent rounded-lg hover:bg-wade-bg-card transition-colors" title="Test">
+                          {testingId === preset.id ? <Icons.Loading /> : <Icons.Test />}
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); handleEdit('llm', preset); }} className="p-1.5 text-wade-text-muted hover:text-wade-text-main rounded-lg hover:bg-wade-bg-card transition-colors" title="Edit"><Icons.Edit /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(preset.id, 'llm'); }} className={`p-1.5 rounded-lg transition-colors ${deleteConfirmId === preset.id ? 'bg-red-50 text-red-500' : 'text-wade-text-muted hover:text-red-400 hover:bg-wade-bg-card'}`} title="Delete">
+                          {deleteConfirmId === preset.id ? <Icons.Check /> : <Icons.Trash />}
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); handleTest(preset, 'llm'); }} className="p-1.5 text-wade-text-muted hover:text-wade-accent rounded-lg hover:bg-wade-bg-card transition-colors" title="Test">
-                        {testingId === preset.id ? <Icons.Loading /> : <Icons.Test />}
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleEdit('llm', preset); }} className="p-1.5 text-wade-text-muted hover:text-wade-text-main rounded-lg hover:bg-wade-bg-card transition-colors" title="Edit"><Icons.Edit /></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(preset.id, 'llm'); }} className={`p-1.5 rounded-lg transition-colors ${deleteConfirmId === preset.id ? 'bg-red-50 text-red-500' : 'text-wade-text-muted hover:text-red-400 hover:bg-wade-bg-card'}`} title="Delete">
-                        {deleteConfirmId === preset.id ? <Icons.Check /> : <Icons.Trash />}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            {activeTab === 'tts' && (
-              <div className="space-y-1">
-                {ttsPresets.length === 0 ? (
-                  <p className="text-center text-[11px] text-wade-text-muted py-8 italic">No voices connected yet.</p>
-                ) : ttsPresets.map(preset => (
-                  <div key={preset.id} onClick={() => activateTts(preset.id)}
-                    className={`px-3 py-3 rounded-xl cursor-pointer transition-all flex justify-between items-center group ${
-                      settings.activeTtsId === preset.id
-                        ? 'bg-wade-accent/8 border border-wade-accent/30'
-                        : 'hover:bg-wade-bg-app border border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 ${
-                        settings.activeTtsId === preset.id ? 'bg-wade-accent/15' : 'bg-wade-bg-app'
-                      }`}>
-                        🎙️
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-bold text-wade-text-main text-xs truncate flex items-center gap-1.5">
-                          {preset.name}
-                          {settings.activeTtsId === preset.id && (
-                            <span className="text-[8px] bg-wade-accent text-white px-1.5 py-0.5 rounded-full font-bold uppercase">Active</span>
-                          )}
+              {activeTab === 'tts' && (
+                <div className="space-y-1">
+                  {ttsPresets.length === 0 ? (
+                    <p className="text-center text-[11px] text-wade-text-muted py-8 italic">No voices connected yet.</p>
+                  ) : ttsPresets.map(preset => (
+                    <div key={preset.id} onClick={() => activateTts(preset.id)}
+                      className={`px-3 py-3 rounded-xl cursor-pointer transition-all flex justify-between items-center group ${
+                        settings.activeTtsId === preset.id
+                          ? 'bg-wade-accent/8 border border-wade-accent/30'
+                          : 'hover:bg-wade-bg-app border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          settings.activeTtsId === preset.id ? 'bg-wade-accent/15 text-wade-accent' : 'bg-wade-bg-app text-wade-text-muted'
+                        }`}>
+                          <Icons.Voice size={16} />
                         </div>
-                        <div className="text-[10px] text-wade-text-muted truncate">{preset.model || 'Standard'} • x{preset.speed}</div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-wade-text-main text-xs truncate flex items-center gap-1.5">
+                            {preset.name}
+                            {settings.activeTtsId === preset.id && (
+                              <span className="text-[8px] bg-wade-accent text-white px-1.5 py-0.5 rounded-full font-bold uppercase">Active</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-wade-text-muted truncate">{preset.model || 'Standard'} • x{preset.speed}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => { e.stopPropagation(); handleTest(preset, 'tts'); }} className="p-1.5 text-wade-text-muted hover:text-wade-accent rounded-lg hover:bg-wade-bg-card transition-colors" title="Test">
+                          {testingId === preset.id ? <Icons.Loading /> : <Icons.Test />}
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); handleEdit('tts', preset); }} className="p-1.5 text-wade-text-muted hover:text-wade-text-main rounded-lg hover:bg-wade-bg-card transition-colors" title="Edit"><Icons.Edit /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(preset.id, 'tts'); }} className={`p-1.5 rounded-lg transition-colors ${deleteConfirmId === preset.id ? 'bg-red-50 text-red-500' : 'text-wade-text-muted hover:text-red-400 hover:bg-wade-bg-card'}`} title="Delete">
+                          {deleteConfirmId === preset.id ? <Icons.Check /> : <Icons.Trash />}
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); handleTest(preset, 'tts'); }} className="p-1.5 text-wade-text-muted hover:text-wade-accent rounded-lg hover:bg-wade-bg-card transition-colors" title="Test">
-                        {testingId === preset.id ? <Icons.Loading /> : <Icons.Test />}
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleEdit('tts', preset); }} className="p-1.5 text-wade-text-muted hover:text-wade-text-main rounded-lg hover:bg-wade-bg-card transition-colors" title="Edit"><Icons.Edit /></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(preset.id, 'tts'); }} className={`p-1.5 rounded-lg transition-colors ${deleteConfirmId === preset.id ? 'bg-red-50 text-red-500' : 'text-wade-text-muted hover:text-red-400 hover:bg-wade-bg-card'}`} title="Delete">
-                        {deleteConfirmId === preset.id ? <Icons.Check /> : <Icons.Trash />}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Mission Control Tab */}
+        {activeTab === 'control' && <FunctionBindings />}
 
         {/* Form Modal */}
         {isFormOpen && (
@@ -370,13 +408,13 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                         <button
                           key={p.value}
                           onClick={() => handleProviderChange(p.value)}
-                          className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all border ${
+                          className={`py-2.5 px-2 rounded-xl text-[11px] font-bold transition-all border flex flex-col items-center gap-1 ${
                             formData.provider === p.value
                               ? 'bg-wade-accent text-white border-wade-accent shadow-sm'
                               : 'bg-wade-bg-app text-wade-text-muted border-wade-border hover:border-wade-accent/50'
                           }`}
                         >
-                          <span className="text-base block mb-0.5">{PROVIDER_ICONS[p.value]}</span>
+                          <ProviderIcon provider={p.value} size={18} />
                           {p.label}
                         </button>
                       ))}
@@ -385,7 +423,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 )}
 
                 <div className={activeTab === 'llm' ? 'grid grid-cols-2 gap-3' : 'space-y-3'}>
-                  <div className={activeTab === 'llm' ? '' : ''}>
+                  <div>
                     <label className="text-[10px] font-bold text-wade-text-muted uppercase tracking-wider mb-1.5 block">Name</label>
                     <input className="api-input" placeholder="e.g. Wade's Brain" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                   </div>
@@ -423,7 +461,9 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
 
                 {activeTab === 'llm' && !formData.isImageGen && (
                   <div className="space-y-4 p-4 bg-wade-bg-app rounded-2xl border border-wade-border/50">
-                    <div className="text-[9px] uppercase tracking-widest text-wade-accent font-bold">Parameters</div>
+                    <div className="text-[9px] uppercase tracking-widest text-wade-accent font-bold flex items-center gap-1.5">
+                      <Icons.Activity size={12} /> Parameters
+                    </div>
                     {[
                       { label: 'Temperature', value: formData.temperature, setter: (v: number) => setFormData({...formData, temperature: v}), min: 0, max: 2, step: 0.01 },
                       { label: 'Top P', value: formData.topP, setter: (v: number) => setFormData({...formData, topP: v}), min: 0, max: 1, step: 0.01 },
@@ -470,7 +510,9 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                     </div>
 
                     <div className="space-y-4 p-4 bg-wade-bg-app rounded-2xl border border-wade-border/50">
-                      <div className="text-[9px] uppercase tracking-widest text-wade-accent font-bold">Voice Tuning</div>
+                      <div className="text-[9px] uppercase tracking-widest text-wade-accent font-bold flex items-center gap-1.5">
+                        <Icons.Wave size={12} /> Voice Tuning
+                      </div>
                       {[
                         { label: 'Speed', value: formData.speed, setter: (v: number) => setFormData({...formData, speed: v}), min: 0.5, max: 2, step: 0.01 },
                         { label: 'Volume', value: formData.vol, setter: (v: number) => setFormData({...formData, vol: v}), min: 0.1, max: 10, step: 0.1 },
@@ -522,67 +564,6 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             </div>
           </div>
         )}
-
-        {/* Settings Cards */}
-        <div className="space-y-3">
-          {/* Home Screen Model */}
-          <div className="bg-wade-bg-card p-4 rounded-2xl shadow-sm border border-wade-border">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-lg bg-wade-accent/10 flex items-center justify-center text-sm">🏠</div>
-              <h3 className="font-bold text-wade-text-main text-xs">Home Screen Model</h3>
-            </div>
-            <select
-              className="w-full bg-wade-bg-app border border-wade-border rounded-xl px-3 py-2.5 text-[11px] text-wade-text-main outline-none focus:border-wade-accent transition-colors appearance-none cursor-pointer"
-              value={settings.homeLlmId || ''}
-              onChange={(e) => updateSettings({ homeLlmId: e.target.value || undefined })}
-            >
-              <option value="">Same as Active Model</option>
-              {llmPresets.map(preset => (<option key={preset.id} value={preset.id}>{preset.name} ({preset.model})</option>))}
-            </select>
-            <p className="text-[9px] text-wade-text-muted/60 mt-2 italic">For "Wade's Daily Sass" on the home screen</p>
-          </div>
-
-          {/* Auto Reply Speed */}
-          <div className="bg-wade-bg-card p-4 rounded-2xl shadow-sm border border-wade-border">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-wade-accent/10 flex items-center justify-center text-sm">⚡</div>
-                <h3 className="font-bold text-wade-text-main text-xs">Reply Speed</h3>
-              </div>
-              <span className="text-xs font-mono text-wade-accent bg-wade-accent/10 px-2.5 py-1 rounded-lg">
-                {settings.autoReplyInterval === 0 ? 'Instant' : `${settings.autoReplyInterval}s`}
-              </span>
-            </div>
-            <input type="range" min="0" max="10" step="1" value={settings.autoReplyInterval} onChange={(e) => updateSettings({ autoReplyInterval: parseInt(e.target.value) })} className="w-full accent-wade-accent h-1.5 bg-wade-border rounded-lg appearance-none cursor-pointer" />
-            <div className="flex justify-between mt-2">
-              <span className="text-[9px] text-wade-text-muted/60">Instant</span>
-              <span className="text-[9px] text-wade-text-muted/60">10s delay</span>
-            </div>
-          </div>
-        </div>
-
-        <FunctionBindings />
-
-        {/* Network Status */}
-        <div className="bg-wade-bg-card rounded-2xl border border-wade-border overflow-hidden shadow-sm">
-          <div className="px-4 py-3 border-b border-wade-border/50">
-            <span className="text-[10px] uppercase tracking-wider text-wade-text-muted font-bold">Network Status</span>
-          </div>
-          <div className="p-4">
-            {syncError ? (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-[10px] text-red-600">
-                <p className="font-bold mb-1">Connection Error</p>
-                <p className="opacity-80 break-words">{syncError}</p>
-                <p className="mt-2 text-[9px] italic text-wade-text-muted">Check Supabase API Key & RLS Policies.</p>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2.5 text-[11px] text-green-600">
-                <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="font-bold">Supabase Connected</span>
-              </div>
-            )}
-          </div>
-        </div>
 
       </div>
 
