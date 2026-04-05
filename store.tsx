@@ -166,8 +166,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             lunaMbti: idData?.luna_mbti || sData?.luna_mbti || '',
             lunaHeight: idData?.luna_height || sData?.luna_height || '',
             lunaInfo: sData?.luna_info || '',
-            lunaCoverUrl: sData?.luna_cover_url || '',
-            wadeCoverUrl: sData?.wade_cover_url || '',
+            lunaCoverUrl: sData?.luna_cover_url || idData?.luna_cover_url || settings.lunaCoverUrl || '',
+            wadeCoverUrl: sData?.wade_cover_url || idData?.wade_cover_url || settings.wadeCoverUrl || '',
             
             ttsEnabled: settings.ttsEnabled,
             autoReplyInterval: settings.autoReplyInterval
@@ -236,6 +236,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           let localLlmCache: Record<string, string> = {};
           try { localLlmCache = JSON.parse(localStorage.getItem('wadeOS_sessionLlm') || '{}'); } catch (e) {}
 
+          let localThemeCache: Record<string, any> = {};
+          try { localThemeCache = JSON.parse(localStorage.getItem('wadeOS_sessionTheme') || '{}'); } catch (e) {}
+
           const mappedSessions = sessData.map(s => ({
             id: s.id,
             mode: s.mode as ChatMode,
@@ -246,7 +249,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             isPinned: (s.is_pinned ?? s.pinned ?? false) || localPinnedIds.includes(s.id),
             customLlmId: localLlmCache[s.id] || s.custom_llm_id,
             customPrompt: s.custom_prompt,
-            customTheme: s.custom_theme ? (typeof s.custom_theme === 'string' ? JSON.parse(s.custom_theme) : s.custom_theme) : undefined
+            customTheme: localThemeCache[s.id] || (s.custom_theme ? (typeof s.custom_theme === 'string' ? JSON.parse(s.custom_theme) : s.custom_theme) : undefined)
           }));
 
           mappedSessions.sort((a, b) => {
@@ -633,6 +636,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (updates.customLlmId) cache[id] = updates.customLlmId;
         else delete cache[id];
         localStorage.setItem('wadeOS_sessionLlm', JSON.stringify(cache));
+      } catch (e) {}
+    }
+    // Cache per-session theme locally so it survives even if Supabase is down
+    if (updates.customTheme !== undefined) {
+      try {
+        const cache = JSON.parse(localStorage.getItem('wadeOS_sessionTheme') || '{}');
+        if (updates.customTheme) cache[id] = updates.customTheme;
+        else delete cache[id];
+        localStorage.setItem('wadeOS_sessionTheme', JSON.stringify(cache));
       } catch (e) {}
     }
     const dbUpdates: any = {};

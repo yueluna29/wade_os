@@ -30,6 +30,8 @@ export const SocialFeed: React.FC = () => {
 
   const [localPosts, setLocalPosts] = useState<SocialPost[]>([]);
   const localPostsRef = useRef<SocialPost[]>([]);
+  const feedScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollPos = useRef<number>(0);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
@@ -39,6 +41,7 @@ export const SocialFeed: React.FC = () => {
     return (saved === 'Luna' || saved === 'Wade') ? saved : null;
   });
   const setViewingProfile = (v: 'Luna' | 'Wade' | null) => {
+    if (v && feedScrollRef.current) savedScrollPos.current = feedScrollRef.current.scrollTop;
     if (v) localStorage.setItem('wadeOS_socialViewProfile', v);
     else localStorage.removeItem('wadeOS_socialViewProfile');
     setViewingProfileRaw(v);
@@ -46,6 +49,7 @@ export const SocialFeed: React.FC = () => {
 
   const [viewingPostDetail, setViewingPostDetailRaw] = useState<string | null>(() => localStorage.getItem('wadeOS_socialViewPost'));
   const setViewingPostDetail = (id: string | null) => {
+    if (id && feedScrollRef.current) savedScrollPos.current = feedScrollRef.current.scrollTop;
     if (id) localStorage.setItem('wadeOS_socialViewPost', id);
     else localStorage.removeItem('wadeOS_socialViewPost');
     setViewingPostDetailRaw(id);
@@ -56,6 +60,15 @@ export const SocialFeed: React.FC = () => {
     setLocalPosts(socialPosts);
     localPostsRef.current = socialPosts;
   }, [socialPosts]);
+
+  // ─── Restore scroll position when returning to feed ───
+  useEffect(() => {
+    if (!viewingProfile && !viewingPostDetail && feedScrollRef.current) {
+      requestAnimationFrame(() => {
+        if (feedScrollRef.current) feedScrollRef.current.scrollTop = savedScrollPos.current;
+      });
+    }
+  }, [viewingProfile, viewingPostDetail]);
 
   // ─── Helpers ───
   const formatExactTime = (timestamp: number) => {
@@ -346,7 +359,7 @@ export const SocialFeed: React.FC = () => {
           </div>
 
           {/* Feed */}
-          <div className="flex-1 overflow-y-auto pb-24 custom-scrollbar bg-wade-bg-app px-4 pt-6">
+          <div ref={feedScrollRef} className="flex-1 overflow-y-auto pb-24 custom-scrollbar bg-wade-bg-app px-4 pt-6">
             <div className="max-w-lg mx-auto">
               {localPosts.length === 0 ? (
                 <div className="text-center py-20 text-[10px] font-mono text-wade-text-muted uppercase tracking-[0.2em] opacity-60">

@@ -64,10 +64,11 @@ interface MessageBubbleProps {
   playingMessageId: string | null;
   isPaused: boolean;
   audioDuration?: number;
+  audioRemainingTime?: number | null;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  msg, settings, onSelect, isSMS, onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration
+  msg, settings, onSelect, isSMS, onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration, audioRemainingTime
 }) => {
   const isLuna = msg.role === 'Luna';
   const [showThought, setShowThought] = useState(false);
@@ -124,7 +125,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               const parts = node.split(regex);
               return parts.map((part: string, i: number) =>
                 part.toLowerCase() === query.toLowerCase()
-                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', padding: '2px 4px', borderRadius: '4px', fontWeight: 'inherit', color: 'inherit' }}>{part}</mark>
+                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', borderRadius: '2px', fontWeight: 'inherit', color: 'inherit' }}>{part}</mark>
                   : part
               );
             }
@@ -143,7 +144,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               const parts = node.split(regex);
               return parts.map((part: string, i: number) =>
                 part.toLowerCase() === query.toLowerCase()
-                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', padding: '2px 4px', borderRadius: '4px', fontWeight: 'inherit', color: 'inherit' }}>{part}</mark>
+                  ? <mark key={i} style={{ backgroundColor: 'rgba(213, 143, 153, 0.35)', borderRadius: '2px', fontWeight: 'inherit', color: 'inherit' }}>{part}</mark>
                   : part
               );
             }
@@ -204,7 +205,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         const s = Math.floor(sec % 60);
         return `${m}:${s.toString().padStart(2, '0')}`;
       };
-      const durationStr = audioDuration ? formatDuration(audioDuration) : '0:--';
+      const isCountingDown = isThisPlaying && audioRemainingTime != null;
+      const durationStr = isCountingDown ? formatDuration(audioRemainingTime!) : (audioDuration ? formatDuration(audioDuration) : '0:--');
       return (
         <>
           <style>{`
@@ -243,7 +245,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         style={{
                           backgroundColor: isThisPlaying && !isPaused
                             ? 'var(--wade-accent)'
-                            : 'rgba(213, 143, 153, 0.4)',
+                            : 'rgba(var(--wade-accent-rgb), 0.4)',
                           height: isThisPlaying && !isPaused ? '100%' : `${h}%`,
                           transformOrigin: 'center',
                           animation: isThisPlaying && !isPaused

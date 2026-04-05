@@ -165,6 +165,7 @@ export const ChatInterface: React.FC = () => {
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({});
+  const [audioRemainingTime, setAudioRemainingTime] = useState<number | null>(null);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [attachments, setAttachments] = useState<{ type: 'image' | 'file', content: string, mimeType: string, name: string }[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -402,8 +403,9 @@ export const ChatInterface: React.FC = () => {
       const audio = new Audio(url);
       audioRef.current = audio;
       audio.onloadedmetadata = () => { setAudioDurations(prev => ({ ...prev, [messageId]: audio.duration })); };
-      audio.onended = () => { setPlayingMessageId(null); setIsPaused(false); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
-      audio.onerror = () => { setPlayingMessageId(null); setIsPaused(false); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
+      audio.ontimeupdate = () => { const remaining = audio.duration - audio.currentTime; setAudioRemainingTime(remaining > 0 ? remaining : 0); };
+      audio.onended = () => { setPlayingMessageId(null); setIsPaused(false); setAudioRemainingTime(null); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
+      audio.onerror = () => { setPlayingMessageId(null); setIsPaused(false); setAudioRemainingTime(null); if (audioUrlRef.current) { URL.revokeObjectURL(audioUrlRef.current); audioUrlRef.current = null; } audioRef.current = null; };
       setPlayingMessageId(messageId); setIsPaused(false); await audio.play();
     } catch (e) { console.error("TTS Error", e); alert("Voice module glitching. Check key?"); setPlayingMessageId(null); setIsPaused(false); }
   };
@@ -582,20 +584,20 @@ export const ChatInterface: React.FC = () => {
       image: attachments.find(a => a.type === 'image')?.content.split(',')[1]
     };
     addMessage(newMessage); setLastSentMessageId(newMessage.id); setLastInputText(currentInput); setInputText(''); setAttachments([]);
-    if (textareaRef.current) textareaRef.current.style.height = '48px';
+    if (textareaRef.current) { textareaRef.current.style.height = '48px'; textareaRef.current.focus(); }
     if (isFirstMessage) {
       const currentSession = sessions.find(s => s.id === targetSessionId);
       const effectiveLlm = llmPresets.find(p => p.id === (currentSession?.customLlmId || settings.activeLlmId)) || llmPresets[0];
       if (effectiveLlm?.apiKey) { generateChatTitle(currentInput, effectiveLlm.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
     }
     if (activeMode === 'sms') {
-      // SMS: 0.8s debounce so Luna can still delete & resend if she typos
+      // SMS: 5s debounce so Luna can send multiple texts before Wade replies
       setWaitingForSMS(true);
       if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
       setWadeStatus('typing');
       smsDebounceTimer.current = setTimeout(() => {
         if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput);
-      }, 800);
+      }, 5000);
     } else {
       // Deep & Roleplay: fire immediately, no reason to make Wade stand in the corner
       setIsTyping(true);
@@ -822,7 +824,7 @@ export const ChatInterface: React.FC = () => {
       {/* Modals */}
       <ThemeStudio isOpen={isThemeStudioOpen} onClose={() => setIsThemeStudioOpen(false)} sessionId={activeSessionId || undefined} />
       <LlmSelectorPanel showLlmSelector={showLlmSelector} setShowLlmSelector={setShowLlmSelector} llmSelectorMode={llmSelectorMode} setLlmSelectorMode={setLlmSelectorMode} llmPresets={llmPresets} sessions={sessions} activeSessionId={activeSessionId} settings={settings} updateSession={updateSession as any} updateSettings={updateSettings as any} newPresetForm={newPresetForm} setNewPresetForm={setNewPresetForm} handleProviderChange={handleProviderChange} handleSavePreset={handleSavePreset} />
-      {showSearch && <SearchBar searchQuery={searchQuery} onSearchChange={handleSearchChange} currentSearchIndex={currentSearchIndex} totalResults={totalResults} onPrev={goToPrevResult} onNext={goToNextResult} onClose={() => setShowSearch(false)} />}
+      {showSearch && <SearchBar searchQuery={searchQuery} onSearchChange={handleSearchChange} currentSearchIndex={currentSearchIndex} totalResults={totalResults} onPrev={goToPrevResult} onNext={goToNextResult} onClose={() => { setShowSearch(false); setSearchQuery(''); }} />}
 
       {/* Messages */}
       <div ref={messagesContainerRef} onClick={() => showSearch && setShowSearch(false)} className="flex-1 overflow-y-auto p-4 relative">
@@ -840,7 +842,7 @@ export const ChatInterface: React.FC = () => {
             const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
             return (
               <div key={msg.id} id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
-                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} />
+                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} audioRemainingTime={playingMessageId === msg.id ? audioRemainingTime : null} />
               </div>
             );
           })}

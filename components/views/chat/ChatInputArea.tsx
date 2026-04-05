@@ -113,6 +113,7 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 
             {/* Send Button */}
             <button
+              onTouchEnd={(e) => { e.preventDefault(); ((isTyping && activeMode !== 'sms') ? handleCancel : handleSend)(); }}
               onClick={(isTyping && activeMode !== 'sms') ? handleCancel : handleSend}
               className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-all border border-wade-border shrink-0 bg-wade-accent text-white border-wade-accent hover:bg-wade-accent-hover"
             >

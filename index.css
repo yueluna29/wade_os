@@ -68,8 +68,8 @@
   --wade-code-text: #6AAFF2;
 
   --wade-nav-bg: #21174B;
-  --wade-bubble-luna: #CC54D0;
-  --wade-bubble-luna-rgb: 204, 84, 208;
+  --wade-bubble-luna: var(--wade-accent);
+  --wade-bubble-luna-rgb: var(--wade-accent-rgb);
 
   --wade-shadow-glow: 0 4px 15px rgba(235, 164, 210, 0.3), 0 0 10px rgba(106, 175, 242, 0.2);
 }
@@ -105,8 +105,8 @@
   --wade-code-text: #FEECDE;
 
   --wade-nav-bg: #1A1A1A;
-  --wade-bubble-luna: #E296B2;
-  --wade-bubble-luna-rgb: 226, 150, 178;
+  --wade-bubble-luna: var(--wade-accent);
+  --wade-bubble-luna-rgb: var(--wade-accent-rgb);
 
   --wade-shadow-glow: 0 4px 12px rgba(151, 24, 26, 0.4);
 }
