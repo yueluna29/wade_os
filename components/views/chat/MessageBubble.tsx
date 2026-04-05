@@ -82,8 +82,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const radiusMap = { sharp: '8px', rounded: '16px', pill: '24px' };
   const bubbleRadius = radiusMap[cs.bubbleRadius || 'rounded'] || '16px';
   const bubbleOpacity = (cs.bubbleOpacity ?? 100) / 100;
-  const fontSizeMap = { small: '12px', medium: '13px', large: '15px' };
-  const fontSize = fontSizeMap[cs.chatFontSize || 'medium'] || '13px';
+  const fontSize = cs.chatFontSizePx ? `${cs.chatFontSizePx}px` : '13px';
   const fontFamily = cs.chatFont || undefined;
   const showAvatar = cs.showAvatar !== false;
   const showTs = cs.showTimestamp !== false;

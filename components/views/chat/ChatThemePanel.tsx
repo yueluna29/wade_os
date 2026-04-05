@@ -105,8 +105,7 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
           const radiusMap: Record<string, string> = { sharp: '8px', rounded: '16px', pill: '24px' };
           const br = radiusMap[local.bubbleRadius || 'rounded'] || '16px';
           const op = (local.bubbleOpacity ?? 100) / 100;
-          const fsMap: Record<string, string> = { small: '11px', medium: '12px', large: '14px' };
-          const fs = fsMap[local.chatFontSize || 'medium'] || '12px';
+          const fs = `${local.chatFontSizePx ?? 13}px`;
           const bgStyle: React.CSSProperties = local.chatBgImage
             ? { backgroundImage: `url(${local.chatBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : { backgroundColor: local.chatBgColor || 'var(--wade-bg-app)' };
@@ -266,21 +265,22 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
               </div>
 
               <div className="pb-3 border-b border-wade-border/50 pt-2">
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-accent mb-2">Font Size</p>
-                <div className="flex gap-2">
-                  {fontSizeOptions.map(opt => (
-                    <button
-                      key={opt.key}
-                      onClick={() => update('chatFontSize', opt.key)}
-                      className={`flex-1 py-2 text-[10px] font-bold rounded-xl transition-colors ${
-                        local.chatFontSize === opt.key
-                          ? 'bg-wade-accent text-white'
-                          : 'bg-wade-bg-app text-wade-text-muted hover:text-wade-accent border border-wade-border'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-accent">Font Size</p>
+                  <span className="text-[10px] font-mono text-wade-text-muted">{local.chatFontSizePx ?? 13}px</span>
+                </div>
+                <input
+                  type="range"
+                  min={10}
+                  max={20}
+                  step={0.5}
+                  value={local.chatFontSizePx ?? 13}
+                  onChange={e => update('chatFontSizePx', parseFloat(e.target.value))}
+                  className="w-full accent-wade-accent h-1"
+                />
+                <div className="flex justify-between text-[8px] text-wade-text-muted/50 mt-1">
+                  <span>10px</span>
+                  <span>20px</span>
                 </div>
               </div>
 
