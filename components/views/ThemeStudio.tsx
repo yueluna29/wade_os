@@ -12,7 +12,7 @@ interface ThemeStudioProps {
 
 const defaultBase: Partial<CustomTheme> = {
   accent: '#d58f99', bgBase: '#fdfbfb', bgCard: '#ffffff', bgApp: '#f9f6f7',
-  textMain: '#5a4a42', textMuted: '#a38585', bubbleLuna: '#fff0f3', bubbleWade: '#ffffff',
+  textMain: '#5a4a42', textMuted: '#a38585', bubbleWade: '#ffffff',
   fontFamilyEn: 'Nunito', fontFamilyZh: '"Noto Sans SC"', fontSize: 'medium', useCustomFont: 'none',
 };
 

@@ -766,7 +766,7 @@ export const ChatInterface: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-wade-bg-app relative">
       {/* Header */}
-      <div className="w-full px-4 py-2 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0 relative">
+      <div className="w-full px-4 py-3 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0 relative">
         <button onClick={handleBack} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Back /></button>
         {activeMode === 'archive' ? (
           <div className="flex-1 flex justify-center"><div className="font-bold text-wade-text-main text-base">{activeArchiveId ? chatArchives.find(a => a.id === activeArchiveId)?.title || 'Archive' : 'Archive'}</div></div>

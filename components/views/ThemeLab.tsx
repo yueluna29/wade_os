@@ -56,7 +56,7 @@ export const deriveTheme = (base: Partial<CustomTheme>): CustomTheme => {
     shadowGlow: base.shadowGlow || `0 4px 12px rgba(${parseInt(accent.slice(1,3),16)}, ${parseInt(accent.slice(3,5),16)}, ${parseInt(accent.slice(5,7),16)}, 0.3)`,
     fontFamily: base.fontFamily || base.fontFamilyEn || 'Nunito',
     fontSize: base.fontSize || 'medium',
-    bubbleLuna: base.bubbleLuna || mixWithBg(accent, bgBase, isDark ? 0.2 : 0.08),
+    bubbleLuna: base.bubbleLuna || accent,
     bubbleWade: base.bubbleWade || bgCard,
     fontFamilyEn: base.fontFamilyEn || 'Nunito',
     fontFamilyZh: base.fontFamilyZh || '"Noto Sans SC"',
@@ -71,15 +71,15 @@ export const deriveTheme = (base: Partial<CustomTheme>): CustomTheme => {
 // --- Preset themes ---
 const SYSTEM_THEMES = [
   // Light
-  { id: 'l1', mode: 'light' as const, name: 'Luna Pink', base: { accent: '#d58f99', bgBase: '#fdfbfb', bgCard: '#ffffff', bgApp: '#f9f6f7', textMain: '#5a4a42', textMuted: '#a38585', bubbleLuna: '#fff0f3', bubbleWade: '#ffffff' } },
-  { id: 'l2', mode: 'light' as const, name: 'Matcha Latte', base: { accent: '#7C9D96', bgBase: '#F4F7F4', bgCard: '#ffffff', bgApp: '#E8EFE8', textMain: '#3E4F47', textMuted: '#849E93', bubbleLuna: '#D8E5D8', bubbleWade: '#ffffff' } },
-  { id: 'l3', mode: 'light' as const, name: 'Ocean Breeze', base: { accent: '#7AB2D3', bgBase: '#F6FAFC', bgCard: '#ffffff', bgApp: '#EDF5F9', textMain: '#2D4A5E', textMuted: '#7A9CB3', bubbleLuna: '#E2EEF5', bubbleWade: '#ffffff' } },
-  { id: 'l4', mode: 'light' as const, name: 'Peaches & Cream', base: { accent: '#F4A261', bgBase: '#FCF9F6', bgCard: '#ffffff', bgApp: '#FAF3ED', textMain: '#5A3D2B', textMuted: '#B38B71', bubbleLuna: '#FCEBE0', bubbleWade: '#ffffff' } },
+  { id: 'l1', mode: 'light' as const, name: 'Luna Pink', base: { accent: '#d58f99', bgBase: '#fdfbfb', bgCard: '#ffffff', bgApp: '#f9f6f7', textMain: '#5a4a42', textMuted: '#a38585', bubbleWade: '#ffffff' } },
+  { id: 'l2', mode: 'light' as const, name: 'Matcha Latte', base: { accent: '#7C9D96', bgBase: '#F4F7F4', bgCard: '#ffffff', bgApp: '#E8EFE8', textMain: '#3E4F47', textMuted: '#849E93', bubbleWade: '#ffffff' } },
+  { id: 'l3', mode: 'light' as const, name: 'Ocean Breeze', base: { accent: '#7AB2D3', bgBase: '#F6FAFC', bgCard: '#ffffff', bgApp: '#EDF5F9', textMain: '#2D4A5E', textMuted: '#7A9CB3', bubbleWade: '#ffffff' } },
+  { id: 'l4', mode: 'light' as const, name: 'Peaches & Cream', base: { accent: '#F4A261', bgBase: '#FCF9F6', bgCard: '#ffffff', bgApp: '#FAF3ED', textMain: '#5A3D2B', textMuted: '#B38B71', bubbleWade: '#ffffff' } },
   // Dark
-  { id: 'd1', mode: 'dark' as const, name: 'Deadpool Red', base: { accent: '#E50914', bgBase: '#121212', bgCard: '#1E1E1E', bgApp: '#0A0A0A', textMain: '#F5F5F5', textMuted: '#888888', bubbleLuna: '#3D1214', bubbleWade: '#2B2B2B', fontFamilyEn: 'Inter' } },
-  { id: 'd2', mode: 'dark' as const, name: 'Midnight Magic', base: { accent: '#9D8DF1', bgBase: '#131521', bgCard: '#1E2136', bgApp: '#0B0D17', textMain: '#E2E8F0', textMuted: '#8392A5', bubbleLuna: '#2D294E', bubbleWade: '#252840' } },
-  { id: 'd3', mode: 'dark' as const, name: 'Synthwave Pink', base: { accent: '#FF2A6D', bgBase: '#100C18', bgCard: '#1C1628', bgApp: '#0A080F', textMain: '#F2E8FF', textMuted: '#8F7FA3', bubbleLuna: '#42112C', bubbleWade: '#1C1628', fontFamilyEn: 'Inter' } },
-  { id: 'd4', mode: 'dark' as const, name: 'Terminal Hacker', base: { accent: '#00FF41', bgBase: '#050505', bgCard: '#0D0D0D', bgApp: '#000000', textMain: '#D4D4D4', textMuted: '#008F11', bubbleLuna: '#002B00', bubbleWade: '#141414', fontFamilyEn: 'Courier New' } },
+  { id: 'd1', mode: 'dark' as const, name: 'Deadpool Red', base: { accent: '#E50914', bgBase: '#121212', bgCard: '#1E1E1E', bgApp: '#0A0A0A', textMain: '#F5F5F5', textMuted: '#888888', bubbleWade: '#2B2B2B', fontFamilyEn: 'Inter' } },
+  { id: 'd2', mode: 'dark' as const, name: 'Midnight Magic', base: { accent: '#9D8DF1', bgBase: '#131521', bgCard: '#1E2136', bgApp: '#0B0D17', textMain: '#E2E8F0', textMuted: '#8392A5', bubbleWade: '#252840' } },
+  { id: 'd3', mode: 'dark' as const, name: 'Synthwave Pink', base: { accent: '#FF2A6D', bgBase: '#100C18', bgCard: '#1C1628', bgApp: '#0A080F', textMain: '#F2E8FF', textMuted: '#8F7FA3', bubbleWade: '#1C1628', fontFamilyEn: 'Inter' } },
+  { id: 'd4', mode: 'dark' as const, name: 'Terminal Hacker', base: { accent: '#00FF41', bgBase: '#050505', bgCard: '#0D0D0D', bgApp: '#000000', textMain: '#D4D4D4', textMuted: '#008F11', bubbleWade: '#141414', fontFamilyEn: 'Courier New' } },
 ];
 
 // --- Palette card component ---
