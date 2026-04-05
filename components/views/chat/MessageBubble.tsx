@@ -96,7 +96,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     borderRadius: bubbleRadius,
     borderTopRightRadius: isSMS ? undefined : '0',
     opacity: bubbleOpacity,
-    border: cs.bubbleLunaBorderColor ? `1px solid ${cs.bubbleLunaBorderColor}` : undefined,
+    border: `1px solid ${cs.bubbleLunaBorderColor || 'transparent'}`,
     fontFamily,
     fontSize,
   };
@@ -107,7 +107,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     borderRadius: bubbleRadius,
     borderTopLeftRadius: isSMS ? undefined : '0',
     opacity: bubbleOpacity,
-    border: cs.bubbleWadeBorderColor ? `1px solid ${cs.bubbleWadeBorderColor}` : undefined,
+    border: `1px solid ${cs.bubbleWadeBorderColor || 'var(--wade-border)'}`,
     fontFamily,
     fontSize,
   };
