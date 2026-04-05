@@ -22,7 +22,6 @@ import { ConversationMapModal } from './chat/ConversationMapModal';
 import { PromptEditorModal } from './chat/PromptEditorModal';
 import { MemoryModal } from './chat/MemoryModal';
 import { XRayModal } from './chat/XRayModal';
-import { ChatStatusBar } from './chat/ChatStatusBar';
 
 export const ChatInterface: React.FC = () => {
   const {
@@ -248,13 +247,6 @@ export const ChatInterface: React.FC = () => {
     displayMessages = activeSessionId ? messages.filter(m => m.sessionId === activeSessionId) : [];
   }
 
-  // 提取Wade最新状态
-  const lastWadeMsg = [...displayMessages].reverse().find(m => m.role === 'Wade');
-  let wadeStatusPanel: string | null = null;
-  if (lastWadeMsg?.text) {
-    const match = lastWadeMsg.text.match(/<status>([\s\S]*?)<\/status>/);
-    if (match) wadeStatusPanel = match[1].trim();
-  }
 
   displayMessages.sort((a, b) => {
     const timeA = Math.floor(a.timestamp / 1000);
@@ -796,7 +788,6 @@ export const ChatInterface: React.FC = () => {
           <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Map /></button>
           <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative"><Icons.More /></button>
         </div>
-      <ChatStatusBar statusText={wadeStatusPanel} activeMode={activeMode} />
       </div>
 
       {/* Menu Dropdown */}
