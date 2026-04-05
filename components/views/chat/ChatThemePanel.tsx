@@ -100,6 +100,65 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
           </button>
         </div>
 
+        {/* Live Preview */}
+        {(() => {
+          const radiusMap: Record<string, string> = { sharp: '8px', rounded: '16px', pill: '24px' };
+          const br = radiusMap[local.bubbleRadius || 'rounded'] || '16px';
+          const op = (local.bubbleOpacity ?? 100) / 100;
+          const fsMap: Record<string, string> = { small: '11px', medium: '12px', large: '14px' };
+          const fs = fsMap[local.chatFontSize || 'medium'] || '12px';
+          const bgStyle: React.CSSProperties = local.chatBgImage
+            ? { backgroundImage: `url(${local.chatBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+            : { backgroundColor: local.chatBgColor || 'var(--wade-bg-app)' };
+          return (
+            <div className="mx-5 mb-3 rounded-2xl p-3 overflow-hidden border border-wade-border shadow-inner" style={bgStyle}>
+              <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-text-muted mb-2">Live Preview</div>
+              <div className={`space-y-${local.messageSpacing === 'compact' ? '1' : local.messageSpacing === 'spacious' ? '4' : '2'}`}>
+                {/* Luna bubble */}
+                <div className="flex justify-end">
+                  <div
+                    className="max-w-[80%] px-3 py-2 shadow-sm"
+                    style={{
+                      backgroundColor: local.bubbleLunaColor || 'var(--wade-bubble-luna)',
+                      color: local.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #fff)',
+                      borderRadius: `${br} 0 ${br} ${br}`,
+                      opacity: op,
+                      border: local.bubbleLunaBorderColor ? `1px solid ${local.bubbleLunaBorderColor}` : undefined,
+                      fontSize: fs,
+                      fontFamily: local.chatFont || undefined,
+                    }}
+                  >
+                    Hey Wade, how does this look?
+                  </div>
+                </div>
+                {/* Wade bubble */}
+                <div className="flex justify-start items-end gap-2">
+                  {local.showAvatar !== false && (
+                    <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm bg-wade-accent">W</div>
+                  )}
+                  <div
+                    className="max-w-[80%] px-3 py-2 shadow-sm"
+                    style={{
+                      backgroundColor: local.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))',
+                      color: local.bubbleWadeTextColor || 'var(--wade-text-main)',
+                      borderRadius: `0 ${br} ${br} ${br}`,
+                      opacity: op,
+                      border: local.bubbleWadeBorderColor ? `1px solid ${local.bubbleWadeBorderColor}` : '1px solid var(--wade-border)',
+                      fontSize: fs,
+                      fontFamily: local.chatFont || undefined,
+                    }}
+                  >
+                    Looking good. Don't make me too transparent though.
+                  </div>
+                </div>
+              </div>
+              {local.showTimestamp !== false && (
+                <div className="text-[8px] text-wade-text-muted/50 text-right mt-1">12:34 PM</div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Section Tabs */}
         <div className="flex px-5 gap-1 mb-3">
           {([
