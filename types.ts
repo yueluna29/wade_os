@@ -42,6 +42,30 @@ export interface SavedTheme {
   theme: CustomTheme;
 }
 
+export interface ChatStyleConfig {
+  // Luna bubble
+  bubbleLunaColor?: string;
+  bubbleLunaTextColor?: string;
+  bubbleLunaBorderColor?: string;
+  // Wade bubble
+  bubbleWadeColor?: string;
+  bubbleWadeTextColor?: string;
+  bubbleWadeBorderColor?: string;
+  // Bubble shape & feel
+  bubbleRadius?: 'sharp' | 'rounded' | 'pill';
+  bubbleOpacity?: number; // 0-100
+  // Layout
+  messageSpacing?: 'compact' | 'normal' | 'spacious';
+  showTimestamp?: boolean;
+  showAvatar?: boolean;
+  // Chat background
+  chatBgColor?: string;
+  chatBgImage?: string;
+  // Typography
+  chatFont?: string;
+  chatFontSize?: 'small' | 'medium' | 'large';
+}
+
 export interface ChatSession {
   id: string;
   mode: ChatMode;
@@ -52,7 +76,8 @@ export interface ChatSession {
   customLlmId?: string;
   customPrompt?: string;
   activeMemoryIds?: string[]; // IDs of core memories linked to this session
-  customTheme?: CustomTheme; // NEW: Per-chat custom theme
+  customTheme?: CustomTheme; // Per-chat custom theme (full theme override)
+  chatStyle?: ChatStyleConfig; // Per-chat style tweaks (bubbles, layout, bg)
 }
 
 export interface MessageVariant {

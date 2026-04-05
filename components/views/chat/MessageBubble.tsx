@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Message } from '../../../types';
+import { Message, ChatStyleConfig } from '../../../types';
 import { Icons } from '../../ui/Icons';
 
 // Static waveform heights for voice bubble visualization
@@ -65,16 +65,52 @@ interface MessageBubbleProps {
   isPaused: boolean;
   audioDuration?: number;
   audioRemainingTime?: number | null;
+  chatStyle?: ChatStyleConfig;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  msg, settings, onSelect, isSMS, onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration, audioRemainingTime
+  msg, settings, onSelect, isSMS, onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration, audioRemainingTime, chatStyle
 }) => {
   const isLuna = msg.role === 'Luna';
   const [showThought, setShowThought] = useState(false);
+  const cs = chatStyle || {};
 
   const formatTime = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const formatDate = (ts: number) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+  // Chat style computed values
+  const radiusMap = { sharp: '8px', rounded: '16px', pill: '24px' };
+  const bubbleRadius = radiusMap[cs.bubbleRadius || 'rounded'] || '16px';
+  const bubbleOpacity = (cs.bubbleOpacity ?? 100) / 100;
+  const fontSizeMap = { small: '12px', medium: '13px', large: '15px' };
+  const fontSize = fontSizeMap[cs.chatFontSize || 'medium'] || '13px';
+  const fontFamily = cs.chatFont || undefined;
+  const showAvatar = cs.showAvatar !== false;
+  const showTs = cs.showTimestamp !== false;
+  const spacingMap = { compact: 'mb-2', normal: 'mb-6', spacious: 'mb-10' };
+  const msgSpacing = isSMS ? '' : (spacingMap[cs.messageSpacing || 'normal'] || 'mb-6');
+
+  const lunaBubbleStyle: React.CSSProperties = {
+    backgroundColor: cs.bubbleLunaColor || 'var(--wade-bubble-luna)',
+    color: cs.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #ffffff)',
+    borderRadius: bubbleRadius,
+    borderTopRightRadius: isSMS ? undefined : '0',
+    opacity: bubbleOpacity,
+    border: cs.bubbleLunaBorderColor ? `1px solid ${cs.bubbleLunaBorderColor}` : undefined,
+    fontFamily,
+    fontSize,
+  };
+
+  const wadeBubbleStyle: React.CSSProperties = {
+    backgroundColor: cs.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))',
+    color: cs.bubbleWadeTextColor || undefined,
+    borderRadius: bubbleRadius,
+    borderTopLeftRadius: isSMS ? undefined : '0',
+    opacity: bubbleOpacity,
+    border: cs.bubbleWadeBorderColor ? `1px solid ${cs.bubbleWadeBorderColor}` : undefined,
+    fontFamily,
+    fontSize,
+  };
 
   const longPressHandlers = useLongPress(() => onSelect(msg.id));
 
@@ -220,9 +256,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               <div className="flex flex-col gap-1 items-start">
                 <div
                   {...longPressHandlers}
-                  style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent' }}
-                  className="border border-wade-border/60 rounded-[20px] rounded-bl-[4px] shadow-sm px-3 py-2 relative flex items-center gap-3 cursor-pointer select-none"
-                  style={{ backgroundColor: 'var(--wade-bubble-wade, var(--wade-bg-card))' }}
+                  style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: '20px', borderBottomLeftRadius: '4px' }}
+                  className="shadow-sm px-3 py-2 relative flex items-center gap-3 cursor-pointer select-none"
                 >
                   {/* Play/Pause */}
                   <button
@@ -286,7 +321,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         <div className={`relative max-w-[85%] ${isLuna ? 'flex flex-row-reverse' : 'flex'} gap-2 items-end`}>
           <div
             {...longPressHandlers}
-            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', backgroundColor: isLuna ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade, var(--wade-bg-card))', ...(isLuna ? { color: 'var(--wade-bubble-luna-text, #ffffff)' } : {}) }}
+            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...(isLuna ? lunaBubbleStyle : wadeBubbleStyle) }}
             className={`px-4 py-2 relative ${bubbleClasses} min-w-[60px] cursor-pointer select-none`}
           >
             {thinkingContent && (
@@ -320,32 +355,29 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             )}
           </div>
-          <span className="text-[9px] text-wade-text-muted/50 mb-1 whitespace-nowrap shrink-0 select-none">
+          {showTs && <span className="text-[9px] text-wade-text-muted/50 mb-1 whitespace-nowrap shrink-0 select-none">
             {formatTime(msg.timestamp)}
-          </span>
+          </span>}
         </div>
       </div>
     );
   }
 
   if (!isLuna) {
-    // 参谋的微创手术：最外层的 div 加上了 mb-6
     return (
-      <div className="flex flex-col items-start w-full group animate-fade-in pr-2 mb-6">
+      <div className={`flex flex-col items-start w-full group animate-fade-in pr-2 ${msgSpacing}`}>
         <div className="flex items-start gap-2 mb-0 ml-1 select-none w-full">
-          <img
+          {showAvatar && <img
             src={settings.wadeAvatar}
             className="w-10 h-10 rounded-full object-cover border border-wade-border shadow-sm"
-          />
-          {/* 修改点：缩小间距 (gap-[2px])，让名字和时间贴得更紧 */}
+          />}
           <div className="flex flex-col justify-start gap-[2px] flex-1 pt-1">
             <span className="font-bold text-wade-text-main text-sm leading-none">Wade</span>
-            
+
             <div className="flex items-center justify-between w-full pr-1">
-              {/* 修改点：固定高度 h-5，并且让文字完全居中，不受按钮影响 */}
               <div className="flex items-center gap-2 text-[10px] text-wade-text-muted leading-none h-5">
-                <span className="tracking-wide">{formatDate(msg.timestamp)}</span>
-                <span className="opacity-70">{formatTime(msg.timestamp)}</span>
+                {showTs && <><span className="tracking-wide">{formatDate(msg.timestamp)}</span>
+                <span className="opacity-70">{formatTime(msg.timestamp)}</span></>}
                 <div className="flex items-center gap-1">
                   <button
                     onClick={(e) => { e.stopPropagation(); onPlayTTS(displayContent, msg.id); }}
@@ -381,9 +413,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         <div
           {...longPressHandlers}
-          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent' }}
-          className="w-full mt-2 text-wade-text-main border border-wade-border rounded-2xl rounded-tl-none shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
-          style={{ backgroundColor: 'var(--wade-bubble-wade, var(--wade-bg-card))' }}
+          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: `${bubbleRadius} ${bubbleRadius} ${bubbleRadius} 0` }}
+          className="w-full mt-2 shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
         >
           {thinkingContent && (
             <div
@@ -402,7 +433,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          <div className="px-4 py-2 text-[13px] leading-relaxed tracking-wide markdown-content">
+          <div className="px-4 py-2 leading-relaxed tracking-wide markdown-content" style={{ fontSize, fontFamily }}>
             {renderAttachments()}
             {isBase64Image ? (
               <img
@@ -420,27 +451,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     );
   }
 
-  // 参谋的微创手术：最外层的 div 加上了 mb-6
+  // Luna's deep/RP bubble
   return (
-    <div className="flex flex-col items-end w-full group animate-fade-in pl-2 mb-6">
+    <div className={`flex flex-col items-end w-full group animate-fade-in pl-2 ${msgSpacing}`}>
       <div className="flex items-start gap-2 mb-0 mr-1 select-none">
         <div className="flex flex-col items-end mt-1.5">
           <span className="font-bold text-wade-text-main text-sm leading-none">Luna</span>
-          <div className="flex items-center gap-2 text-[10px] text-wade-text-muted h-5">
+          {showTs && <div className="flex items-center gap-2 text-[10px] text-wade-text-muted h-5">
             <span className="tracking-wide">{formatDate(msg.timestamp)}</span>
             <span className="opacity-70">{formatTime(msg.timestamp)}</span>
-          </div>
+          </div>}
         </div>
-        <img
+        {showAvatar && <img
           src={settings.lunaAvatar}
           className="w-10 h-10 rounded-full object-cover border border-wade-accent shadow-sm"
-        />
+        />}
       </div>
 
       <div
         {...longPressHandlers}
-        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', backgroundColor: 'var(--wade-bubble-luna)', color: 'var(--wade-bubble-luna-text, #ffffff)' }}
-        className="max-w-[90%] mt-2 rounded-2xl rounded-tr-none shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
+        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...lunaBubbleStyle, borderRadius: `${bubbleRadius} 0 ${bubbleRadius} ${bubbleRadius}` }}
+        className="max-w-[90%] mt-2 shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
       >
         {renderAttachments()}
         {isBase64Image ? (
@@ -451,7 +482,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             style={{ maxHeight: '400px', width: 'auto' }}
           />
         ) : (
-          <div className="text-[13px] leading-relaxed markdown-content">
+          <div className="leading-relaxed markdown-content" style={{ fontSize, fontFamily }}>
             <MarkdownWithHighlight content={displayContent} query={searchQuery} />
           </div>
         )}

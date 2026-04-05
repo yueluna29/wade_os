@@ -239,6 +239,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           let localThemeCache: Record<string, any> = {};
           try { localThemeCache = JSON.parse(localStorage.getItem('wadeOS_sessionTheme') || '{}'); } catch (e) {}
 
+          let localStyleCache: Record<string, any> = {};
+          try { localStyleCache = JSON.parse(localStorage.getItem('wadeOS_sessionChatStyle') || '{}'); } catch (e) {}
+
           const mappedSessions = sessData.map(s => ({
             id: s.id,
             mode: s.mode as ChatMode,
@@ -249,7 +252,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             isPinned: (s.is_pinned ?? s.pinned ?? false) || localPinnedIds.includes(s.id),
             customLlmId: localLlmCache[s.id] || s.custom_llm_id,
             customPrompt: s.custom_prompt,
-            customTheme: localThemeCache[s.id] || (s.custom_theme ? (typeof s.custom_theme === 'string' ? JSON.parse(s.custom_theme) : s.custom_theme) : undefined)
+            customTheme: localThemeCache[s.id] || (s.custom_theme ? (typeof s.custom_theme === 'string' ? JSON.parse(s.custom_theme) : s.custom_theme) : undefined),
+            chatStyle: localStyleCache[s.id] || (s.chat_style ? (typeof s.chat_style === 'string' ? JSON.parse(s.chat_style) : s.chat_style) : undefined)
           }));
 
           mappedSessions.sort((a, b) => {
@@ -647,6 +651,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem('wadeOS_sessionTheme', JSON.stringify(cache));
       } catch (e) {}
     }
+    // Cache per-session chat style locally
+    if (updates.chatStyle !== undefined) {
+      try {
+        const cache = JSON.parse(localStorage.getItem('wadeOS_sessionChatStyle') || '{}');
+        if (updates.chatStyle) cache[id] = updates.chatStyle;
+        else delete cache[id];
+        localStorage.setItem('wadeOS_sessionChatStyle', JSON.stringify(cache));
+      } catch (e) {}
+    }
     const dbUpdates: any = {};
     if (updates.customLlmId !== undefined) dbUpdates.custom_llm_id = updates.customLlmId;
     if (updates.customPrompt !== undefined) dbUpdates.custom_prompt = updates.customPrompt;
@@ -654,6 +667,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     if (updates.isPinned !== undefined) dbUpdates.is_pinned = updates.isPinned;
     if (updates.activeMemoryIds !== undefined) dbUpdates.active_memory_ids = updates.activeMemoryIds;
     if (updates.customTheme !== undefined) dbUpdates.custom_theme = updates.customTheme;
+    if (updates.chatStyle !== undefined) dbUpdates.chat_style = updates.chatStyle;
     if (Object.keys(dbUpdates).length > 0) {
       dbUpdates.updated_at = new Date().toISOString();
       await supabase.from('chat_sessions').update(dbUpdates).eq('id', id);
