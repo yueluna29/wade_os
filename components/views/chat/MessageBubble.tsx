@@ -58,6 +58,7 @@ interface MessageBubbleProps {
   settings: any;
   onSelect: (id: string) => void;
   isSMS: boolean;
+  groupPosition?: 'alone' | 'first' | 'middle' | 'last';
   onPlayTTS: (text: string, messageId: string) => void;
   onRegenerateTTS: (text: string, messageId: string) => void;
   searchQuery?: string;
@@ -69,7 +70,7 @@ interface MessageBubbleProps {
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  msg, settings, onSelect, isSMS, onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration, audioRemainingTime, chatStyle
+  msg, settings, onSelect, isSMS, groupPosition = 'alone', onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration, audioRemainingTime, chatStyle
 }) => {
   const isLuna = msg.role === 'Luna';
   const [showThought, setShowThought] = useState(false);
@@ -89,6 +90,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const spacingMap = { compact: 'mb-2', normal: 'mb-6', spacious: 'mb-10' };
   const msgSpacing = isSMS ? '' : (spacingMap[cs.messageSpacing || 'normal'] || 'mb-6');
 
+  // SMS grouped bubble radius
+  // Wade (left side): sharp corner on the left side
+  //   first: bottom-left sharp | middle: top-left & bottom-left sharp | last: top-left sharp | alone: all round
+  // Luna (right side): mirror — sharp corner on the right side
+  const r = '20px';
+  const sharp = '4px';
+  const getSmsRadius = (role: 'Luna' | 'Wade', pos: 'alone' | 'first' | 'middle' | 'last') => {
+    if (role === 'Wade') {
+      // [top-left, top-right, bottom-right, bottom-left]
+      switch (pos) {
+        case 'first':  return { borderRadius: `${r} ${r} ${r} ${sharp}` };
+        case 'middle': return { borderRadius: `${sharp} ${r} ${r} ${sharp}` };
+        case 'last':   return { borderRadius: `${sharp} ${r} ${r} ${r}` };
+        default:       return { borderRadius: r };
+      }
+    } else {
+      // Luna: mirror (sharp on right side)
+      switch (pos) {
+        case 'first':  return { borderRadius: `${r} ${r} ${sharp} ${r}` };
+        case 'middle': return { borderRadius: `${r} ${sharp} ${sharp} ${r}` };
+        case 'last':   return { borderRadius: `${r} ${sharp} ${r} ${r}` };
+        default:       return { borderRadius: r };
+      }
+    }
+  };
+
+  const smsRadiusLuna = isSMS ? getSmsRadius('Luna', groupPosition) : {};
+  const smsRadiusWade = isSMS ? getSmsRadius('Wade', groupPosition) : {};
+
   const lunaBubbleStyle: React.CSSProperties = {
     backgroundColor: cs.bubbleLunaColor || 'var(--wade-bubble-luna)',
     color: cs.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #ffffff)',
@@ -98,6 +128,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     border: `1px solid ${cs.bubbleLunaBorderColor || 'transparent'}`,
     fontFamily,
     fontSize,
+    ...(isSMS ? smsRadiusLuna : {}),
   };
 
   const wadeBubbleStyle: React.CSSProperties = {
@@ -109,6 +140,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     border: `1px solid ${cs.bubbleWadeBorderColor || 'var(--wade-border)'}`,
     fontFamily,
     fontSize,
+    ...(isSMS ? smsRadiusWade : {}),
   };
 
   const longPressHandlers = useLongPress(() => onSelect(msg.id));
@@ -221,8 +253,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   if (isSMS) {
     const bubbleClasses = isLuna
-      ? "rounded-2xl rounded-br-none shadow-sm"
-      : "text-wade-text-main border border-wade-border rounded-2xl rounded-bl-none shadow-sm";
+      ? "shadow-sm"
+      : "text-wade-text-main shadow-sm";
 
     // Voice message detection: Wade's SMS starting with [VOICE]
     const isVoiceMessage = !isLuna && displayContent.startsWith('[VOICE]');
@@ -255,7 +287,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               <div className="flex flex-col gap-1 items-start">
                 <div
                   {...longPressHandlers}
-                  style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: '20px', borderBottomLeftRadius: '4px' }}
+                  style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle }}
                   className="shadow-sm px-3 py-2 relative flex items-center gap-3 cursor-pointer select-none"
                 >
                   {/* Play/Pause */}
@@ -412,7 +444,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         <div
           {...longPressHandlers}
-          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: `${bubbleRadius} ${bubbleRadius} ${bubbleRadius} 0` }}
+          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: `4px ${bubbleRadius} ${bubbleRadius} ${bubbleRadius}` }}
           className="w-full mt-2 shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
         >
           {thinkingContent && (
@@ -469,7 +501,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       <div
         {...longPressHandlers}
-        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...lunaBubbleStyle, borderRadius: `${bubbleRadius} 0 ${bubbleRadius} ${bubbleRadius}` }}
+        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...lunaBubbleStyle, borderRadius: `${bubbleRadius} 4px ${bubbleRadius} ${bubbleRadius}` }}
         className="max-w-[90%] mt-2 shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
       >
         {renderAttachments()}

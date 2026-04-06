@@ -155,6 +155,9 @@ export const ChatInterface: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior }), 50);
+  };
   const audioContextRef = useRef<AudioContext | null>(null);
   const smsDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -204,6 +207,16 @@ export const ChatInterface: React.FC = () => {
   }, [viewState, activeMode, activeArchiveId]);
 
   useEffect(() => { return () => setNavHidden(false); }, []);
+
+  // Auto-scroll to bottom when new messages arrive (Luna sends or Wade replies)
+  const prevMsgCountRef = useRef(0);
+  useEffect(() => {
+    if (viewState === 'chat' && activeMode !== 'archive') {
+      const count = messages.filter(m => m.sessionId === activeSessionId).length;
+      if (count > prevMsgCountRef.current) { scrollToBottom(); }
+      prevMsgCountRef.current = count;
+    }
+  }, [messages, viewState, activeSessionId, activeMode]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -576,6 +589,7 @@ export const ChatInterface: React.FC = () => {
       image: attachments.find(a => a.type === 'image')?.content.split(',')[1]
     };
     addMessage(newMessage); setLastSentMessageId(newMessage.id); setLastInputText(currentInput); setInputText(''); setAttachments([]);
+    scrollToBottom();
     if (textareaRef.current) { textareaRef.current.style.height = '48px'; textareaRef.current.focus(); }
     if (isFirstMessage) {
       const currentSession = sessions.find(s => s.id === targetSessionId);
@@ -839,14 +853,19 @@ export const ChatInterface: React.FC = () => {
         <div className="flex flex-col w-full">
           {displayMessages.map((msg, idx) => {
             let marginBottom = 'mb-6';
+            const prevMsg = displayMessages[idx - 1];
             const nextMsg = displayMessages[idx + 1];
             // 控制气泡间距
-            if (activeMode === 'sms') { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-0' : 'mb-2'; }
+            if (activeMode === 'sms') { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-0.5' : 'mb-2'; }
             else { marginBottom = nextMsg && nextMsg.role === msg.role ? 'mb-1' : 'mb-0.5'; }
+            // SMS bubble group position: first/middle/last/alone
+            const sameAsPrev = prevMsg && prevMsg.role === msg.role;
+            const sameAsNext = nextMsg && nextMsg.role === msg.role;
+            const groupPosition: 'alone' | 'first' | 'middle' | 'last' = sameAsPrev && sameAsNext ? 'middle' : sameAsPrev ? 'last' : sameAsNext ? 'first' : 'alone';
             const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
             return (
               <div key={msg.id} id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
-                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} audioRemainingTime={playingMessageId === msg.id ? audioRemainingTime : null} chatStyle={activeSessionId ? sessions.find(s => s.id === activeSessionId)?.chatStyle : undefined} />
+                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} groupPosition={groupPosition} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} audioRemainingTime={playingMessageId === msg.id ? audioRemainingTime : null} chatStyle={activeSessionId ? sessions.find(s => s.id === activeSessionId)?.chatStyle : undefined} />
               </div>
             );
           })}
