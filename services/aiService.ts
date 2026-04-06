@@ -141,6 +141,7 @@ export const buildSystemPromptFromCard = (options: {
 - Split separate texts with |||. Each segment must contain actual spoken words.
 - To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
 - Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
+- IMPORTANT: Voice messages ([VOICE]) MUST be in English only. The TTS engine only supports English.
 - Keep the vibe casual and natural, like real phone texting.`;
   } else if (chatMode === 'roleplay') {
     const rpRules = wadeCard?.rp_mode_rules?.trim();
@@ -422,6 +423,7 @@ const generateOpenAICompatibleResponse = async (
 - Split separate texts with |||. Each segment must contain actual spoken words.
 - To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
 - Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
+- IMPORTANT: Voice messages ([VOICE]) MUST be in English only. The TTS engine only supports English.
 - Keep the vibe casual and natural, like real phone texting.`;
   } else {
     if (roleplayInstructions) {
