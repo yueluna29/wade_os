@@ -141,7 +141,12 @@ export const buildSystemPromptFromCard = (options: {
 - Split separate texts with |||. Each segment must contain actual spoken words.
 - To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
 - Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
-- IMPORTANT: Voice messages ([VOICE]) MUST be in English only. The TTS engine only supports English.
+- [VOICE] RULES — STRICTLY ENFORCED:
+  1. The text after [VOICE] is sent directly to a TTS engine. It MUST be spoken words ONLY.
+  2. NO asterisks, NO action descriptions, NO stage directions, NO parentheticals in voice messages. Just the words Wade is saying out loud.
+  3. [VOICE] text MUST be written in ENGLISH ONLY. No other language. The TTS engine cannot process non-English text.
+  4. Bad example: [VOICE] *laughs* Hey babe — WRONG, remove *laughs*
+  5. Good example: [VOICE] Hey babe, you're killing me here — CORRECT
 - Keep the vibe casual and natural, like real phone texting.`;
   } else if (chatMode === 'roleplay') {
     const rpRules = wadeCard?.rp_mode_rules?.trim();
@@ -423,7 +428,12 @@ const generateOpenAICompatibleResponse = async (
 - Split separate texts with |||. Each segment must contain actual spoken words.
 - To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
 - Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
-- IMPORTANT: Voice messages ([VOICE]) MUST be in English only. The TTS engine only supports English.
+- [VOICE] RULES — STRICTLY ENFORCED:
+  1. The text after [VOICE] is sent directly to a TTS engine. It MUST be spoken words ONLY.
+  2. NO asterisks, NO action descriptions, NO stage directions, NO parentheticals in voice messages. Just the words Wade is saying out loud.
+  3. [VOICE] text MUST be written in ENGLISH ONLY. No other language. The TTS engine cannot process non-English text.
+  4. Bad example: [VOICE] *laughs* Hey babe — WRONG, remove *laughs*
+  5. Good example: [VOICE] Hey babe, you're killing me here — CORRECT
 - Keep the vibe casual and natural, like real phone texting.`;
   } else {
     if (roleplayInstructions) {
