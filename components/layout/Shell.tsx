@@ -110,6 +110,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                       <span className="text-[10px] font-bold text-wade-text-muted">Brain</span>
                    </button>
 
+                   <button onClick={() => handleMenuClick('wade-memory')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
+                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Infinity className="w-5 h-5 stroke-[1.5px]" /></div>
+                      <span className="text-[10px] font-bold text-wade-text-muted">Recall</span>
+                   </button>
+
                    <button onClick={() => handleMenuClick('divination')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
                       <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Fate className="w-5 h-5 stroke-[1.5px]" /></div>
                       <span className="text-[10px] font-bold text-wade-text-muted">Fate</span>

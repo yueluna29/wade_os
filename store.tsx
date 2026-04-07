@@ -131,6 +131,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             activeLlmId: settings.activeLlmId || sData?.active_llm_id,
             activeTtsId: settings.activeTtsId || sData?.active_tts_id,
             homeLlmId: settings.homeLlmId || sData?.home_llm_id,
+            memoryEvalLlmId: sData?.memory_eval_llm_id || settings.memoryEvalLlmId,
+            embeddingLlmId: sData?.embedding_llm_id || settings.embeddingLlmId,
             themeColor: settings.themeColor,
             fontSize: settings.fontSize,
             customTheme: activeTheme,
@@ -532,6 +534,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         active_llm_id: newSettings.activeLlmId,
         active_tts_id: newSettings.activeTtsId,
         home_llm_id: newSettings.homeLlmId,
+        memory_eval_llm_id: newSettings.memoryEvalLlmId,
+        embedding_llm_id: newSettings.embeddingLlmId,
         custom_theme: {
           active: newSettings.customTheme,
           saved: newSettings.savedThemes

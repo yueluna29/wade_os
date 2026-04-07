@@ -9,6 +9,7 @@ import { ApiSettings } from './components/views/ApiSettings';
 import { PersonaTuning } from './components/views/PersonaTuning';
 import { Memos } from './components/views/Memos';
 import { MemoryBank } from './components/views/MemoryBank';
+import { MemoryDashboard } from './components/views/memory/MemoryDashboard';
 import { Home } from './components/views/Home';
 import { TimeCapsulesView } from './components/views/TimeCapsulesView';
 import { WadesPicksView } from './components/views/WadesPicksView';
@@ -129,6 +130,7 @@ const AppContent = () => {
       case 'persona': return <PersonaTuning />;
       case 'favorites': return <Memos />; 
       case 'memory': return <MemoryBank />;
+      case 'wade-memory': return <MemoryDashboard />;
       case 'time-capsules': return <TimeCapsulesView />;
       case 'wade-picks': return <WadesPicksView />;
       case 'theme-lab': return <ThemeLab />;

@@ -125,11 +125,11 @@ src/
 **紧急：**
 - Supabase 恢复连接（4月1日免费额度重置）
 
-**代码清理：**
-- 删除 `views/chat/LlmSelectorPanel.tsx`（重复的，统一用 `ui/` 版）
-- ChatInterface.tsx 顶部的 `@ts-nocheck` 以后移除
-- 修正 types.ts 中 Message 的 `variants`/`variantsThinking` 类型定义
-- `api/minimax-tts.js` Vercel API route 确认部署位置
+**代码清理：** ✅ 全部完成
+- ~~删除重复的 LlmSelectorPanel~~（已删除 `ui/` 版，`chat/` 版是实际在用的）
+- ~~ChatInterface.tsx 的 `@ts-nocheck`~~（已不存在）
+- ~~修正 types.ts 中 variants 类型定义~~（已修好）
+- ~~确认 minimax-tts API route 部署位置~~（`api/minimax-tts.js` 位置正确）
 
 **功能统一：**
 - 统一"换脑"UI — 让 ApiSettings 也用 LlmSelectorPanel 的卡片式 UI

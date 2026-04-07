@@ -381,7 +381,63 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         )}
 
         {/* Mission Control Tab */}
-        {activeTab === 'control' && <FunctionBindings />}
+        {activeTab === 'control' && (
+          <div className="space-y-4">
+            <FunctionBindings />
+
+            {/* Memory Eval Model Selector */}
+            <div className="bg-wade-bg-card rounded-2xl border border-wade-border p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-wade-accent-light flex items-center justify-center text-wade-accent">
+                  <Icons.Brain size={14} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-wade-text-main">Memory Evaluation</h3>
+                  <p className="text-[10px] text-wade-text-muted">Which model evaluates what Wade remembers</p>
+                </div>
+              </div>
+              <select
+                value={settings.memoryEvalLlmId || ''}
+                onChange={(e) => updateSettings({ memoryEvalLlmId: e.target.value || undefined })}
+                className="w-full px-3 py-2.5 rounded-xl border border-wade-border bg-wade-bg-base text-wade-text-main text-xs focus:outline-none focus:border-wade-accent transition-colors appearance-none cursor-pointer"
+              >
+                <option value="">Default (same as active brain)</option>
+                {llmPresets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.model} ({p.provider})</option>
+                ))}
+              </select>
+              <p className="text-[9px] text-wade-text-muted mt-2 leading-relaxed">
+                Pick a smart model here -- it needs to understand emotions and context to decide what's worth remembering.
+              </p>
+            </div>
+
+            {/* Embedding Model Selector */}
+            <div className="bg-wade-bg-card rounded-2xl border border-wade-border p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-wade-accent-light flex items-center justify-center text-wade-accent">
+                  <Icons.Sparkle size={14} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-wade-text-main">Vector Embedding</h3>
+                  <p className="text-[10px] text-wade-text-muted">Converts memories into searchable vectors</p>
+                </div>
+              </div>
+              <select
+                value={settings.embeddingLlmId || ''}
+                onChange={(e) => updateSettings({ embeddingLlmId: e.target.value || undefined })}
+                className="w-full px-3 py-2.5 rounded-xl border border-wade-border bg-wade-bg-base text-wade-text-main text-xs focus:outline-none focus:border-wade-accent transition-colors appearance-none cursor-pointer"
+              >
+                <option value="">Default (same as memory eval model)</option>
+                {llmPresets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.model} ({p.provider})</option>
+                ))}
+              </select>
+              <p className="text-[9px] text-wade-text-muted mt-2 leading-relaxed">
+                This only converts text to numbers -- use a cheap model (Gemini Flash is free for this). Does not need to be smart.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Form Modal */}
         {isFormOpen && (

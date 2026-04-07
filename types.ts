@@ -237,6 +237,8 @@ export interface AppSettings {
   activeLlmId?: string;
   activeTtsId?: string;
   homeLlmId?: string; // NEW: Dedicated model for Home Screen Sass
+  memoryEvalLlmId?: string; // Model for Wade's memory evaluation (smart, understands emotions)
+  embeddingLlmId?: string; // Model for vector embedding (cheap, just converts text to numbers)
 
   themeColor: string;
   fontSize: 'small' | 'medium' | 'large';

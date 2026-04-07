@@ -7,6 +7,8 @@ import { generateMinimaxTTS } from '../../services/minimaxService';
 import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
 import { ChatThemePanel } from './chat/ChatThemePanel';
 import { supabase } from '../../services/supabase';
+import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, WadeMemory } from '../../services/memoryService';
+import { MemoryLiveIndicator } from './memory/MemoryLiveIndicator';
 
 // Chat subcomponents
 import { PLACEHOLDERS, TYPING_INDICATORS, PROVIDERS, SESSIONS_PER_PAGE } from './chat/chatConstants';
@@ -36,6 +38,8 @@ export const ChatInterface: React.FC = () => {
 
   // Session Summary
   const [sessionSummary, setSessionSummary] = useState<string>("");
+  // Memory live indicator
+  const [newMemories, setNewMemories] = useState<WadeMemory[]>([]);
 
   useEffect(() => {
     const loadSummary = async () => {
@@ -446,9 +450,9 @@ export const ChatInterface: React.FC = () => {
         if (content) parts.push({ text: content });
         if (m.attachments && m.attachments.length > 0) { m.attachments.forEach(att => { parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } }); }); }
         else if (m.image) { parts.push({ inlineData: { mimeType: 'image/png', data: m.image } }); }
-        if (parts.length === 0) parts.push({ text: "..." });
+        if (parts.length === 0) parts.push({ text: "(no text)" });
         return { role: m.role, parts: parts };
-      }).slice(-(settings.contextLimit || 50));
+      }).filter(h => h.parts.some(p => 'text' in p && p.text && p.text !== '(no text)')).slice(-(settings.contextLimit || 50));
 
       const isRegeneration = !!regenMsgId;
       const currentSession = sessions.find(s => s.id === targetSessionId);
@@ -472,17 +476,32 @@ export const ChatInterface: React.FC = () => {
       const wadeCard = binding?.personaCard?.cardData || getDefaultPersonaCard('Wade')?.cardData;
       const lunaCard = getDefaultPersonaCard('Luna')?.cardData;
  
+      // 智能记忆：检索已有记忆注入 prompt
+      let wadeMemoriesXml = '';
+      try {
+        const currentUserText = activeMode === 'sms'
+          ? freshMessages.filter(m => m.role === 'Luna').slice(-3).map(m => m.text).join('\n')
+          : (savedPrompt || inputText || '');
+        const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
+        const memEvalLlm = memEvalLlmId ? llmPresets.find(p => p.id === memEvalLlmId) : undefined;
+        const embLlmId = settings.embeddingLlmId || memEvalLlmId;
+        const embLlm = embLlmId ? llmPresets.find(p => p.id === embLlmId) : undefined;
+        const wadeMemories = await retrieveRelevantMemories(currentUserText, 10, memEvalLlm, embLlm);
+        wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
+      } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
+
       // 🔥 用新的 generateFromCard 统一入口！
       const response = await generateFromCard({
         wadeCard,
         lunaCard,
         chatMode: activeMode as 'deep' | 'sms' | 'roleplay',
-        prompt: activeMode === 'sms' ? " (Reply to the latest texts)" : savedPrompt || inputText || "...",
+        prompt: activeMode === 'sms' ? " (Reply to the latest texts)" : savedPrompt || inputText || freshMessages.filter(m => m.role === 'Luna').pop()?.text || "(continue the conversation)",
         history,
         coreMemories: sessionMemories,
         isRetry: isRegeneration,
         sessionSummary,
         customPrompt: currentSession?.customPrompt,
+        wadeMemoriesXml,
         llmPreset: activeLlm,
       });
 
@@ -491,7 +510,23 @@ export const ChatInterface: React.FC = () => {
       const currentModel = activeLlm?.model || (activeMode === 'roleplay' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview');
 
       if (regenMsgId) { addVariantToMessage(regenMsgId, responseText, thinking, currentModel); setRegenerating(regenMsgId, false); setWadeStatus('online'); return; }
-      
+
+      // 智能记忆：异步评估这轮对话（不阻塞 UI）
+      const memoryEvalLlmId2 = settings.memoryEvalLlmId || settings.activeLlmId;
+      const memoryEvalLlm = memoryEvalLlmId2 ? llmPresets.find(p => p.id === memoryEvalLlmId2) : null;
+      const embLlmId2 = settings.embeddingLlmId || memoryEvalLlmId2;
+      const embLlm2 = embLlmId2 ? llmPresets.find(p => p.id === embLlmId2) : undefined;
+      if (memoryEvalLlm?.apiKey) {
+        const userText = activeMode === 'sms'
+          ? freshMessages.filter(m => m.role === 'Luna').slice(-3).map(m => m.text).join('\n')
+          : (savedPrompt || inputText || '');
+        if (userText.trim()) {
+          evaluateAndStoreMemory(userText, responseText, targetSessionId, memoryEvalLlm, embLlm2)
+            .then(stored => { if (stored.length > 0) setNewMemories(stored); })
+            .catch(console.error);
+        }
+      }
+
       if (activeMode === 'sms') {
         let parts = responseText.split('|||').map((s: string) => s.trim()).filter((s: string) => s);
         if (parts.length === 1 && responseText.includes('\n')) { const lines = responseText.split('\n').map((s: string) => s.trim()).filter((s: string) => s); if (lines.length > 1) parts = lines; }
@@ -910,6 +945,9 @@ export const ChatInterface: React.FC = () => {
       <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession as any} />
       <MemoryModal showMemorySelector={showMemorySelector} setShowMemorySelector={setShowMemorySelector} coreMemories={coreMemories} sessions={sessions} activeSessionId={activeSessionId} toggleCoreMemoryEnabled={toggleCoreMemoryEnabled} updateSession={updateSession as any} />
       <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} personaCards={personaCards} functionBindings={functionBindings} getBinding={getBinding} getDefaultPersonaCard={getDefaultPersonaCard} />
+
+      {/* Memory Live Indicator */}
+      <MemoryLiveIndicator newMemories={newMemories} onDismiss={() => setNewMemories([])} />
 
       {/* Input Area */}
       <ChatInputArea inputText={inputText} setInputText={setInputText} textareaRef={textareaRef} messagesEndRef={messagesEndRef} placeholderText={placeholderText} isTyping={isTyping} activeMode={activeMode} attachments={attachments} removeAttachment={removeAttachment} showUploadMenu={showUploadMenu} setShowUploadMenu={setShowUploadMenu} imageInputRef={imageInputRef} fileInputRef={fileInputRef} handleImageSelect={handleImageSelect} handleFileSelect={handleFileSelect} handleSend={handleSend} handleCancel={handleCancel} handleKeyDown={handleKeyDown} />

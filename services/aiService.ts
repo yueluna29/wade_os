@@ -61,6 +61,7 @@ export const buildSystemPromptFromCard = (options: {
   sessionSummary?: string;      // ← 加这一行，buildSystemPromptFromCard 也需要接收这个参数。
   customPrompt?: string;
   formattedHistory?: any[]; // 只有 sms retry 时需要
+  wadeMemoriesXml?: string; // 智能记忆注入（放在 prompt 最后）
 }): string => {
   const { wadeCard, lunaCard, chatMode, coreMemories, isRetry, formattedHistory } = options;
  
@@ -160,10 +161,15 @@ export const buildSystemPromptFromCard = (options: {
       prompt += `\n\n${rpRules}`;
     }
   }
- 
+
+  // 智能记忆注入（放在最后，保护前面内容的 cache 命中率）
+  if (options.wadeMemoriesXml) {
+    prompt += options.wadeMemoriesXml;
+  }
+
   return prompt;
 };
- 
+
 /**
  * 🔥 新的统一入口：用角色卡 + LLM 配置发送请求
  * 
@@ -189,8 +195,9 @@ export const generateFromCard = async (config: {
   history: { role: string; parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] }[];
   coreMemories?: CoreMemory[];
   isRetry?: boolean;
-  sessionSummary?: string;      // ← 加这一行
+  sessionSummary?: string;
   customPrompt?: string;
+  wadeMemoriesXml?: string;
   llmPreset?: {
     provider: string;
     model: string;
@@ -206,7 +213,7 @@ export const generateFromCard = async (config: {
   };
 }): Promise<GeminiResponse> => {
  
-  const { wadeCard, lunaCard, chatMode, prompt, history, coreMemories, isRetry, sessionSummary, customPrompt, llmPreset } = config;
+  const { wadeCard, lunaCard, chatMode, prompt, history, coreMemories, isRetry, sessionSummary, customPrompt, wadeMemoriesXml, llmPreset } = config;
  
   if (!llmPreset) {
     throw new Error("No LLM preset provided. Configure a brain in Mission Control!");
@@ -219,8 +226,9 @@ export const generateFromCard = async (config: {
     chatMode,
     coreMemories,
     isRetry,
-    sessionSummary,              // ← 加这一行
+    sessionSummary,
     customPrompt,
+    wadeMemoriesXml,
   });
  
   const isGemini = !llmPreset.baseUrl || llmPreset.baseUrl.includes('google');
@@ -290,11 +298,13 @@ export const generateFromCard = async (config: {
  
     if (llmPreset.isImageGen) requestBody.modalities = ["image", "text"];
  
+    // Some providers (e.g. xAI/Grok) don't support certain parameters
+    const isXai = llmPreset.baseUrl?.includes('x.ai') || llmPreset.baseUrl?.includes('xai');
     if (!llmPreset.isImageGen) {
       if (llmPreset.temperature !== undefined) requestBody.temperature = llmPreset.temperature;
       if (llmPreset.topP !== undefined) requestBody.top_p = llmPreset.topP;
-      if (llmPreset.frequencyPenalty !== undefined) requestBody.frequency_penalty = llmPreset.frequencyPenalty;
-      if (llmPreset.presencePenalty !== undefined) requestBody.presence_penalty = llmPreset.presencePenalty;
+      if (!isXai && llmPreset.frequencyPenalty !== undefined) requestBody.frequency_penalty = llmPreset.frequencyPenalty;
+      if (!isXai && llmPreset.presencePenalty !== undefined) requestBody.presence_penalty = llmPreset.presencePenalty;
     }
  
     const url = `${llmPreset.baseUrl}/chat/completions`;
