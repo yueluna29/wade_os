@@ -122,25 +122,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const lunaBubbleStyle: React.CSSProperties = {
     backgroundColor: cs.bubbleLunaColor || 'var(--wade-bubble-luna)',
     color: cs.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #ffffff)',
-    borderRadius: bubbleRadius,
-    borderTopRightRadius: isSMS ? undefined : '0',
     opacity: bubbleOpacity,
     border: `1px solid ${cs.bubbleLunaBorderColor || 'transparent'}`,
     fontFamily,
     fontSize,
-    ...(isSMS ? smsRadiusLuna : {}),
+    ...(isSMS
+      ? { borderRadius: smsRadiusLuna.borderRadius || bubbleRadius }
+      : { borderRadius: bubbleRadius, borderTopRightRadius: '0' }),
   };
 
   const wadeBubbleStyle: React.CSSProperties = {
     backgroundColor: cs.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))',
     color: cs.bubbleWadeTextColor || undefined,
-    borderRadius: bubbleRadius,
-    borderTopLeftRadius: isSMS ? undefined : '0',
     opacity: bubbleOpacity,
     border: `1px solid ${cs.bubbleWadeBorderColor || 'var(--wade-border)'}`,
     fontFamily,
     fontSize,
-    ...(isSMS ? smsRadiusWade : {}),
+    ...(isSMS
+      ? { borderRadius: smsRadiusWade.borderRadius || bubbleRadius }
+      : { borderRadius: bubbleRadius, borderTopLeftRadius: '0' }),
   };
 
   const longPressHandlers = useLongPress(() => onSelect(msg.id));
