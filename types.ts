@@ -25,7 +25,22 @@ export interface CustomTheme {
   fontSize: string;
   bubbleLuna: string;
   bubbleLunaText?: string;
+  bubbleLunaBorder?: string;
   bubbleWade: string;
+  bubbleWadeText?: string;
+  bubbleWadeBorder?: string;
+  // Bubble style
+  bubbleRadius?: 'sharp' | 'rounded' | 'pill';
+  bubbleOpacity?: number; // 0-100
+  // Layout defaults
+  messageSpacing?: 'compact' | 'normal' | 'spacious';
+  showAvatar?: boolean;
+  showTimestamp?: boolean;
+  chatBgImage?: string;
+  // Typography fine-tuning
+  chatFontSizePx?: number;
+  chatLineHeight?: number;
+  chatLetterSpacing?: number;
   // Extended font fields
   fontFamilyEn?: string;
   fontFamilyZh?: string;
