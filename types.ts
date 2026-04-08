@@ -63,6 +63,7 @@ export interface ChatStyleConfig {
   chatBgImage?: string;
   // Typography
   chatFont?: string;
+  chatFontData?: string; // local font as data URL (session-only, not synced)
   chatFontSize?: 'small' | 'medium' | 'large'; // legacy
   chatFontSizePx?: number; // precise: 10-20px, step 0.5
 }

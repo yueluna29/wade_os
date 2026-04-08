@@ -61,6 +61,19 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
     setLocal({ ...defaults, ...chatStyle });
   }, [chatStyle, isOpen]);
 
+  // Inject @font-face for local font preview
+  useEffect(() => {
+    if (!local.chatFontData || !local.chatFont) return;
+    const fontName = local.chatFont.replace(/"/g, '');
+    const styleId = `wade-preview-font-${fontName.replace(/\s+/g, '-')}`;
+    if (document.getElementById(styleId)) return;
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `@font-face { font-family: ${local.chatFont}; src: url('${local.chatFontData}'); font-display: swap; }`;
+    document.head.appendChild(style);
+    return () => { document.getElementById(styleId)?.remove(); };
+  }, [local.chatFontData, local.chatFont]);
+
   const update = (key: keyof ChatStyleConfig, value: any) => {
     setLocal(prev => ({ ...prev, [key]: value }));
   };
@@ -286,10 +299,42 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                 <input
                   type="text"
                   value={local.chatFont || ''}
-                  onChange={e => update('chatFont', e.target.value)}
+                  onChange={e => { update('chatFont', e.target.value); update('chatFontData', ''); }}
                   placeholder="e.g. Pacifico, Noto Sans SC"
                   className="w-full px-3 py-2 text-xs bg-wade-bg-app border border-wade-border rounded-xl focus:outline-none focus:border-wade-accent text-wade-text-main placeholder-wade-text-muted/50"
                 />
+                <div className="flex items-center gap-2 mt-2">
+                  <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] font-bold text-wade-text-muted bg-wade-bg-app border border-wade-border rounded-xl hover:border-wade-accent/50 cursor-pointer transition-colors">
+                    <Icons.Upload size={12} />
+                    {local.chatFontData ? 'Font loaded' : 'Upload local font'}
+                    <input
+                      type="file"
+                      accept=".ttf,.otf,.woff,.woff2"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const dataUrl = reader.result as string;
+                          update('chatFontData', dataUrl);
+                          update('chatFont', `"WadeLocalFont-${file.name.replace(/\.[^.]+$/, '')}"`);
+                        };
+                        reader.readAsDataURL(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {local.chatFontData && (
+                    <button
+                      onClick={() => { update('chatFontData', ''); update('chatFont', ''); }}
+                      className="px-3 py-2 text-[10px] font-bold text-red-400 bg-wade-bg-app border border-wade-border rounded-xl hover:bg-red-50 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="text-[8px] text-wade-text-muted/50 mt-1.5">Local only, this session only. Supports .ttf .otf .woff .woff2</p>
               </div>
             </div>
           )}

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message, ChatStyleConfig } from '../../../types';
@@ -85,6 +85,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const bubbleOpacity = (cs.bubbleOpacity ?? 100) / 100;
   const fontSize = cs.chatFontSizePx ? `${cs.chatFontSizePx}px` : '13px';
   const fontFamily = cs.chatFont || undefined;
+  const chatFontData = cs.chatFontData;
+
+  // Inject @font-face for local font (session-scoped, cleaned up on unmount)
+  useEffect(() => {
+    if (!chatFontData || !fontFamily) return;
+    const fontName = fontFamily.replace(/"/g, '');
+    const styleId = `wade-local-font-${fontName.replace(/\s+/g, '-')}`;
+    if (document.getElementById(styleId)) return;
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `@font-face { font-family: ${fontFamily}; src: url('${chatFontData}'); font-display: swap; }`;
+    document.head.appendChild(style);
+    return () => { document.getElementById(styleId)?.remove(); };
+  }, [chatFontData, fontFamily]);
+
   const showAvatar = cs.showAvatar !== false;
   const showTs = cs.showTimestamp !== false;
   const spacingMap = { compact: 'mb-2', normal: 'mb-6', spacious: 'mb-10' };
