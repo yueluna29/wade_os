@@ -83,7 +83,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const radiusMap = { sharp: '8px', rounded: '16px', pill: '24px' };
   const bubbleRadius = radiusMap[cs.bubbleRadius || 'rounded'] || '16px';
   const bubbleOpacity = (cs.bubbleOpacity ?? 100) / 100;
+  // Apply opacity to background only, not text
+  const applyBgOpacity = (color: string, op: number): string => {
+    if (op >= 1) return color;
+    // hex color
+    const hexMatch = color.match(/^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (hexMatch) {
+      return `rgba(${parseInt(hexMatch[1], 16)}, ${parseInt(hexMatch[2], 16)}, ${parseInt(hexMatch[3], 16)}, ${op})`;
+    }
+    // rgb()
+    const rgbMatch = color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+    if (rgbMatch) {
+      return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${op})`;
+    }
+    // css var — can't decompose, fall back to whole-element opacity
+    return color;
+  };
   const fontSize = cs.chatFontSizePx ? `${cs.chatFontSizePx}px` : '13px';
+  const lineHeight = cs.chatLineHeight ? `${cs.chatLineHeight}` : undefined;
+  const letterSpacing = cs.chatLetterSpacing !== undefined ? `${cs.chatLetterSpacing}px` : undefined;
   const fontFamily = cs.chatFont || undefined;
   const chatFontData = cs.chatFontData;
 
@@ -134,10 +152,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const smsRadiusLuna = isSMS ? getSmsRadius('Luna', groupPosition) : { borderRadius: '' };
   const smsRadiusWade = isSMS ? getSmsRadius('Wade', groupPosition) : { borderRadius: '' };
 
+  const lunaRawBg = cs.bubbleLunaColor || 'var(--wade-bubble-luna)';
   const lunaBubbleStyle: React.CSSProperties = {
-    backgroundColor: cs.bubbleLunaColor || 'var(--wade-bubble-luna)',
+    backgroundColor: applyBgOpacity(lunaRawBg, bubbleOpacity),
     color: cs.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #ffffff)',
-    opacity: bubbleOpacity,
+    ...(lunaRawBg.startsWith('var(') && bubbleOpacity < 1 ? { opacity: bubbleOpacity } : {}),
     border: `1px solid ${cs.bubbleLunaBorderColor || 'transparent'}`,
     fontFamily,
     fontSize,
@@ -146,10 +165,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       : { borderRadius: bubbleRadius, borderTopRightRadius: '0' }),
   };
 
+  const wadeRawBg = cs.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))';
   const wadeBubbleStyle: React.CSSProperties = {
-    backgroundColor: cs.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))',
+    backgroundColor: applyBgOpacity(wadeRawBg, bubbleOpacity),
     color: cs.bubbleWadeTextColor || undefined,
-    opacity: bubbleOpacity,
+    ...(wadeRawBg.startsWith('var(') && bubbleOpacity < 1 ? { opacity: bubbleOpacity } : {}),
     border: `1px solid ${cs.bubbleWadeBorderColor || 'var(--wade-border)'}`,
     fontFamily,
     fontSize,
@@ -479,7 +499,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          <div className="px-4 py-2 leading-relaxed tracking-wide markdown-content" style={{ fontSize, fontFamily }}>
+          <div className="px-4 py-2 leading-relaxed tracking-wide markdown-content" style={{ fontSize, fontFamily, lineHeight, letterSpacing }}>
             {renderAttachments()}
             {isBase64Image ? (
               <img
@@ -528,7 +548,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             style={{ maxHeight: '400px', width: 'auto' }}
           />
         ) : (
-          <div className="leading-relaxed markdown-content" style={{ fontSize, fontFamily }}>
+          <div className="leading-relaxed markdown-content" style={{ fontSize, fontFamily, lineHeight, letterSpacing }}>
             <MarkdownWithHighlight content={displayContent} query={searchQuery} />
           </div>
         )}

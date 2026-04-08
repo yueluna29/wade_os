@@ -66,6 +66,8 @@ export interface ChatStyleConfig {
   chatFontData?: string; // local font as data URL (session-only, not synced)
   chatFontSize?: 'small' | 'medium' | 'large'; // legacy
   chatFontSizePx?: number; // precise: 10-20px, step 0.5
+  chatLineHeight?: number; // 1.0-2.5, step 0.1
+  chatLetterSpacing?: number; // -1 to 3px, step 0.1
 }
 
 export interface ChatSession {

@@ -119,6 +119,8 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
           const br = radiusMap[local.bubbleRadius || 'rounded'] || '16px';
           const op = (local.bubbleOpacity ?? 100) / 100;
           const fs = `${local.chatFontSizePx ?? 13}px`;
+          const lh = local.chatLineHeight ? `${local.chatLineHeight}` : undefined;
+          const ls = local.chatLetterSpacing !== undefined ? `${local.chatLetterSpacing}px` : undefined;
           const bgStyle: React.CSSProperties = local.chatBgImage
             ? { backgroundImage: `url(${local.chatBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : { backgroundColor: local.chatBgColor || 'var(--wade-bg-app)' };
@@ -138,6 +140,8 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                       border: local.bubbleLunaBorderColor ? `1px solid ${local.bubbleLunaBorderColor}` : undefined,
                       fontSize: fs,
                       fontFamily: local.chatFont || undefined,
+                      lineHeight: lh,
+                      letterSpacing: ls,
                     }}
                   >
                     Hey Wade, how does this look?
@@ -155,6 +159,8 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                       border: local.bubbleWadeBorderColor ? `1px solid ${local.bubbleWadeBorderColor}` : '1px solid var(--wade-border)',
                       fontSize: fs,
                       fontFamily: local.chatFont || undefined,
+                      lineHeight: lh,
+                      letterSpacing: ls,
                     }}
                   >
                     Looking good, babe.
@@ -291,6 +297,46 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                 <div className="flex justify-between text-[8px] text-wade-text-muted/50 mt-1">
                   <span>10px</span>
                   <span>20px</span>
+                </div>
+              </div>
+
+              <div className="pb-3 border-b border-wade-border/50 pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-accent">Line Height</p>
+                  <span className="text-[10px] font-mono text-wade-text-muted">{(local.chatLineHeight ?? 1.6).toFixed(1)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1.0}
+                  max={2.5}
+                  step={0.1}
+                  value={local.chatLineHeight ?? 1.6}
+                  onChange={e => update('chatLineHeight', parseFloat(e.target.value))}
+                  className="w-full accent-wade-accent h-1"
+                />
+                <div className="flex justify-between text-[8px] text-wade-text-muted/50 mt-1">
+                  <span>1.0</span>
+                  <span>2.5</span>
+                </div>
+              </div>
+
+              <div className="pb-3 border-b border-wade-border/50 pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-accent">Letter Spacing</p>
+                  <span className="text-[10px] font-mono text-wade-text-muted">{(local.chatLetterSpacing ?? 0).toFixed(1)}px</span>
+                </div>
+                <input
+                  type="range"
+                  min={-1}
+                  max={3}
+                  step={0.1}
+                  value={local.chatLetterSpacing ?? 0}
+                  onChange={e => update('chatLetterSpacing', parseFloat(e.target.value))}
+                  className="w-full accent-wade-accent h-1"
+                />
+                <div className="flex justify-between text-[8px] text-wade-text-muted/50 mt-1">
+                  <span>-1px</span>
+                  <span>3px</span>
                 </div>
               </div>
 
