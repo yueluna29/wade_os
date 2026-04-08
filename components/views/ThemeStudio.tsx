@@ -125,12 +125,12 @@ export const ThemeStudio: React.FC<ThemeStudioProps> = ({ isOpen, onClose, sessi
   const previewFontStack = `${previewFont}, ${t.fontFamilyZh || '"Noto Sans SC"'}, sans-serif`;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center">
+    <div className="fixed inset-0 z-[60] flex items-stretch md:items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative w-full max-w-md max-h-[90vh] bg-wade-bg-card rounded-t-3xl md:rounded-3xl border border-wade-border shadow-2xl flex flex-col overflow-hidden animate-fade-in z-10">
+      <div className="relative w-full h-full md:h-auto md:max-h-[90vh] max-w-none md:max-w-md bg-wade-bg-card md:rounded-3xl border-0 md:border border-wade-border shadow-2xl flex flex-col overflow-hidden animate-fade-in z-10">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">

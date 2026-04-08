@@ -99,12 +99,12 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
   ];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center">
+    <div className="fixed inset-0 z-[60] flex items-stretch md:items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Panel */}
-      <div className="relative w-full max-w-md max-h-[85vh] bg-wade-bg-card rounded-t-3xl md:rounded-3xl border border-wade-border shadow-2xl flex flex-col overflow-hidden animate-fade-in z-10">
+      {/* Panel — full-screen on mobile, centered modal on desktop */}
+      <div className="relative w-full h-full md:h-auto md:max-h-[85vh] max-w-none md:max-w-md bg-wade-bg-card md:rounded-3xl border-0 md:border border-wade-border shadow-2xl flex flex-col overflow-hidden animate-fade-in z-10">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3">
           <h3 className="font-hand text-xl text-wade-accent tracking-wide">Chat Style</h3>
