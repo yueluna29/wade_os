@@ -169,6 +169,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     border: `1px solid ${cs.bubbleLunaBorderColor || 'transparent'}`,
     fontFamily,
     fontSize,
+    lineHeight: lineHeight || '1.625',
+    letterSpacing: letterSpacing || '0.025em',
     ...(isSMS
       ? { borderRadius: smsRadiusLuna.borderRadius || bubbleRadius }
       : { borderRadius: bubbleRadius, borderTopRightRadius: '0' }),
@@ -182,6 +184,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     border: `1px solid ${cs.bubbleWadeBorderColor || 'var(--wade-border)'}`,
     fontFamily,
     fontSize,
+    lineHeight: lineHeight || '1.625',
+    letterSpacing: letterSpacing || '0.025em',
     ...(isSMS
       ? { borderRadius: smsRadiusWade.borderRadius || bubbleRadius }
       : { borderRadius: bubbleRadius, borderTopLeftRadius: '0' }),
@@ -508,7 +512,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             </div>
           )}
 
-          <div className="px-4 py-2 leading-relaxed tracking-wide markdown-content" style={{ fontSize, fontFamily, lineHeight, letterSpacing }}>
+          <div className="px-4 py-2 markdown-content" style={{ fontSize, fontFamily, lineHeight: lineHeight || '1.625', letterSpacing: letterSpacing || '0.025em' }}>
             {renderAttachments()}
             {isBase64Image ? (
               <img
@@ -557,7 +561,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             style={{ maxHeight: '400px', width: 'auto' }}
           />
         ) : (
-          <div className="leading-relaxed markdown-content" style={{ fontSize, fontFamily, lineHeight, letterSpacing }}>
+          <div className="markdown-content" style={{ fontSize, fontFamily, lineHeight: lineHeight || '1.625', letterSpacing: letterSpacing || '0.025em' }}>
             <MarkdownWithHighlight content={displayContent} query={searchQuery} />
           </div>
         )}

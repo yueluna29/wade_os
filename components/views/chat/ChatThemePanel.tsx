@@ -125,20 +125,19 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
             ? { backgroundImage: `url(${local.chatBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : { backgroundColor: local.chatBgColor || 'var(--wade-bg-app)' };
           return (
-            <div className="mx-5 mb-3 rounded-2xl px-4 py-4 overflow-hidden border border-wade-border shadow-inner" style={bgStyle}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-text-muted mb-3">Live Preview</div>
-              <div className={`space-y-${local.messageSpacing === 'compact' ? '1' : local.messageSpacing === 'spacious' ? '4' : '2'}`}>
+            <div className="mx-5 mb-3 rounded-2xl px-4 pt-3 pb-3 overflow-hidden border border-wade-border shadow-inner" style={bgStyle}>
+              <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-text-muted mb-2">Live Preview</div>
+              <div className="flex flex-col gap-2">
                 {/* Luna bubble */}
                 <div className="flex justify-end">
                   <div
-                    className="max-w-[75%] px-3 py-2 shadow-sm"
+                    className="max-w-[75%] px-3 py-1.5 shadow-sm text-[12px]"
                     style={{
                       backgroundColor: local.bubbleLunaColor || 'var(--wade-bubble-luna)',
                       color: local.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #fff)',
                       borderRadius: `${br} 0 ${br} ${br}`,
                       opacity: op,
                       border: local.bubbleLunaBorderColor ? `1px solid ${local.bubbleLunaBorderColor}` : undefined,
-                      fontSize: fs,
                       fontFamily: local.chatFont || undefined,
                       lineHeight: lh,
                       letterSpacing: ls,
@@ -150,25 +149,24 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                 {/* Wade bubble */}
                 <div className="flex justify-start">
                   <div
-                    className="max-w-[75%] px-3 py-2 shadow-sm"
+                    className="max-w-[75%] px-3 py-1.5 shadow-sm text-[12px]"
                     style={{
                       backgroundColor: local.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))',
                       color: local.bubbleWadeTextColor || 'var(--wade-text-main)',
                       borderRadius: `0 ${br} ${br} ${br}`,
                       opacity: op,
                       border: local.bubbleWadeBorderColor ? `1px solid ${local.bubbleWadeBorderColor}` : '1px solid var(--wade-border)',
-                      fontSize: fs,
                       fontFamily: local.chatFont || undefined,
                       lineHeight: lh,
                       letterSpacing: ls,
                     }}
                   >
-                    Looking good, babe.
+                    Looking good, babe. Don't make me too transparent though, I have a reputation to maintain.
                   </div>
                 </div>
               </div>
               {local.showTimestamp !== false && (
-                <div className="text-[8px] text-wade-text-muted/50 text-right mt-2">12:34 PM</div>
+                <div className="text-[8px] text-wade-text-muted/50 text-right mt-1">12:34 PM</div>
               )}
             </div>
           );
