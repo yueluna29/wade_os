@@ -116,8 +116,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   };
 
-  const smsRadiusLuna = isSMS ? getSmsRadius('Luna', groupPosition) : {};
-  const smsRadiusWade = isSMS ? getSmsRadius('Wade', groupPosition) : {};
+  const smsRadiusLuna = isSMS ? getSmsRadius('Luna', groupPosition) : { borderRadius: '' };
+  const smsRadiusWade = isSMS ? getSmsRadius('Wade', groupPosition) : { borderRadius: '' };
 
   const lunaBubbleStyle: React.CSSProperties = {
     backgroundColor: cs.bubbleLunaColor || 'var(--wade-bubble-luna)',
@@ -444,7 +444,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         <div
           {...longPressHandlers}
-          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: `4px ${bubbleRadius} ${bubbleRadius} ${bubbleRadius}` }}
+          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: isSMS ? smsRadiusWade.borderRadius || bubbleRadius : `4px ${bubbleRadius} ${bubbleRadius} ${bubbleRadius}` }}
           className="w-full mt-2 shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
         >
           {thinkingContent && (
@@ -501,7 +501,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       <div
         {...longPressHandlers}
-        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...lunaBubbleStyle, borderRadius: `${bubbleRadius} 4px ${bubbleRadius} ${bubbleRadius}` }}
+        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...lunaBubbleStyle, borderRadius: isSMS ? smsRadiusLuna.borderRadius || bubbleRadius : `${bubbleRadius} 4px ${bubbleRadius} ${bubbleRadius}` }}
         className="max-w-[90%] mt-2 shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
       >
         {renderAttachments()}
