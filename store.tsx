@@ -114,14 +114,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         if (sData || idData) {
           let parsedTheme = sData?.custom_theme ? (typeof sData.custom_theme === 'string' ? JSON.parse(sData.custom_theme) : sData.custom_theme) : null;
           let activeTheme = settings.customTheme;
-          let savedThemes = settings.savedThemes;
           if (parsedTheme) {
-            if ('active' in parsedTheme || 'saved' in parsedTheme) {
+            if ('active' in parsedTheme) {
               activeTheme = parsedTheme.active;
-              savedThemes = parsedTheme.saved || [];
             } else if (Object.keys(parsedTheme).length === 0) {
               activeTheme = undefined;
-              savedThemes = [];
             } else {
               activeTheme = parsedTheme;
             }
@@ -136,7 +133,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             themeColor: settings.themeColor,
             fontSize: settings.fontSize,
             customTheme: activeTheme,
-            savedThemes: savedThemes,
+            savedThemes: settings.savedThemes, // loaded separately from saved_themes table
             
             systemInstruction: idData?.global_directives || sData?.system_instruction || '',
             wadePersonality: idData?.wade_core_identity || sData?.wade_personality || '',
@@ -218,6 +215,15 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             format: p.format || 'mp3',
             channel: p.channel || 1
           })));
+        }
+
+        // Load saved themes from dedicated table
+        const { data: stData } = await supabase.from('saved_themes').select('*').order('created_at', { ascending: true });
+        if (stData && stData.length > 0) {
+          setSettingsState(prev => ({
+            ...prev,
+            savedThemes: stData.map(row => ({ id: row.id, title: row.title, theme: row.theme }))
+          }));
         }
 
         const { data: sessData, error: sessError } = await supabase
@@ -537,10 +543,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         memory_eval_llm_id: newSettings.memoryEvalLlmId,
         embedding_llm_id: newSettings.embeddingLlmId,
         custom_theme: {
-          active: newSettings.customTheme,
-          saved: newSettings.savedThemes
+          active: newSettings.customTheme
         }
       });
+
+      // Sync saved themes to dedicated table if changed
+      if (s.savedThemes !== undefined) {
+        const themes = newSettings.savedThemes || [];
+        // Delete all then re-insert (simple, themes list is small)
+        await supabase.from('saved_themes').delete().neq('id', '');
+        if (themes.length > 0) {
+          await supabase.from('saved_themes').insert(
+            themes.map(t => ({ id: t.id, title: t.title, theme: t.theme }))
+          );
+        }
+      }
     } catch (err) {
       console.error("Sync failed", err);
     }
