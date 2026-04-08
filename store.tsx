@@ -592,16 +592,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       top_p: p.topP, top_k: p.topK, frequency_penalty: p.frequencyPenalty,
       presence_penalty: p.presencePenalty, is_vision: p.isVision ?? false, is_image_gen: p.isImageGen ?? false
     }).select().single();
+    if (error) { console.error("LLM preset save failed:", error); alert(`Save failed: ${error.message}`); return; }
     if (data) setLlmPresets(prev => [...prev, { ...p, id: data.id } as LlmPreset]);
   };
 
   const updateLlmPreset = async (id: string, p: Partial<LlmPreset>) => {
-    await supabase.from('llm_presets').update({
+    const { error } = await supabase.from('llm_presets').update({
       provider: p.provider, name: p.name, model: p.model, api_key: p.apiKey,
       base_url: p.baseUrl, api_path: p.apiPath, temperature: p.temperature,
       top_p: p.topP, top_k: p.topK, frequency_penalty: p.frequencyPenalty,
       presence_penalty: p.presencePenalty, is_vision: p.isVision, is_image_gen: p.isImageGen
     }).eq('id', id);
+    if (error) { console.error("LLM preset update failed:", error); alert(`Update failed: ${error.message}`); return; }
     setLlmPresets(prev => prev.map(item => item.id === id ? { ...item, ...p } : item));
   };
 
