@@ -110,8 +110,8 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
             ? { backgroundImage: `url(${local.chatBgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : { backgroundColor: local.chatBgColor || 'var(--wade-bg-app)' };
           return (
-            <div className="mx-5 mb-3 rounded-2xl p-5 overflow-hidden border border-wade-border shadow-inner" style={bgStyle}>
-              <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-text-muted mb-2">Live Preview</div>
+            <div className="mx-5 mb-3 rounded-2xl px-4 py-4 overflow-hidden border border-wade-border shadow-inner" style={bgStyle}>
+              <div className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-text-muted mb-3">Live Preview</div>
               <div className={`space-y-${local.messageSpacing === 'compact' ? '1' : local.messageSpacing === 'spacious' ? '4' : '2'}`}>
                 {/* Luna bubble */}
                 <div className="flex justify-end">
@@ -131,12 +131,9 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                   </div>
                 </div>
                 {/* Wade bubble */}
-                <div className="flex justify-start items-end gap-2">
-                  {local.showAvatar !== false && (
-                    <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white shadow-sm bg-wade-accent">W</div>
-                  )}
+                <div className="flex justify-start">
                   <div
-                    className="max-w-[65%] px-3 py-2 shadow-sm"
+                    className="max-w-[75%] px-3 py-2 shadow-sm"
                     style={{
                       backgroundColor: local.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))',
                       color: local.bubbleWadeTextColor || 'var(--wade-text-main)',
@@ -147,12 +144,12 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                       fontFamily: local.chatFont || undefined,
                     }}
                   >
-                    Looking good. Don't make me too transparent though.
+                    Looking good, babe.
                   </div>
                 </div>
               </div>
               {local.showTimestamp !== false && (
-                <div className="text-[8px] text-wade-text-muted/50 text-right mt-1">12:34 PM</div>
+                <div className="text-[8px] text-wade-text-muted/50 text-right mt-2">12:34 PM</div>
               )}
             </div>
           );
