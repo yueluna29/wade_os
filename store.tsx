@@ -116,11 +116,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           let activeTheme = settings.customTheme;
           if (parsedTheme) {
             if ('active' in parsedTheme) {
-              activeTheme = parsedTheme.active;
-            } else if (Object.keys(parsedTheme).length === 0) {
-              activeTheme = undefined;
-            } else {
+              activeTheme = parsedTheme.active || undefined;
+            } else if (parsedTheme.accent) {
+              // Legacy format: raw theme object with color fields
               activeTheme = parsedTheme;
+            } else {
+              // Empty or unrecognized format — no custom theme
+              activeTheme = undefined;
             }
           }
 
