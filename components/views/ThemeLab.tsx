@@ -75,6 +75,8 @@ const SYSTEM_THEMES = [
   { id: 'l2', mode: 'light' as const, name: 'Matcha Latte', base: { accent: '#7C9D96', bgBase: '#F4F7F4', bgCard: '#ffffff', bgApp: '#E8EFE8', textMain: '#3E4F47', textMuted: '#849E93', bubbleWade: '#ffffff' } },
   { id: 'l3', mode: 'light' as const, name: 'Ocean Breeze', base: { accent: '#7AB2D3', bgBase: '#F6FAFC', bgCard: '#ffffff', bgApp: '#EDF5F9', textMain: '#2D4A5E', textMuted: '#7A9CB3', bubbleWade: '#ffffff' } },
   { id: 'l4', mode: 'light' as const, name: 'Peaches & Cream', base: { accent: '#F4A261', bgBase: '#FCF9F6', bgCard: '#ffffff', bgApp: '#FAF3ED', textMain: '#5A3D2B', textMuted: '#B38B71', bubbleWade: '#ffffff' } },
+  { id: 'l5', mode: 'light' as const, name: 'Spring Garden', base: { accent: '#b3d6ab', bgBase: '#f4f9dd', bgCard: '#fafdf0', bgApp: '#eff6d3', textMain: '#3d4a2f', textMuted: '#7a8a6a', bubbleLuna: '#b3d6ab', bubbleWade: '#fafdf0' } },
+  { id: 'l6', mode: 'light' as const, name: 'Honey Toast', base: { accent: '#e08946', bgBase: '#f0dcba', bgCard: '#faf3ea', bgApp: '#ecdab5', textMain: '#5a3d1e', textMuted: '#a07850', bubbleLuna: '#f3bb66', bubbleWade: '#faf3ea' } },
   // Dark
   { id: 'd1', mode: 'dark' as const, name: 'Deadpool Red', base: { accent: '#E50914', bgBase: '#121212', bgCard: '#1E1E1E', bgApp: '#0A0A0A', textMain: '#F5F5F5', textMuted: '#888888', bubbleWade: '#2B2B2B', fontFamilyEn: 'Inter' } },
   { id: 'd2', mode: 'dark' as const, name: 'Midnight Magic', base: { accent: '#9D8DF1', bgBase: '#131521', bgCard: '#1E2136', bgApp: '#0B0D17', textMain: '#E2E8F0', textMuted: '#8392A5', bubbleWade: '#252840' } },
