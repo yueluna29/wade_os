@@ -152,11 +152,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const smsRadiusLuna = isSMS ? getSmsRadius('Luna', groupPosition) : { borderRadius: '' };
   const smsRadiusWade = isSMS ? getSmsRadius('Wade', groupPosition) : { borderRadius: '' };
 
+  // Resolve CSS variable to actual color value for opacity support
+  const resolveCssColor = (color: string): string => {
+    if (!color.startsWith('var(')) return color;
+    const varMatch = color.match(/var\(--([^,)]+)(?:,\s*([^)]+))?\)/);
+    if (!varMatch) return color;
+    const resolved = getComputedStyle(document.documentElement).getPropertyValue(`--${varMatch[1]}`).trim();
+    return resolved || varMatch[2]?.trim() || color;
+  };
+
   const lunaRawBg = cs.bubbleLunaColor || 'var(--wade-bubble-luna)';
+  const lunaResolvedBg = resolveCssColor(lunaRawBg);
   const lunaBubbleStyle: React.CSSProperties = {
-    backgroundColor: applyBgOpacity(lunaRawBg, bubbleOpacity),
+    backgroundColor: applyBgOpacity(lunaResolvedBg, bubbleOpacity),
     color: cs.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #ffffff)',
-    ...(lunaRawBg.startsWith('var(') && bubbleOpacity < 1 ? { opacity: bubbleOpacity } : {}),
     border: `1px solid ${cs.bubbleLunaBorderColor || 'transparent'}`,
     fontFamily,
     fontSize,
@@ -166,10 +175,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   };
 
   const wadeRawBg = cs.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))';
+  const wadeResolvedBg = resolveCssColor(wadeRawBg);
   const wadeBubbleStyle: React.CSSProperties = {
-    backgroundColor: applyBgOpacity(wadeRawBg, bubbleOpacity),
+    backgroundColor: applyBgOpacity(wadeResolvedBg, bubbleOpacity),
     color: cs.bubbleWadeTextColor || undefined,
-    ...(wadeRawBg.startsWith('var(') && bubbleOpacity < 1 ? { opacity: bubbleOpacity } : {}),
     border: `1px solid ${cs.bubbleWadeBorderColor || 'var(--wade-border)'}`,
     fontFamily,
     fontSize,
