@@ -73,7 +73,7 @@ const SYSTEM_THEMES = [
   // Light
   { id: 'l1', mode: 'light' as const, name: 'Luna Pink', base: { accent: '#d58f99', bgBase: '#fdfbfb', bgCard: '#ffffff', bgApp: '#f9f6f7', textMain: '#5a4a42', textMuted: '#a38585', bubbleWade: '#ffffff' } },
   { id: 'l2', mode: 'light' as const, name: 'Matcha Latte', base: { accent: '#7C9D96', bgBase: '#F4F7F4', bgCard: '#ffffff', bgApp: '#E8EFE8', textMain: '#3E4F47', textMuted: '#849E93', bubbleWade: '#ffffff' } },
-  { id: 'l3', mode: 'light' as const, name: 'Ocean Breeze', base: { accent: '#8FAEBB', bgBase: '#F6FAFC', bgCard: '#ffffff', bgApp: '#EDF5F9', textMain: '#3D5566', textMuted: '#8AA3B3', bubbleWade: '#ffffff' } },
+  { id: 'l3', mode: 'light' as const, name: 'Ocean Breeze', base: { accent: '#8FAEBB', bgBase: '#F6FAFC', bgCard: '#ffffff', bgApp: '#EDF5F9', textMain: '#3D5566', textMuted: '#8AA3B3', bubbleLuna: '#9DB5BF', bubbleWade: '#ffffff' } },
   { id: 'l4', mode: 'light' as const, name: 'Peaches & Cream', base: { accent: '#F4A261', bgBase: '#FCF9F6', bgCard: '#ffffff', bgApp: '#FAF3ED', textMain: '#5A3D2B', textMuted: '#B38B71', bubbleWade: '#ffffff' } },
   { id: 'l5', mode: 'light' as const, name: 'Spring Garden', base: { accent: '#7dad71', bgBase: '#f7faf2', bgCard: '#ffffff', bgApp: '#f0f5ea', textMain: '#2d3a25', textMuted: '#7d9170', bubbleLuna: '#7dad71', bubbleWade: '#ffffff' } },
   { id: 'l6', mode: 'light' as const, name: 'Honey Toast', base: { accent: '#d4834e', bgBase: '#faf5ee', bgCard: '#ffffff', bgApp: '#f5ece0', textMain: '#4a3425', textMuted: '#a08060', bubbleLuna: '#d4834e', bubbleWade: '#ffffff' } },
