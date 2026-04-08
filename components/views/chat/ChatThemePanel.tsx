@@ -131,8 +131,9 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                 {/* Luna bubble */}
                 <div className="flex justify-end">
                   <div
-                    className="max-w-[75%] px-3 py-1.5 shadow-sm text-[12px]"
+                    className="max-w-[75%] px-3 py-1.5 shadow-sm"
                     style={{
+                      fontSize: fs,
                       backgroundColor: local.bubbleLunaColor || 'var(--wade-bubble-luna)',
                       color: local.bubbleLunaTextColor || 'var(--wade-bubble-luna-text, #fff)',
                       borderRadius: `${br} 0 ${br} ${br}`,
@@ -149,8 +150,9 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                 {/* Wade bubble */}
                 <div className="flex justify-start">
                   <div
-                    className="max-w-[75%] px-3 py-1.5 shadow-sm text-[12px]"
+                    className="max-w-[75%] px-3 py-1.5 shadow-sm"
                     style={{
+                      fontSize: fs,
                       backgroundColor: local.bubbleWadeColor || 'var(--wade-bubble-wade, var(--wade-bg-card))',
                       color: local.bubbleWadeTextColor || 'var(--wade-text-main)',
                       borderRadius: `0 ${br} ${br} ${br}`,
