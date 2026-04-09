@@ -21,7 +21,7 @@ export const MemoryLiveIndicator: React.FC<Props> = ({ newMemories, onDismiss })
           setVisible(false);
           onDismiss();
         }
-      }, 6000);
+      }, 12000);
       return () => clearTimeout(timer);
     }
   }, [newMemories]);
@@ -29,7 +29,7 @@ export const MemoryLiveIndicator: React.FC<Props> = ({ newMemories, onDismiss })
   if (!visible || newMemories.length === 0) return null;
 
   return (
-    <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30 animate-fade-in w-[90%] max-w-sm">
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-in w-[90%] max-w-sm">
       <div
         className="bg-wade-bg-card/95 backdrop-blur-md border border-wade-accent/20 rounded-2xl shadow-lg overflow-hidden cursor-pointer"
         onClick={() => setExpanded(!expanded)}

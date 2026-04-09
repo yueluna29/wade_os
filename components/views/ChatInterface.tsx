@@ -40,6 +40,7 @@ export const ChatInterface: React.FC = () => {
   const [sessionSummary, setSessionSummary] = useState<string>("");
   // Memory live indicator
   const [newMemories, setNewMemories] = useState<WadeMemory[]>([]);
+  const [lastWadeMemoriesXml, setLastWadeMemoriesXml] = useState<string>('');
 
   useEffect(() => {
     const loadSummary = async () => {
@@ -488,6 +489,7 @@ export const ChatInterface: React.FC = () => {
         const embLlm = embLlmId ? llmPresets.find(p => p.id === embLlmId) : undefined;
         const wadeMemories = await retrieveRelevantMemories(currentUserText, 10, memEvalLlm, embLlm);
         wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
+        setLastWadeMemoriesXml(wadeMemoriesXml);
       } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
 
       // 🔥 用新的 generateFromCard 统一入口！
@@ -944,7 +946,7 @@ export const ChatInterface: React.FC = () => {
       <ConversationMapModal showMap={showMap} setShowMap={setShowMap} displayMessages={displayMessages} scrollToMessage={scrollToMessage} />
       <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession as any} />
       <MemoryModal showMemorySelector={showMemorySelector} setShowMemorySelector={setShowMemorySelector} coreMemories={coreMemories} sessions={sessions} activeSessionId={activeSessionId} toggleCoreMemoryEnabled={toggleCoreMemoryEnabled} updateSession={updateSession as any} />
-      <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} personaCards={personaCards} functionBindings={functionBindings} getBinding={getBinding} getDefaultPersonaCard={getDefaultPersonaCard} />
+      <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} personaCards={personaCards} functionBindings={functionBindings} getBinding={getBinding} getDefaultPersonaCard={getDefaultPersonaCard} lastWadeMemoriesXml={lastWadeMemoriesXml} />
 
       {/* Memory Live Indicator */}
       <MemoryLiveIndicator newMemories={newMemories} onDismiss={() => setNewMemories([])} />

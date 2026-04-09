@@ -19,12 +19,15 @@ interface XRayModalProps {
   functionBindings?: any[];
   getBinding?: (key: string) => any;
   getDefaultPersonaCard?: (character: 'Wade' | 'Luna') => any;
+  // Wade 智能记忆
+  lastWadeMemoriesXml?: string;
 }
 
 export const XRayModal: React.FC<XRayModalProps> = ({
   showDebug, setShowDebug, settings, messages, sessions,
   activeSessionId, activeMode, coreMemories, llmPresets, sessionSummary,
-  personaCards, functionBindings, getBinding, getDefaultPersonaCard
+  personaCards, functionBindings, getBinding, getDefaultPersonaCard,
+  lastWadeMemoriesXml
 }) => {
   const [expandedMemoryIds, setExpandedMemoryIds] = useState<string[]>([]);
   const [expandedHistoryIndices, setExpandedHistoryIndices] = useState<number[]>([]);
@@ -68,6 +71,11 @@ export const XRayModal: React.FC<XRayModalProps> = ({
     ? safeMemories.filter(m => currentSession.activeMemoryIds!.includes(m.id))
     : safeMemories.filter(m => m.enabled);
 
+  // === 记忆系统状态 ===
+  const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
+  const memEvalLlm = memEvalLlmId ? llmPresets.find((p: any) => p.id === memEvalLlmId) : null;
+  const memorySystemActive = !!(memEvalLlm?.apiKey);
+
   // === 构建真正的 System Prompt（和 generateFromCard 用同一个函数！）===
   const realSystemPrompt = buildSystemPromptFromCard({
     wadeCard: wadeCardData,
@@ -76,6 +84,7 @@ export const XRayModal: React.FC<XRayModalProps> = ({
     coreMemories: activeMemories,
     sessionSummary: sessionSummary,
     isRetry: false,
+    wadeMemoriesXml: lastWadeMemoriesXml,
   });
 
   // === Token 估算 ===
@@ -140,7 +149,7 @@ export const XRayModal: React.FC<XRayModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
           
           {/* Dashboard */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-wade-bg-card p-4 rounded-2xl border border-wade-accent shadow-sm flex flex-col items-center justify-center text-center">
               <div className="text-wade-accent font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Active Brain</div>
               <div className="text-lg font-black text-wade-text-main tracking-tight line-clamp-1 px-1">{currentModelName}</div>
@@ -160,6 +169,16 @@ export const XRayModal: React.FC<XRayModalProps> = ({
               <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Persona Card</div>
               <div className="text-lg font-black text-wade-text-main tracking-tight line-clamp-1 px-1">{wadeCard?.name || 'None'}</div>
               <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">{modeKey}</div>
+            </div>
+            <div className={`bg-wade-bg-card p-4 rounded-2xl border shadow-sm flex flex-col items-center justify-center text-center ${memorySystemActive ? 'border-green-500/30' : 'border-red-400/30'}`}>
+              <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Smart Memory</div>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${memorySystemActive ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`} />
+                <div className={`text-sm font-black tracking-tight ${memorySystemActive ? 'text-green-600' : 'text-red-400'}`}>
+                  {memorySystemActive ? 'Active' : 'Off'}
+                </div>
+              </div>
+              <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">{memEvalLlm?.name || 'No LLM set'}</div>
             </div>
           </div>
 
@@ -199,6 +218,21 @@ export const XRayModal: React.FC<XRayModalProps> = ({
               <CodeBlock content={spiceContent} />
             </XRaySection>
           )}
+
+          {/* Wade Smart Memories (auto-extracted) */}
+          <XRaySection title="Wade's Smart Memory" subtitle={memorySystemActive ? 'Auto-extracted from conversations' : 'System inactive — check LLM settings'}>
+            {lastWadeMemoriesXml ? (
+              <CodeBlock content={lastWadeMemoriesXml} maxH="200px" />
+            ) : (
+              <div className="bg-wade-bg-card p-8 rounded-2xl border border-wade-border border-dashed text-center">
+                <p className="text-xs text-wade-text-muted italic">
+                  {memorySystemActive
+                    ? 'No memories retrieved for this turn yet. Send a message first.'
+                    : 'Memory system is not active. Set a Memory Eval LLM in Settings to enable.'}
+                </p>
+              </div>
+            )}
+          </XRaySection>
 
           {/* Core Memories */}
           <XRaySection title="Long-Term Memory" subtitle={`${activeMemories.length} active items`}>

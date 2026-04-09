@@ -194,6 +194,10 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   // Get active presets for the status banner
   const activeLlm = llmPresets.find(p => p.id === settings.activeLlmId);
   const activeTts = ttsPresets.find(p => p.id === settings.activeTtsId);
+  const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
+  const activeMemEval = memEvalLlmId ? llmPresets.find(p => p.id === memEvalLlmId) : null;
+  const embLlmId = settings.embeddingLlmId || memEvalLlmId;
+  const activeEmb = embLlmId ? llmPresets.find(p => p.id === embLlmId) : null;
 
   return (
     <div className="h-full overflow-y-auto bg-wade-bg-app p-4 pb-10 flex flex-col items-center">
@@ -244,6 +248,32 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>
               </div>
             )}
+            {/* Memory Eval AI */}
+            <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
+              <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
+                {activeMemEval ? <ProviderIcon provider={activeMemEval.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Brain size={18} className="text-wade-text-muted" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-wade-text-main truncate">{activeMemEval ? activeMemEval.name : 'Not set'}</div>
+                <div className="text-[10px] text-wade-text-muted truncate">Memory Evaluation{!settings.memoryEvalLlmId && activeMemEval ? ' (default)' : ''}</div>
+              </div>
+              {activeMemEval?.apiKey
+                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>
+                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0"></div>}
+            </div>
+            {/* Vector Embedding AI */}
+            <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
+              <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
+                {activeEmb ? <ProviderIcon provider={activeEmb.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Sparkle size={18} className="text-wade-text-muted" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-wade-text-main truncate">{activeEmb ? activeEmb.name : 'Not set'}</div>
+                <div className="text-[10px] text-wade-text-muted truncate">Vector Embedding{!settings.embeddingLlmId && activeEmb ? ' (default)' : ''}</div>
+              </div>
+              {activeEmb?.apiKey
+                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>
+                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0"></div>}
+            </div>
             {syncError && (
               <div className="pt-2 border-t border-wade-border/40">
                 <p className="text-[10px] text-red-500 break-words">{syncError}</p>
