@@ -942,8 +942,8 @@ export const ChatInterface: React.FC = () => {
                 {showKeepaliveDivider && (
                   <div className="flex items-center gap-3 my-3 px-4 select-none">
                     <div className="flex-1 h-px bg-wade-accent/20" />
-                    <span className="text-[9px] text-wade-accent/50 font-medium whitespace-nowrap">
-                      while you were away · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <span className="text-[9px] text-wade-accent/50 font-medium whitespace-nowrap italic">
+                      Wade was here · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                     <div className="flex-1 h-px bg-wade-accent/20" />
                   </div>
@@ -951,7 +951,7 @@ export const ChatInterface: React.FC = () => {
                 {showBackDivider && (
                   <div className="flex items-center gap-3 my-3 px-4 select-none">
                     <div className="flex-1 h-px bg-wade-text-muted/20" />
-                    <span className="text-[9px] text-wade-text-muted/40 font-medium whitespace-nowrap">you're back</span>
+                    <span className="text-[9px] text-wade-text-muted/40 font-medium whitespace-nowrap italic">oh, there she is</span>
                     <div className="flex-1 h-px bg-wade-text-muted/20" />
                   </div>
                 )}
