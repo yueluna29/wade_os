@@ -276,7 +276,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
         
         const fetchMessages = async () => {
-          const msgColumns = 'id, session_id, role, content, model, created_at, variants, selected_index, variants_thinking';
+          const msgColumns = 'id, session_id, role, content, model, created_at, variants, selected_index, variants_thinking, source';
           const [deepRes, smsRes, rpRes] = await Promise.all([
             supabase.from('messages_deep').select(msgColumns),
             supabase.from('messages_sms').select(msgColumns),
@@ -317,7 +317,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               isFavorite: false, 
               variants: parsedVariants,
               selectedIndex: selectedIdx,
-              thinking: currentVariant.thinking || undefined
+              thinking: currentVariant.thinking || undefined,
+              source: row.source || 'chat',
             };
           };
 

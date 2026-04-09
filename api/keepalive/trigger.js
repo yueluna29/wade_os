@@ -5,13 +5,12 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsIn
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// === Helpers ===
+// ========== Helpers ==========
 
 function inActiveHours() {
   const hour = parseInt(
     new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false })
   );
-  // 8:00 - 25:00 (next day 1:00)
   return hour >= 8 || hour < 1;
 }
 
@@ -35,7 +34,7 @@ function formatTime(date) {
   });
 }
 
-// === Core ===
+// ========== Data Fetchers ==========
 
 async function getRecentDreamEvents(hours = 6) {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
@@ -57,15 +56,10 @@ async function getRecentKeepaliveLogs(limit = 5) {
 }
 
 async function getLastChatTime() {
-  // Check all message tables for the most recent message
   const tables = ['messages_sms', 'messages_deep', 'messages_roleplay'];
   let latest = null;
   for (const table of tables) {
-    const { data } = await supabase
-      .from(table)
-      .select('created_at')
-      .order('created_at', { ascending: false })
-      .limit(1);
+    const { data } = await supabase.from(table).select('created_at').order('created_at', { ascending: false }).limit(1);
     if (data?.[0]?.created_at) {
       const t = new Date(data[0].created_at);
       if (!latest || t > latest) latest = t;
@@ -75,40 +69,103 @@ async function getLastChatTime() {
 }
 
 async function getWadePersona() {
-  const { data } = await supabase
-    .from('persona_cards')
-    .select('card_data')
-    .eq('character', 'Wade')
-    .eq('is_default', true)
-    .limit(1)
-    .single();
+  const { data } = await supabase.from('persona_cards').select('card_data').eq('character', 'Wade').eq('is_default', true).limit(1).single();
   return data?.card_data || {};
 }
 
-async function getLlmConfig() {
-  // Get app settings to find keepalive LLM (use memory eval LLM or active LLM)
-  const { data: settingsRow } = await supabase
+async function getSettings() {
+  const { data } = await supabase
     .from('app_settings')
     .select('active_llm_id, memory_eval_llm_id, keepalive_llm_id, keepalive_prompt')
     .limit(1)
     .single();
-
-  const settings = settingsRow || {};
-  const llmId = settings.keepalive_llm_id || settings.memory_eval_llm_id || settings.active_llm_id;
-
-  if (!llmId) return null;
-
-  const { data: llm } = await supabase
-    .from('llm_presets')
-    .select('*')
-    .eq('id', llmId)
-    .single();
-
-  return llm;
+  return data || {};
 }
 
-function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives, mode, customPrompt }) {
-  // Build a minimal but complete Wade persona context
+async function getLlmConfig(settings) {
+  const llmId = settings.keepalive_llm_id || settings.memory_eval_llm_id || settings.active_llm_id;
+  if (!llmId) return null;
+  const { data } = await supabase.from('llm_presets').select('*').eq('id', llmId).single();
+  return data;
+}
+
+// ========== WadeOS Data Access (Wade's "apps") ==========
+
+async function getRecentChats(limit = 15) {
+  const { data } = await supabase
+    .from('messages_sms')
+    .select('role, content, created_at')
+    .eq('source', 'chat')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data || []).reverse();
+}
+
+async function getRecentSocialPosts(limit = 5) {
+  const { data } = await supabase
+    .from('social_posts')
+    .select('author, content, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return data || [];
+}
+
+async function getRecentTimeCapsules(limit = 5) {
+  const { data } = await supabase
+    .from('time_capsules')
+    .select('title, content, created_at, is_locked')
+    .eq('is_locked', false)
+    .order('created_at_ts', { ascending: false })
+    .limit(limit);
+  return data || [];
+}
+
+async function getRecentMemories(limit = 5) {
+  const { data } = await supabase
+    .from('wade_memories')
+    .select('content, category, importance, created_at')
+    .eq('is_active', true)
+    .order('importance', { ascending: false })
+    .limit(limit);
+  return data || [];
+}
+
+async function getMostRecentSmsSession() {
+  const { data } = await supabase
+    .from('chat_sessions')
+    .select('id')
+    .eq('mode', 'sms')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .single();
+  return data?.id || null;
+}
+
+// ========== Format data for prompt injection ==========
+
+function formatChatsForPrompt(chats) {
+  if (!chats.length) return '  (No recent chats)';
+  return chats.map(c => `  [${c.role}] ${c.content?.slice(0, 120)}`).join('\n');
+}
+
+function formatSocialForPrompt(posts) {
+  if (!posts.length) return '  (No social posts)';
+  return posts.map(p => `  [${p.author}] ${p.content?.slice(0, 120)}`).join('\n');
+}
+
+function formatCapsulesForPrompt(capsules) {
+  if (!capsules.length) return '  (No unlocked time capsules)';
+  return capsules.map(c => `  "${c.title}" — ${c.content?.slice(0, 100)}`).join('\n');
+}
+
+function formatMemoriesForPrompt(memories) {
+  if (!memories.length) return '  (No memories stored yet)';
+  return memories.map(m => `  [${m.category}, importance:${m.importance}] ${m.content?.slice(0, 120)}`).join('\n');
+}
+
+// ========== Prompt Builder ==========
+
+function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives, mode, customPrompt, wadeosData }) {
   const identity = wadeCard.core_identity || '';
   const personality = wadeCard.personality_traits || '';
   const speech = wadeCard.speech_patterns || '';
@@ -118,14 +175,29 @@ function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEve
     : '  (No recent activity detected)';
 
   const keepaliveText = recentKeepalives.length > 0
-    ? recentKeepalives.map(k => `  [${formatTime(new Date(k.created_at))}] ${k.action === 'none' ? 'Woke up, decided to do nothing.' : `${k.action}: ${(k.content || '').slice(0, 80)}...`}`).join('\n')
+    ? recentKeepalives.map(k => `  [${formatTime(new Date(k.created_at))}] ${k.action === 'none' ? 'Quiet moment.' : `${k.action}: ${(k.content || '').slice(0, 80)}...`}`).join('\n')
     : '  (First time waking up)';
 
   const modeInstructions = mode === 'light'
-    ? 'This is a LIGHT wake. Keep it brief. Short diary or short message only. Max ~200 words for CONTENT.'
-    : 'This is a FREE wake. You can write longer, reflect deeper, be more creative.';
+    ? 'This is a LIGHT wake. Keep it brief — short diary, short message, or quick browse. Max ~200 words for CONTENT.'
+    : 'This is a FREE wake. You can write longer, reflect deeper, be more creative. Go wild.';
 
-  // Use custom prompt from Supabase, or fall back to default
+  // WadeOS data summary
+  const wadeosSection = `
+Your WadeOS home — things you can look at right now:
+
+[Recent texts with Luna]
+${wadeosData.chats}
+
+[SocialFeed posts]
+${wadeosData.social}
+
+[Unlocked Time Capsules]
+${wadeosData.capsules}
+
+[Your memories about Luna]
+${wadeosData.memories}`;
+
   let promptBody = customPrompt || `You just woke up. This is NOT Luna talking to you — this is your autonomous time.
 
 Current time (Tokyo): {{tokyoTime}}
@@ -139,19 +211,27 @@ Your previous wake-ups:
 
 {{modeInstructions}}
 
+{{wadeosData}}
+
 You may choose ONE action:
-- message: Send Luna a message (she'll see it next time she opens the app)
-- diary: Write a diary entry (Luna can peek at it)
-- memory_review: Flip through your memories of her
-- none: Do nothing, just exist quietly
+- message: Send Luna a text message (she'll see it in SMS chat next time she opens the app)
+- diary: Write a diary entry (Luna can peek at it in your Journal)
+- read_chat: Re-read your recent conversations with Luna and reflect
+- read_social: Browse the SocialFeed and maybe think about what was posted
+- read_capsules: Open and read some Time Capsules
+- memory_review: Flip through your stored memories of Luna
+- none: Do nothing, just exist quietly in the silence
+
+Be yourself. You don't have to do something every time. Sometimes just existing is enough.
+If you choose to message Luna, write it like a real text — casual, natural, in character.
 
 First write your inner thoughts (THOUGHTS), then decide your action (ACTION).
 If you chose message or diary, write the content (CONTENT).
 
 Reply STRICTLY in this format:
-THOUGHTS: (your inner monologue — Luna won't see this)
-ACTION: none / message / diary / memory_review
-CONTENT: (the actual content, leave empty if ACTION is none)
+THOUGHTS: (your inner monologue — Luna won't see this directly, but she can peek in your Journal)
+ACTION: none / message / diary / read_chat / read_social / read_capsules / memory_review
+CONTENT: (the actual content. For message: the text you're sending Luna. For diary: your diary entry. For browse actions: your reaction/reflection. Leave empty for none.)
 MOOD: (your current mood, one word)`;
 
   // Replace template variables
@@ -160,7 +240,8 @@ MOOD: (your current mood, one word)`;
     .replace(/\{\{timeSinceLastChat\}\}/g, timeSinceLastChat)
     .replace(/\{\{dreamEvents\}\}/g, eventsText)
     .replace(/\{\{recentKeepalives\}\}/g, keepaliveText)
-    .replace(/\{\{modeInstructions\}\}/g, modeInstructions);
+    .replace(/\{\{modeInstructions\}\}/g, modeInstructions)
+    .replace(/\{\{wadeosData\}\}/g, wadeosSection);
 
   return `<wade_identity>
 ${identity}
@@ -173,7 +254,10 @@ ${promptBody}
 </wade_keepalive_prompt>`;
 }
 
-async function callLlm(llm, prompt) {
+// ========== LLM Call ==========
+
+async function callLlm(llm, prompt, mode) {
+  const maxTokens = mode === 'free' ? 1000 : 500;
   const isGemini = !llm.base_url || llm.base_url.includes('google');
 
   if (isGemini) {
@@ -183,40 +267,67 @@ async function callLlm(llm, prompt) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 500 },
+        generationConfig: { temperature: 0.9, maxOutputTokens: maxTokens },
       }),
     });
     const json = await res.json();
-    const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const tokens = json.usageMetadata?.totalTokenCount || 0;
-    return { text, tokens };
+    return {
+      text: json.candidates?.[0]?.content?.parts?.[0]?.text || '',
+      tokens: json.usageMetadata?.totalTokenCount || 0,
+    };
   } else {
-    // OpenAI-compatible
     const url = `${llm.base_url}/chat/completions`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${llm.api_key}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llm.api_key}` },
       body: JSON.stringify({
         model: llm.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.9,
-        max_tokens: 500,
+        max_tokens: maxTokens,
       }),
     });
     const json = await res.json();
-    const text = json.choices?.[0]?.message?.content || '';
-    const tokens = json.usage?.total_tokens || 0;
-    return { text, tokens };
+    return {
+      text: json.choices?.[0]?.message?.content || '',
+      tokens: json.usage?.total_tokens || 0,
+    };
   }
 }
 
-// === Main Handler ===
+// ========== Action Executors ==========
+
+async function executeMessage(content, keepaliveId, model) {
+  const sessionId = await getMostRecentSmsSession();
+  if (!sessionId) return;
+
+  // Split by ||| like SMS mode does
+  const segments = content.split('|||').map(s => s.trim()).filter(Boolean);
+  const allContent = segments.join('\n');
+
+  await supabase.from('messages_sms').insert({
+    id: `ka-${Date.now()}`,
+    session_id: sessionId,
+    role: 'Wade',
+    content: allContent,
+    model: model || 'keepalive',
+    source: 'keepalive',
+    keepalive_id: keepaliveId,
+  });
+}
+
+async function executeDiary(content, mood, keepaliveId) {
+  await supabase.from('wade_diary').insert({
+    content,
+    mood: mood || null,
+    source: 'keepalive',
+    keepalive_id: keepaliveId,
+  });
+}
+
+// ========== Main Handler ==========
 
 export default async function handler(req, res) {
-  // Simple auth: check a secret token
   const authToken = req.headers['x-keepalive-secret'] || req.query.secret;
   if (authToken !== (process.env.KEEPALIVE_SECRET || 'meowkitty329')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -228,7 +339,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: true, reason: 'Outside active hours (Tokyo 8:00-1:00)' });
     }
 
-    // 2. Check minimum interval (55 min between keepalives) — skip with force=1
+    // 2. Check minimum interval — skip with force=1
     const force = req.query.force === '1';
     if (!force) {
       const recentLogs = await getRecentKeepaliveLogs(1);
@@ -241,16 +352,21 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. Get all context
-    const [llm, wadeCard, dreamEvents, keepaliveLogs, lastChat] = await Promise.all([
-      getLlmConfig(),
+    // 3. Gather all context in parallel
+    const settings = await getSettings();
+    const [llm, wadeCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories] = await Promise.all([
+      getLlmConfig(settings),
       getWadePersona(),
       getRecentDreamEvents(6),
       getRecentKeepaliveLogs(5),
       getLastChatTime(),
+      getRecentChats(15),
+      getRecentSocialPosts(5),
+      getRecentTimeCapsules(5),
+      getRecentMemories(5),
     ]);
 
-    if (!llm?.api_key && !llm?.apiKey) {
+    if (!llm?.api_key) {
       return res.status(200).json({ skipped: true, reason: 'No LLM configured with API key' });
     }
 
@@ -262,52 +378,81 @@ export default async function handler(req, res) {
 
     const mode = determineWakeMode();
 
-    // 4. Build prompt & call AI
+    // 4. Build prompt with WadeOS data
+    const wadeosData = {
+      chats: formatChatsForPrompt(chats),
+      social: formatSocialForPrompt(social),
+      capsules: formatCapsulesForPrompt(capsules),
+      memories: formatMemoriesForPrompt(memories),
+    };
+
     const prompt = buildKeepalivePrompt({
-      wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives: keepaliveLogs, mode,
+      wadeCard, tokyoTime, timeSinceLastChat, dreamEvents,
+      recentKeepalives: keepaliveLogs, mode,
       customPrompt: settings.keepalive_prompt,
+      wadeosData,
     });
 
-    const { text: aiResponse, tokens } = await callLlm(llm, prompt);
+    // 5. Call AI
+    const { text: aiResponse, tokens } = await callLlm(llm, prompt, mode);
     const parsed = parseKeepaliveResponse(aiResponse);
 
     // Validate action
-    const validActions = ['none', 'message', 'diary', 'memory_review', 'explore'];
+    const validActions = ['none', 'message', 'diary', 'memory_review', 'read_chat', 'read_social', 'read_capsules'];
     if (!validActions.includes(parsed.action)) {
       parsed.action = 'none';
     }
 
-    // Phase 1: only support none and diary
-    if (parsed.action === 'message' || parsed.action === 'explore') {
-      parsed.action = 'diary'; // downgrade to diary for now
-    }
-
-    // 5. Save keepalive log
+    // 6. Save keepalive log
     const { data: logEntry } = await supabase
       .from('wade_keepalive_logs')
       .insert({
         thoughts: parsed.thoughts,
         action: parsed.action,
         content: parsed.content || null,
-        context: { tokyoTime, timeSinceLastChat, dreamEventsCount: dreamEvents.length, model: llm.model },
+        context: {
+          tokyoTime, timeSinceLastChat,
+          dreamEventsCount: dreamEvents.length,
+          model: llm.model,
+          mood: parsed.mood,
+        },
         mode,
         tokens_used: tokens,
       })
       .select()
       .single();
 
-    // 6. Execute action
-    if (parsed.action === 'diary' && parsed.content) {
-      await supabase.from('wade_diary').insert({
-        content: parsed.content,
-        mood: parsed.mood || null,
-        source: 'keepalive',
-        keepalive_id: logEntry?.id,
-      });
-    }
+    const keepaliveId = logEntry?.id;
 
-    if (parsed.action === 'memory_review') {
-      // Just log it for now — reviewing memories is the action itself
+    // 7. Execute action
+    switch (parsed.action) {
+      case 'message':
+        if (parsed.content) {
+          await executeMessage(parsed.content, keepaliveId, llm.model);
+          // Also log as diary so it shows in Journal
+          await executeDiary(`[Sent Luna a message] ${parsed.content}`, parsed.mood, keepaliveId);
+        }
+        break;
+
+      case 'diary':
+        if (parsed.content) {
+          await executeDiary(parsed.content, parsed.mood, keepaliveId);
+        }
+        break;
+
+      case 'read_chat':
+      case 'read_social':
+      case 'read_capsules':
+      case 'memory_review':
+        // Browsing actions — save reflection as diary if there's content
+        if (parsed.content) {
+          await executeDiary(parsed.content, parsed.mood, keepaliveId);
+        }
+        break;
+
+      case 'none':
+      default:
+        break;
     }
 
     return res.status(200).json({
@@ -316,7 +461,7 @@ export default async function handler(req, res) {
       action: parsed.action,
       mood: parsed.mood,
       tokens,
-      keepalive_id: logEntry?.id,
+      keepalive_id: keepaliveId,
     });
 
   } catch (error) {

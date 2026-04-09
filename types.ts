@@ -125,8 +125,11 @@ export interface Message {
   variants?: MessageVariant[]; 
   selectedIndex?: number; // Index of the currently shown version
   
+  // Keepalive (autonomous message)
+  source?: 'chat' | 'keepalive';
+
   // UI State (Transient)
-  isRegenerating?: boolean; 
+  isRegenerating?: boolean;
 }
 
 export interface SocialPost {
