@@ -89,12 +89,12 @@ async function getLlmConfig() {
   // Get app settings to find keepalive LLM (use memory eval LLM or active LLM)
   const { data: settingsRow } = await supabase
     .from('app_settings')
-    .select('data')
+    .select('active_llm_id, memory_eval_llm_id')
     .limit(1)
     .single();
 
-  const settings = settingsRow?.data || {};
-  const llmId = settings.memoryEvalLlmId || settings.activeLlmId;
+  const settings = settingsRow || {};
+  const llmId = settings.memory_eval_llm_id || settings.active_llm_id;
 
   if (!llmId) return null;
 
@@ -236,7 +236,7 @@ export default async function handler(req, res) {
       getLastChatTime(),
     ]);
 
-    if (!llm?.api_key) {
+    if (!llm?.api_key && !llm?.apiKey) {
       return res.status(200).json({ skipped: true, reason: 'No LLM configured with API key' });
     }
 
