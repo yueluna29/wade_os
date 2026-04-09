@@ -326,7 +326,14 @@ export const ChatInterface: React.FC = () => {
       } else {
         setViewState('list'); setActiveSessionId(null); setActiveArchiveId(null); setArchiveMessages([]);
       }
-    } else if (viewState === 'list') { setViewState('menu'); }
+    } else if (viewState === 'list') {
+      // SMS: back from session list → return to chat (we came from chat)
+      if (activeMode === 'sms' && activeSessionId) {
+        setViewState('chat');
+      } else {
+        setViewState('menu');
+      }
+    }
   };
 
   // === ACTION HANDLERS ===
@@ -647,9 +654,9 @@ export const ChatInterface: React.FC = () => {
     scrollToBottom();
     if (textareaRef.current) { textareaRef.current.style.height = '48px'; textareaRef.current.focus(); }
     if (isFirstMessage) {
-      const currentSession = sessions.find(s => s.id === targetSessionId);
-      const effectiveLlm = llmPresets.find(p => p.id === (currentSession?.customLlmId || settings.activeLlmId)) || llmPresets[0];
-      if (effectiveLlm?.apiKey) { generateChatTitle(currentInput, effectiveLlm.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
+      // Title generation uses Gemini — find any Gemini preset, or fall back to first preset with key
+      const geminiPreset = llmPresets.find(p => p.provider === 'Gemini' && p.apiKey) || llmPresets.find(p => p.apiKey);
+      if (geminiPreset?.apiKey) { generateChatTitle(currentInput, geminiPreset.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
     }
     if (activeMode === 'sms') {
       // SMS: 10s debounce so Luna can send multiple texts before Wade replies
@@ -854,7 +861,6 @@ export const ChatInterface: React.FC = () => {
         )}
         <div className="flex items-center gap-2">
           <button onClick={() => { setShowSearch(!showSearch); setShowMap(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Search /></button>
-          {activeMode === 'sms' && <button onClick={() => setViewState('list')} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors" title="Chat history"><Icons.Clock /></button>}
           <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Map /></button>
           <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative"><Icons.More /></button>
         </div>
@@ -872,6 +878,7 @@ export const ChatInterface: React.FC = () => {
               { icon: <Icons.Fire />, label: "Add Special Sauce", action: () => { setShowPromptEditor(true); setShowMenu(false); const cs = sessions.find(s => s.id === activeSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
               { icon: <Icons.Skin />, label: "Chat Style", action: () => { setIsChatThemeOpen(true); setShowMenu(false); } },
               { icon: <Icons.Bug />, label: "X-Ray Vision", action: () => { setShowDebug(true); setShowMenu(false); } },
+              ...(activeMode === 'sms' ? [{ icon: <Icons.Clock />, label: "Chat History", action: () => { setViewState('list'); setShowMenu(false); } }] : []),
             ].map((item, i) => (
               <button key={i} onClick={item.action} className="w-full text-left px-3 py-2 rounded-lg hover:bg-wade-bg-card/60 transition-colors text-wade-text-main text-[11px] flex items-center gap-2.5 whitespace-nowrap">
                 <div className="w-5 flex justify-center">{item.icon}</div>

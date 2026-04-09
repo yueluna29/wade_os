@@ -437,10 +437,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
           </div>
           {showTs && <span className="text-[9px] text-wade-text-muted/50 mb-1 whitespace-nowrap shrink-0 select-none">
-            {msg.source === 'keepalive' && <span className="text-wade-accent/60 mr-1">while you were away</span>}
             {formatTime(msg.timestamp)}
           </span>}
         </div>
+        {msg.source === 'keepalive' && (
+          <div className={`text-[8px] text-wade-accent/50 mt-0.5 select-none ${isLuna ? 'text-right pr-1' : 'pl-1'}`}>
+            while you were away{shownModel ? ` · ${shownModel}` : ''}
+          </div>
+        )}
       </div>
     );
   }
