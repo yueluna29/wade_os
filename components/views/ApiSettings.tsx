@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store';
+import { supabase } from '../../services/supabase';
 import { GoogleGenAI } from "@google/genai";
 import { generateMinimaxTTS } from "../../services/minimaxService";
 import { Icons } from '../ui/Icons';
@@ -199,6 +200,15 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const embLlmId = settings.embeddingLlmId || memEvalLlmId;
   const activeEmb = embLlmId ? llmPresets.find(p => p.id === embLlmId) : null;
 
+  // Keepalive LLM (stored in app_settings, not in store)
+  const [keepaliveLlmId, setKeepaliveLlmId] = useState<string>('');
+  useEffect(() => {
+    supabase.from('app_settings').select('keepalive_llm_id').limit(1).single()
+      .then(({ data }) => { if (data?.keepalive_llm_id) setKeepaliveLlmId(data.keepalive_llm_id); });
+  }, []);
+  const keepaliveFallbackId = keepaliveLlmId || memEvalLlmId;
+  const activeKeepalive = keepaliveFallbackId ? llmPresets.find(p => p.id === keepaliveFallbackId) : null;
+
   return (
     <div className="h-full overflow-y-auto bg-wade-bg-app p-4 pb-10 flex flex-col items-center">
       <div className="w-full max-w-[500px] space-y-4">
@@ -271,6 +281,19 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="text-[10px] text-wade-text-muted truncate">Vector Embedding{!settings.embeddingLlmId && activeEmb ? ' (default)' : ''}</div>
               </div>
               {activeEmb?.apiKey
+                ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
+                : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
+            </div>
+            {/* Keepalive AI */}
+            <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
+              <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
+                {activeKeepalive ? <ProviderIcon provider={activeKeepalive.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Clock size={18} className="text-wade-text-muted" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-wade-text-main truncate">{activeKeepalive ? activeKeepalive.name : 'Not set'}</div>
+                <div className="text-[10px] text-wade-text-muted truncate">Keepalive AI{!keepaliveLlmId && activeKeepalive ? ' (default)' : ''}</div>
+              </div>
+              {activeKeepalive?.apiKey
                 ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
                 : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
             </div>
