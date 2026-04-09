@@ -173,31 +173,37 @@ export const JournalView: React.FC = () => {
       const isGemini = !llm.baseUrl || llm.baseUrl.includes('google');
       let translated = '';
 
+      const prompt = `Translate the following text to Chinese (Simplified). Keep the tone and emotion. Output ONLY the translation, nothing else.\n\n${text}`;
+
       if (isGemini) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${llm.model || 'gemini-2.0-flash'}:generateContent?key=${llm.apiKey}`;
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `Translate the following text to Chinese (Simplified). Keep the tone and emotion. Output ONLY the translation, nothing else.\n\n${text}` }] }],
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
           }),
         });
+        if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text().catch(() => 'unknown')}`);
         const json = await res.json();
-        translated = json.candidates?.[0]?.content?.parts?.[0]?.text || '(Translation failed)';
+        translated = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!translated) throw new Error('Gemini returned empty response');
       } else {
         const res = await fetch(`${llm.baseUrl}/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llm.apiKey}` },
           body: JSON.stringify({
             model: llm.model,
-            messages: [{ role: 'user', content: `Translate the following text to Chinese (Simplified). Keep the tone and emotion. Output ONLY the translation, nothing else.\n\n${text}` }],
+            messages: [{ role: 'user', content: prompt }],
             temperature: 0.3,
             max_tokens: 500,
           }),
         });
+        if (!res.ok) throw new Error(`API ${res.status}: ${await res.text().catch(() => 'unknown')}`);
         const json = await res.json();
-        translated = json.choices?.[0]?.message?.content || '(Translation failed)';
+        translated = json.choices?.[0]?.message?.content || '';
+        if (!translated) throw new Error('API returned empty response');
       }
 
       setTranslations(prev => ({ ...prev, [id]: translated }));
@@ -224,7 +230,12 @@ export const JournalView: React.FC = () => {
       const newAudio = await tts.play(text, cached);
       if (newAudio) setAudioCache(prev => ({ ...prev, [id]: newAudio }));
     } catch {
-      // retry on autoplay block
+      // Auto-retry once (handles browser autoplay block)
+      try {
+        const cached = audioCache[id];
+        const newAudio = await tts.play(text, cached);
+        if (newAudio) setAudioCache(prev => ({ ...prev, [id]: newAudio }));
+      } catch { /* give up */ }
     } finally {
       setPlayingId(null);
     }
@@ -332,39 +343,39 @@ export const JournalView: React.FC = () => {
             </div>
           </div>
 
-          {/* Model Selectors with active indicators */}
-          <div className="space-y-2 mb-2">
-            <div className="flex items-center gap-2">
-              <Icons.Brain size={13} className="text-wade-text-muted shrink-0" />
+          {/* Model Selectors — single row */}
+          <div className="flex gap-2 mb-2">
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <Icons.Brain size={12} className="text-wade-text-muted shrink-0" />
               <select
                 value={keepaliveLlmId}
                 onChange={e => handleKeepaliveLlmChange(e.target.value)}
-                className="flex-1 px-2 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[10px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer"
+                className="flex-1 min-w-0 px-1.5 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[9px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer truncate"
               >
-                <option value="">Wake-up AI...</option>
+                <option value="">Wake AI</option>
                 {llmPresets.map(p => (
                   <option key={p.id} value={p.id}>{p.name || p.model}</option>
                 ))}
               </select>
               {keepaliveLlm?.apiKey
-                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title={keepaliveLlm.name} />
-                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" title="No API key" />}
+                ? <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                : <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
             </div>
-            <div className="flex items-center gap-2">
-              <Icons.Translate size={13} className="text-wade-text-muted shrink-0" />
+            <div className="flex items-center gap-1 flex-1 min-w-0">
+              <Icons.Translate size={12} className="text-wade-text-muted shrink-0" />
               <select
                 value={translationLlmId}
                 onChange={e => handleTranslationLlmChange(e.target.value)}
-                className="flex-1 px-2 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[10px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer"
+                className="flex-1 min-w-0 px-1.5 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[9px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer truncate"
               >
-                <option value="">Translation AI...</option>
+                <option value="">Translate AI</option>
                 {llmPresets.map(p => (
                   <option key={p.id} value={p.id}>{p.name || p.model}</option>
                 ))}
               </select>
               {translationLlm?.apiKey
-                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title={translationLlm.name} />
-                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" title="No API key" />}
+                ? <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                : <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
             </div>
           </div>
         </div>
@@ -484,77 +495,63 @@ export const JournalView: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Action Buttons */}
-                                <div className="flex items-center gap-1.5 pt-1">
-                                  {/* Translate */}
-                                  <button
-                                    onClick={e => { e.stopPropagation(); translateContent(id, mainContent); }}
-                                    disabled={translatingId === id}
-                                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
-                                      showTranslation[id]
-                                        ? 'bg-wade-accent text-white'
-                                        : 'bg-wade-bg-base text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent-light'
-                                    }`}
-                                  >
-                                    {translatingId === id ? (
-                                      <span className="animate-pulse">...</span>
-                                    ) : (
-                                      <>
-                                        <Icons.Translate size={12} />
-                                        <span>{showTranslation[id] ? 'Hide' : 'CN'}</span>
-                                      </>
-                                    )}
-                                  </button>
-
-                                  {/* TTS — diary content */}
-                                  <button
-                                    onClick={e => { e.stopPropagation(); handleTTS(id, mainContent); }}
-                                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
-                                      playingId === id
-                                        ? 'bg-wade-accent text-white'
-                                        : 'bg-wade-bg-base text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent-light'
-                                    }`}
-                                  >
-                                    <Icons.Voice size={12} />
-                                    <span>{playingId === id ? 'Stop' : isDiary ? 'Diary' : 'Listen'}</span>
-                                  </button>
-
-                                  {/* TTS — inner thoughts (separate cache key) */}
-                                  {isDiary && item.log.thoughts && (
+                                {/* Action Buttons: TTS left, Translate right */}
+                                <div className="flex items-center justify-between pt-1">
+                                  {/* Left: TTS buttons */}
+                                  <div className="flex items-center gap-1.5">
                                     <button
-                                      onClick={e => { e.stopPropagation(); handleTTS(`${id}-thoughts-tts`, item.log.thoughts); }}
+                                      onClick={e => { e.stopPropagation(); handleTTS(id, mainContent); }}
                                       className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
-                                        playingId === `${id}-thoughts-tts`
-                                          ? 'bg-purple-500 text-white'
-                                          : 'bg-wade-bg-base text-wade-text-muted hover:text-purple-500 hover:bg-purple-50'
+                                        playingId === id
+                                          ? 'bg-wade-accent text-white'
+                                          : 'bg-wade-bg-base text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent-light'
                                       }`}
                                     >
                                       <Icons.Voice size={12} />
-                                      <span>{playingId === `${id}-thoughts-tts` ? 'Stop' : 'Thoughts'}</span>
+                                      <span>{playingId === id ? 'Stop' : isDiary ? 'Diary' : 'Listen'}</span>
                                     </button>
-                                  )}
+                                    {isDiary && item.log.thoughts && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleTTS(`${id}-thoughts-tts`, item.log.thoughts); }}
+                                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
+                                          playingId === `${id}-thoughts-tts`
+                                            ? 'bg-purple-500 text-white'
+                                            : 'bg-wade-bg-base text-wade-text-muted hover:text-purple-500 hover:bg-purple-50'
+                                        }`}
+                                      >
+                                        <Icons.Voice size={12} />
+                                        <span>{playingId === `${id}-thoughts-tts` ? 'Stop' : 'Thoughts'}</span>
+                                      </button>
+                                    )}
+                                  </div>
 
-                                  {/* Translate thoughts too (if diary) */}
-                                  {isDiary && item.log.thoughts && (
+                                  {/* Right: Translate buttons */}
+                                  <div className="flex items-center gap-1.5">
                                     <button
-                                      onClick={e => { e.stopPropagation(); translateContent(`${id}-thoughts`, item.log.thoughts); }}
-                                      disabled={translatingId === `${id}-thoughts`}
+                                      onClick={e => { e.stopPropagation(); translateContent(id, mainContent); }}
+                                      disabled={translatingId === id}
                                       className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
-                                        showTranslation[`${id}-thoughts`]
-                                          ? 'bg-purple-500 text-white'
-                                          : 'bg-wade-bg-base text-wade-text-muted hover:text-purple-500 hover:bg-purple-50'
+                                        showTranslation[id]
+                                          ? 'bg-wade-accent text-white'
+                                          : 'bg-wade-bg-base text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent-light'
                                       }`}
                                     >
-                                      {translatingId === `${id}-thoughts` ? (
-                                        <span className="animate-pulse">...</span>
-                                      ) : (
-                                        <>
-                                          <Icons.Translate size={12} />
-                                          <span>{showTranslation[`${id}-thoughts`] ? 'Hide' : 'Thoughts CN'}</span>
-                                        </>
-                                      )}
+                                      {translatingId === id ? <span className="animate-pulse">...</span> : <><Icons.Translate size={12} /><span>{showTranslation[id] ? 'Hide' : 'CN'}</span></>}
                                     </button>
-                                  )}
+                                    {isDiary && item.log.thoughts && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); translateContent(`${id}-thoughts`, item.log.thoughts); }}
+                                        disabled={translatingId === `${id}-thoughts`}
+                                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
+                                          showTranslation[`${id}-thoughts`]
+                                            ? 'bg-purple-500 text-white'
+                                            : 'bg-wade-bg-base text-wade-text-muted hover:text-purple-500 hover:bg-purple-50'
+                                        }`}
+                                      >
+                                        {translatingId === `${id}-thoughts` ? <span className="animate-pulse">...</span> : <><Icons.Translate size={12} /><span>{showTranslation[`${id}-thoughts`] ? 'Hide' : 'Thoughts'}</span></>}
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {/* Thoughts translation */}
