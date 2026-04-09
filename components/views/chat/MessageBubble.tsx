@@ -459,9 +459,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             {formatTime(msg.timestamp)}
           </span>}
         </div>
-        {msg.source === 'keepalive' && (
-          <div className={`text-[8px] text-wade-accent/50 mt-0.5 select-none ${isLuna ? 'text-right pr-1' : 'pl-1'}`}>
-            while you were away{shownModel ? ` · ${shownModel}` : ''}
+        {msg.source === 'keepalive' && shownModel && (
+          <div className={`text-[8px] text-wade-text-muted/40 mt-0.5 select-none ${isLuna ? 'text-right pr-1' : 'pl-1'}`}>
+            {shownModel}
           </div>
         )}
       </div>

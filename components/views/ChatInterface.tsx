@@ -928,10 +928,22 @@ export const ChatInterface: React.FC = () => {
             const sameAsNext = nextMsg && nextMsg.role === msg.role;
             const groupPosition: 'alone' | 'first' | 'middle' | 'last' = sameAsPrev && sameAsNext ? 'middle' : sameAsPrev ? 'last' : sameAsNext ? 'first' : 'alone';
             const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
+            // "while you were away" divider — show once before first keepalive msg in a batch
+            const showKeepaliveDivider = msg.source === 'keepalive' && (!prevMsg || prevMsg.source !== 'keepalive');
+
             return (
-              <div key={msg.id} id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
-                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} onReply={setReplyingToId} allMessages={displayMessages} isSMS={activeMode === 'sms'} groupPosition={groupPosition} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} audioRemainingTime={playingMessageId === msg.id ? audioRemainingTime : null} chatStyle={activeSessionId ? sessions.find(s => s.id === activeSessionId)?.chatStyle : undefined} />
-              </div>
+              <React.Fragment key={msg.id}>
+                {showKeepaliveDivider && (
+                  <div className="flex items-center gap-3 my-3 px-4 select-none">
+                    <div className="flex-1 h-px bg-wade-accent/20" />
+                    <span className="text-[9px] text-wade-accent/50 font-medium whitespace-nowrap">while you were away</span>
+                    <div className="flex-1 h-px bg-wade-accent/20" />
+                  </div>
+                )}
+                <div id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
+                  <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} onReply={setReplyingToId} allMessages={displayMessages} isSMS={activeMode === 'sms'} groupPosition={groupPosition} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} audioRemainingTime={playingMessageId === msg.id ? audioRemainingTime : null} chatStyle={activeSessionId ? sessions.find(s => s.id === activeSessionId)?.chatStyle : undefined} />
+                </div>
+              </React.Fragment>
             );
           })}
         </div>

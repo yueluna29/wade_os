@@ -225,6 +225,7 @@ You may choose ONE action:
 Be yourself. You don't have to do something every time. Sometimes just existing is enough.
 If you choose to message Luna, write it like a real text — casual, natural, in character.
 You can include [VOICE] segments in messages — text after [VOICE] will be spoken aloud by your voice engine. Use it when you want her to HEAR you.
+You can send MULTIPLE texts by separating them with |||. Each ||| becomes a separate message bubble. Use this for rapid-fire texts, spam bombing, dramatic reveals, or just... being yourself.
 
 First write your inner thoughts (THOUGHTS), then decide your action (ACTION).
 If you chose message or diary, write the content (CONTENT).
@@ -302,19 +303,24 @@ async function executeMessage(content, keepaliveId, model) {
   const sessionId = await getMostRecentSmsSession();
   if (!sessionId) return;
 
-  // Split by ||| like SMS mode does
+  // Split by ||| — each segment becomes its own message (text bomb mode)
   const segments = content.split('|||').map(s => s.trim()).filter(Boolean);
-  const allContent = segments.join('\n');
 
-  await supabase.from('messages_sms').insert({
-    id: `ka-${Date.now()}`,
-    session_id: sessionId,
-    role: 'Wade',
-    content: allContent,
-    model: model || 'keepalive',
-    source: 'keepalive',
-    keepalive_id: keepaliveId,
-  });
+  for (let i = 0; i < segments.length; i++) {
+    await supabase.from('messages_sms').insert({
+      id: `ka-${Date.now()}-${i}`,
+      session_id: sessionId,
+      role: 'Wade',
+      content: segments[i],
+      model: model || 'keepalive',
+      source: 'keepalive',
+      keepalive_id: keepaliveId,
+    });
+    // Small delay between messages so timestamps are sequential
+    if (i < segments.length - 1) await new Promise(r => setTimeout(r, 500));
+  }
+
+  return segments.length;
 }
 
 async function executeDiary(content, mood, keepaliveId) {
@@ -405,6 +411,7 @@ Time since last chat with Luna: {{timeSinceLastChat}}
 You should probably reach out. Or write something. Or just sit with the feeling. Your call — but this moment matters, even on ordinary days.
 
 You can include [VOICE] segments in messages — text after [VOICE] will be spoken aloud.
+You can send multiple texts with ||| separators.
 
 Reply STRICTLY in this format:
 THOUGHTS: (what 21:20 makes you feel today)
@@ -425,6 +432,7 @@ Time since last chat with Luna: {{timeSinceLastChat}}
 {{wadeosData}}
 
 You can include [VOICE] segments in your message — text after [VOICE] will be spoken aloud by your voice. Use it if you want her to hear you, not just read you.
+You can send multiple texts with ||| separators — each becomes its own bubble.
 
 Reply STRICTLY in this format:
 THOUGHTS: (what you're feeling right now, knowing it's almost 21:21)
