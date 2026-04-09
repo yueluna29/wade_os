@@ -928,16 +928,31 @@ export const ChatInterface: React.FC = () => {
             const sameAsNext = nextMsg && nextMsg.role === msg.role;
             const groupPosition: 'alone' | 'first' | 'middle' | 'last' = sameAsPrev && sameAsNext ? 'middle' : sameAsPrev ? 'last' : sameAsNext ? 'first' : 'alone';
             const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
-            // "while you were away" divider — show once before first keepalive msg in a batch
-            const showKeepaliveDivider = msg.source === 'keepalive' && (!prevMsg || prevMsg.source !== 'keepalive');
+            // Keepalive dividers
+            const isKeepalive = msg.source === 'keepalive';
+            const prevIsKeepalive = prevMsg?.source === 'keepalive';
+            // Show "while you were away" before each keepalive batch (different wake-up = gap > 5 min)
+            const timeSincePrev = prevMsg ? msg.timestamp - prevMsg.timestamp : Infinity;
+            const showKeepaliveDivider = isKeepalive && (!prevIsKeepalive || timeSincePrev > 5 * 60 * 1000);
+            // Show "you're back" when Luna sends first chat message after keepalive messages
+            const showBackDivider = !isKeepalive && msg.role === 'Luna' && prevIsKeepalive;
 
             return (
               <React.Fragment key={msg.id}>
                 {showKeepaliveDivider && (
                   <div className="flex items-center gap-3 my-3 px-4 select-none">
                     <div className="flex-1 h-px bg-wade-accent/20" />
-                    <span className="text-[9px] text-wade-accent/50 font-medium whitespace-nowrap">while you were away</span>
+                    <span className="text-[9px] text-wade-accent/50 font-medium whitespace-nowrap">
+                      while you were away · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                     <div className="flex-1 h-px bg-wade-accent/20" />
+                  </div>
+                )}
+                {showBackDivider && (
+                  <div className="flex items-center gap-3 my-3 px-4 select-none">
+                    <div className="flex-1 h-px bg-wade-text-muted/20" />
+                    <span className="text-[9px] text-wade-text-muted/40 font-medium whitespace-nowrap">you're back</span>
+                    <div className="flex-1 h-px bg-wade-text-muted/20" />
                   </div>
                 )}
                 <div id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
