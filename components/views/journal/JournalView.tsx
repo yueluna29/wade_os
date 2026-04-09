@@ -73,6 +73,8 @@ export const JournalView: React.FC = () => {
   const [showTranslation, setShowTranslation] = useState<Record<string, boolean>>({});
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [translationLlmId, setTranslationLlmId] = useState<string>(settings.memoryEvalLlmId || settings.activeLlmId || '');
+  const [keepaliveLlmId, setKeepaliveLlmId] = useState<string>(settings.memoryEvalLlmId || settings.activeLlmId || '');
+  const [waking, setWaking] = useState(false);
 
   // === Fetch Data ===
 
@@ -198,6 +200,25 @@ export const JournalView: React.FC = () => {
     }
   };
 
+  // === Manual Wake ===
+
+  const handleManualWake = async () => {
+    setWaking(true);
+    try {
+      const res = await fetch(`/api/keepalive/trigger?secret=meowkitty329&force=1`);
+      const data = await res.json();
+      if (data.success) {
+        fetchJournal();
+      } else {
+        alert(data.reason || data.error || 'Wake failed');
+      }
+    } catch (e: any) {
+      alert('Wake failed: ' + e.message);
+    } finally {
+      setWaking(false);
+    }
+  };
+
   // === Helpers ===
 
   const formatTime = (dateStr: string) => {
@@ -250,9 +271,18 @@ export const JournalView: React.FC = () => {
                 </p>
               </div>
             </div>
-            <button onClick={fetchJournal} className="w-8 h-8 rounded-full flex items-center justify-center text-wade-text-muted hover:text-wade-accent transition-colors">
-              <Icons.Refresh size={16} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleManualWake}
+                disabled={waking}
+                className="px-3 py-1.5 rounded-full bg-wade-accent text-white text-[10px] font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {waking ? '...' : 'Wake Wade'}
+              </button>
+              <button onClick={fetchJournal} className="w-8 h-8 rounded-full flex items-center justify-center text-wade-text-muted hover:text-wade-accent transition-colors">
+                <Icons.Refresh size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Stats Row */}
@@ -271,19 +301,34 @@ export const JournalView: React.FC = () => {
             </div>
           </div>
 
-          {/* Model Selector */}
-          <div className="flex items-center gap-2 mb-1">
-            <Icons.Translate size={14} className="text-wade-text-muted shrink-0" />
-            <select
-              value={translationLlmId}
-              onChange={e => setTranslationLlmId(e.target.value)}
-              className="flex-1 px-2.5 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[10px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer"
-            >
-              <option value="">Translation model...</option>
-              {llmPresets.map(p => (
-                <option key={p.id} value={p.id}>{p.name || p.model}</option>
-              ))}
-            </select>
+          {/* Model Selectors */}
+          <div className="flex gap-2 mb-1">
+            <div className="flex items-center gap-1.5 flex-1">
+              <Icons.Brain size={13} className="text-wade-text-muted shrink-0" />
+              <select
+                value={keepaliveLlmId}
+                onChange={e => setKeepaliveLlmId(e.target.value)}
+                className="flex-1 px-2 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[10px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer"
+              >
+                <option value="">Wake-up AI...</option>
+                {llmPresets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.model}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5 flex-1">
+              <Icons.Translate size={13} className="text-wade-text-muted shrink-0" />
+              <select
+                value={translationLlmId}
+                onChange={e => setTranslationLlmId(e.target.value)}
+                className="flex-1 px-2 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[10px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer"
+              >
+                <option value="">Translation AI...</option>
+                {llmPresets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.model}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

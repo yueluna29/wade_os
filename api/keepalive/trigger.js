@@ -217,13 +217,16 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: true, reason: 'Outside active hours (Tokyo 8:00-1:00)' });
     }
 
-    // 2. Check minimum interval (55 min between keepalives)
-    const recentLogs = await getRecentKeepaliveLogs(1);
-    if (recentLogs.length > 0) {
-      const lastWake = new Date(recentLogs[recentLogs.length - 1].created_at);
-      const minutesSince = (Date.now() - lastWake.getTime()) / 60000;
-      if (minutesSince < 55) {
-        return res.status(200).json({ skipped: true, reason: `Only ${Math.round(minutesSince)}min since last wake` });
+    // 2. Check minimum interval (55 min between keepalives) — skip with force=1
+    const force = req.query.force === '1';
+    if (!force) {
+      const recentLogs = await getRecentKeepaliveLogs(1);
+      if (recentLogs.length > 0) {
+        const lastWake = new Date(recentLogs[recentLogs.length - 1].created_at);
+        const minutesSince = (Date.now() - lastWake.getTime()) / 60000;
+        if (minutesSince < 55) {
+          return res.status(200).json({ skipped: true, reason: `Only ${Math.round(minutesSince)}min since last wake` });
+        }
       }
     }
 
