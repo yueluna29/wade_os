@@ -40,6 +40,26 @@ export const MemoryDashboard: React.FC = () => {
 
   useEffect(() => { fetchMemories(); }, [sortBy]);
 
+  // Realtime: auto-refresh when wade_memories changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('wade_memories_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wade_memories' }, () => {
+        fetchMemories();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [sortBy]);
+
+  // Refresh when tab becomes visible (e.g. switching back from chat)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchMemories();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [sortBy]);
+
   // Delete memory
   const handleDelete = async (id: string) => {
     await supabase.from('wade_memories').update({ is_active: false }).eq('id', id);

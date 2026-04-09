@@ -271,7 +271,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       };
     }, [query]);
 
-    return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{content}</ReactMarkdown>;
+    // Escape ^( so remark-gfm doesn't render it as superscript
+    const escaped = content.replace(/\^(\()/g, '\\^$1');
+    return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{escaped}</ReactMarkdown>;
   };
 
   if (msg.isRegenerating) {
