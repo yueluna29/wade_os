@@ -127,6 +127,7 @@ export interface Message {
   
   // Keepalive (autonomous message)
   source?: 'chat' | 'keepalive';
+  replyToId?: string; // Quote reply — references another message's id
 
   // UI State (Transient)
   isRegenerating?: boolean;

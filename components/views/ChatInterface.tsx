@@ -85,6 +85,7 @@ export const ChatInterface: React.FC = () => {
   const [archiveDates, setArchiveDates] = useState<Record<string, string>>({});
   const [archiveTimestamps, setArchiveTimestamps] = useState<Record<string, number>>({});
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
@@ -648,9 +649,10 @@ export const ChatInterface: React.FC = () => {
     const newMessage: Message = {
       id: Date.now().toString(), sessionId: targetSessionId, role: 'Luna', text: inputText, timestamp: Date.now(), mode: activeMode,
       attachments: attachments.map(a => ({ type: a.type, content: a.content.split(',')[1], mimeType: a.mimeType, name: a.name })),
-      image: attachments.find(a => a.type === 'image')?.content.split(',')[1]
+      image: attachments.find(a => a.type === 'image')?.content.split(',')[1],
+      ...(replyingToId ? { replyToId: replyingToId } : {}),
     };
-    addMessage(newMessage); setLastSentMessageId(newMessage.id); setLastInputText(currentInput); setInputText(''); setAttachments([]);
+    addMessage(newMessage); setLastSentMessageId(newMessage.id); setLastInputText(currentInput); setInputText(''); setAttachments([]); setReplyingToId(null);
     scrollToBottom();
     if (textareaRef.current) { textareaRef.current.style.height = '48px'; textareaRef.current.focus(); }
     if (isFirstMessage) {
@@ -928,7 +930,7 @@ export const ChatInterface: React.FC = () => {
             const isCurrentSearchResult = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
             return (
               <div key={msg.id} id={`msg-${msg.id}`} className={`${marginBottom} ${isCurrentSearchResult ? 'highlight-search' : ''}`}>
-                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} isSMS={activeMode === 'sms'} groupPosition={groupPosition} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} audioRemainingTime={playingMessageId === msg.id ? audioRemainingTime : null} chatStyle={activeSessionId ? sessions.find(s => s.id === activeSessionId)?.chatStyle : undefined} />
+                <MessageBubble msg={msg} settings={settings} onSelect={setSelectedMsgId} onReply={setReplyingToId} allMessages={displayMessages} isSMS={activeMode === 'sms'} groupPosition={groupPosition} onPlayTTS={handleQuickTTS} onRegenerateTTS={handleRegenerateTTS} searchQuery={searchQuery} playingMessageId={playingMessageId} isPaused={isPaused} audioDuration={audioDurations[msg.id]} audioRemainingTime={playingMessageId === msg.id ? audioRemainingTime : null} chatStyle={activeSessionId ? sessions.find(s => s.id === activeSessionId)?.chatStyle : undefined} />
               </div>
             );
           })}
@@ -967,7 +969,7 @@ export const ChatInterface: React.FC = () => {
       </div>
 
       {/* All Modals */}
-      <ActionSheet selectedMsg={selectedMsg} activeMode={activeMode} isEditing={isEditing} setIsEditing={setIsEditing} editContent={editContent} setEditContent={setEditContent} isDeleteConfirming={isDeleteConfirming} canRegenerate={canRegenerate} canBranch={canBranch} playingMessageId={playingMessageId} isPaused={isPaused} closeActions={closeActions} handleCopy={handleCopy} handleTextSelection={handleTextSelection} handleRegenerate={handleRegenerate} handleBranch={handleBranch} handleInitEdit={handleInitEdit} handleSaveEdit={handleSaveEdit} handleFavorite={handleFavorite} handleDelete={handleDelete} playTTS={playTTS} regenerateTTS={regenerateTTS} prevVariant={prevVariant} nextVariant={nextVariant} />
+      <ActionSheet selectedMsg={selectedMsg} activeMode={activeMode} isEditing={isEditing} setIsEditing={setIsEditing} editContent={editContent} setEditContent={setEditContent} isDeleteConfirming={isDeleteConfirming} canRegenerate={canRegenerate} canBranch={canBranch} playingMessageId={playingMessageId} isPaused={isPaused} closeActions={closeActions} handleCopy={handleCopy} handleTextSelection={handleTextSelection} handleRegenerate={handleRegenerate} handleBranch={handleBranch} handleInitEdit={handleInitEdit} handleSaveEdit={handleSaveEdit} handleFavorite={handleFavorite} handleDelete={handleDelete} playTTS={playTTS} regenerateTTS={regenerateTTS} prevVariant={prevVariant} nextVariant={nextVariant} onReply={() => { if (selectedMsg) { setReplyingToId(selectedMsg.id); closeActions(); textareaRef.current?.focus(); } }} />
       <TextSelectionModal textSelectionMsg={textSelectionMsg} setTextSelectionMsg={setTextSelectionMsg} />
       <ConversationMapModal showMap={showMap} setShowMap={setShowMap} displayMessages={displayMessages} scrollToMessage={scrollToMessage} />
       <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession as any} />
@@ -978,7 +980,7 @@ export const ChatInterface: React.FC = () => {
       <MemoryLiveIndicator newMemories={newMemories} onDismiss={() => setNewMemories([])} />
 
       {/* Input Area */}
-      <ChatInputArea inputText={inputText} setInputText={setInputText} textareaRef={textareaRef} messagesEndRef={messagesEndRef} placeholderText={placeholderText} isTyping={isTyping} activeMode={activeMode} attachments={attachments} removeAttachment={removeAttachment} showUploadMenu={showUploadMenu} setShowUploadMenu={setShowUploadMenu} imageInputRef={imageInputRef} fileInputRef={fileInputRef} handleImageSelect={handleImageSelect} handleFileSelect={handleFileSelect} handleSend={handleSend} handleCancel={handleCancel} handleKeyDown={handleKeyDown} />
+      <ChatInputArea inputText={inputText} setInputText={setInputText} textareaRef={textareaRef} messagesEndRef={messagesEndRef} placeholderText={placeholderText} isTyping={isTyping} activeMode={activeMode} attachments={attachments} removeAttachment={removeAttachment} showUploadMenu={showUploadMenu} setShowUploadMenu={setShowUploadMenu} imageInputRef={imageInputRef} fileInputRef={fileInputRef} handleImageSelect={handleImageSelect} handleFileSelect={handleFileSelect} handleSend={handleSend} handleCancel={handleCancel} handleKeyDown={handleKeyDown} replyingTo={replyingToId ? (() => { const m = messages.find(msg => msg.id === replyingToId); return m ? { id: m.id, role: m.role, text: m.text.slice(0, 100) } : null; })() : null} onCancelReply={() => setReplyingToId(null)} />
       </div>
     );
   }

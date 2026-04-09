@@ -276,7 +276,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
         
         const fetchMessages = async () => {
-          const msgColumns = 'id, session_id, role, content, model, created_at, variants, selected_index, variants_thinking, source';
+          const msgColumns = 'id, session_id, role, content, model, created_at, variants, selected_index, variants_thinking, source, reply_to_id';
           const [deepRes, smsRes, rpRes] = await Promise.all([
             supabase.from('messages_deep').select(msgColumns),
             supabase.from('messages_sms').select(msgColumns),
@@ -319,6 +319,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               selectedIndex: selectedIdx,
               thinking: currentVariant.thinking || undefined,
               source: row.source || 'chat',
+              replyToId: row.reply_to_id || undefined,
             };
           };
 
@@ -765,7 +766,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
          model: newMessage.model,
          variants: newMessage.variants,
          selected_index: 0,
-         created_at: new Date(newMessage.timestamp).toISOString()
+         created_at: new Date(newMessage.timestamp).toISOString(),
+         ...(newMessage.replyToId ? { reply_to_id: newMessage.replyToId } : {}),
       });
       setSessions(prev => prev.map(s => s.id === newMessage.sessionId ? { ...s, updatedAt: Date.now() } : s));
       supabase.from('chat_sessions').update({ updated_at: new Date().toISOString() }).eq('id', newMessage.sessionId).then();

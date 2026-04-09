@@ -1,6 +1,12 @@
 import React from 'react';
 import { Icons } from '../../ui/Icons';
 
+interface ReplyPreview {
+  id: string;
+  role: string;
+  text: string;
+}
+
 interface ChatInputAreaProps {
   inputText: string;
   setInputText: (v: string) => void;
@@ -20,13 +26,16 @@ interface ChatInputAreaProps {
   handleSend: () => void;
   handleCancel: () => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
+  replyingTo?: ReplyPreview | null;
+  onCancelReply?: () => void;
 }
 
 export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   inputText, setInputText, textareaRef, messagesEndRef, placeholderText,
   isTyping, activeMode, attachments, removeAttachment,
   showUploadMenu, setShowUploadMenu, imageInputRef, fileInputRef,
-  handleImageSelect, handleFileSelect, handleSend, handleCancel, handleKeyDown
+  handleImageSelect, handleFileSelect, handleSend, handleCancel, handleKeyDown,
+  replyingTo, onCancelReply
 }) => {
   if (activeMode === 'archive') return null;
 
@@ -34,6 +43,19 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     <div className="p-3 pb-6 md:pb-3 bg-wade-bg-card border-t border-wade-border z-30 shrink-0">
       <div className="max-w-4xl mx-auto">
         <div className="bg-wade-bg-app border border-wade-border rounded-3xl px-2 py-2 focus-within:border-wade-accent shadow-inner flex flex-col gap-2 transition-colors">
+          {/* Reply Preview */}
+          {replyingTo && (
+            <div className="flex items-center gap-2 px-2 py-1.5 bg-wade-accent/5 rounded-xl border-l-2 border-wade-accent">
+              <div className="flex-1 min-w-0">
+                <div className="text-[9px] font-bold text-wade-accent">{replyingTo.role}</div>
+                <div className="text-[10px] text-wade-text-muted truncate">{replyingTo.text}</div>
+              </div>
+              <button onClick={onCancelReply} className="text-wade-text-muted hover:text-wade-accent transition-colors shrink-0 p-0.5">
+                <Icons.Close size={12} />
+              </button>
+            </div>
+          )}
+
           {/* Attachment Preview Inside Input */}
           {attachments.length > 0 && (
             <div className="flex gap-2 overflow-x-auto pb-1 px-1">

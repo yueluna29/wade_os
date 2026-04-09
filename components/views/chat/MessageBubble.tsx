@@ -57,6 +57,8 @@ interface MessageBubbleProps {
   msg: Message;
   settings: any;
   onSelect: (id: string) => void;
+  onReply?: (id: string) => void;
+  allMessages?: Message[];
   isSMS: boolean;
   groupPosition?: 'alone' | 'first' | 'middle' | 'last';
   onPlayTTS: (text: string, messageId: string) => void;
@@ -70,7 +72,7 @@ interface MessageBubbleProps {
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  msg, settings, onSelect, isSMS, groupPosition = 'alone', onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration, audioRemainingTime, chatStyle
+  msg, settings, onSelect, onReply, allMessages, isSMS, groupPosition = 'alone', onPlayTTS, onRegenerateTTS, searchQuery, playingMessageId, isPaused, audioDuration, audioRemainingTime, chatStyle
 }) => {
   const isLuna = msg.role === 'Luna';
   const [showThought, setShowThought] = useState(false);
@@ -204,6 +206,22 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const shownModel = currentVariant?.model || msg.model;
 
   const isBase64Image = msg.text.startsWith('data:image/');
+
+  // Quote reply lookup
+  const quotedMsg = msg.replyToId && allMessages ? allMessages.find(m => m.id === msg.replyToId) : null;
+
+  const QuoteCard = () => {
+    if (!quotedMsg) return null;
+    return (
+      <div
+        className="mb-1.5 px-2.5 py-1.5 rounded-lg bg-wade-bg-app/80 border-l-2 border-wade-accent/50 cursor-pointer"
+        onClick={(e) => { e.stopPropagation(); const el = document.getElementById(`msg-${quotedMsg.id}`); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('highlight-flash'); setTimeout(() => el.classList.remove('highlight-flash'), 2000); } }}
+      >
+        <div className="text-[9px] font-bold text-wade-accent/70">{quotedMsg.role}</div>
+        <div className="text-[10px] text-wade-text-muted/70 line-clamp-2 leading-snug">{quotedMsg.text.replace(/\|\|\|/g, ' ').replace(/<think>[\s\S]*?<\/think>/gi, '').slice(0, 80)}</div>
+      </div>
+    );
+  };
 
   // think标签和status标签的正则
   const displayContent = msg.text.replace(/\|\|\|/g, '\n\n').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*<status>[\s\S]*?<\/status>/gi, '').trim();
@@ -422,6 +440,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             )}
 
+            <QuoteCard />
             {renderAttachments()}
             {isBase64Image ? (
               <img

@@ -27,6 +27,7 @@ interface ActionSheetProps {
   regenerateTTS: () => void;
   prevVariant: () => void;
   nextVariant: () => void;
+  onReply?: () => void;
 }
 
 export const ActionSheet: React.FC<ActionSheetProps> = ({
@@ -34,7 +35,7 @@ export const ActionSheet: React.FC<ActionSheetProps> = ({
   isDeleteConfirming, canRegenerate, canBranch, playingMessageId, isPaused,
   closeActions, handleCopy, handleTextSelection, handleRegenerate, handleBranch,
   handleInitEdit, handleSaveEdit, handleFavorite, handleDelete,
-  playTTS, regenerateTTS, prevVariant, nextVariant
+  playTTS, regenerateTTS, prevVariant, nextVariant, onReply
 }) => {
   if (!selectedMsg) return null;
 
@@ -91,6 +92,13 @@ export const ActionSheet: React.FC<ActionSheetProps> = ({
                 <div className="w-12 h-12 bg-wade-bg-app rounded-full flex items-center justify-center text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white transition-colors shadow-sm"><Icons.Copy /></div>
                 <span className="text-[10px] text-wade-text-muted">Copy</span>
               </button>
+
+              {onReply && activeMode !== 'archive' && (
+                <button onClick={(e) => { e.stopPropagation(); onReply(); }} className="flex flex-col items-center gap-2 group">
+                  <div className="w-12 h-12 bg-wade-bg-app rounded-full flex items-center justify-center text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white transition-colors shadow-sm"><Icons.Reply /></div>
+                  <span className="text-[10px] text-wade-text-muted">Reply</span>
+                </button>
+              )}
 
               <button onClick={(e) => { e.stopPropagation(); handleTextSelection(); }} className="flex flex-col items-center gap-2 group">
                 <div className="w-12 h-12 bg-wade-bg-app rounded-full flex items-center justify-center text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white transition-colors shadow-sm"><Icons.TextSelect /></div>
