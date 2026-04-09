@@ -334,8 +334,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Check active hours
-    if (!inActiveHours()) {
+    // 1. Check active hours — skip with force=1
+    if (!force && !inActiveHours()) {
       return res.status(200).json({ skipped: true, reason: 'Outside active hours (Tokyo 8:00-1:00)' });
     }
 
