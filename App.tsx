@@ -14,6 +14,7 @@ import { Home } from './components/views/Home';
 import { TimeCapsulesView } from './components/views/TimeCapsulesView';
 import { WadesPicksView } from './components/views/WadesPicksView';
 import { ThemeLab } from './components/views/ThemeLab';
+import { JournalView } from './components/views/journal/JournalView';
 
 const AppContent = () => {
   const { currentTab, settings, sessions, activeSessionId } = useStore();
@@ -134,6 +135,7 @@ const AppContent = () => {
       case 'time-capsules': return <TimeCapsulesView />;
       case 'wade-picks': return <WadesPicksView />;
       case 'theme-lab': return <ThemeLab />;
+      case 'journal': return <JournalView />;
       default: return <Home />;
     }
   };

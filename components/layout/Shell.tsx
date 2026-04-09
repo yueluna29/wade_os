@@ -145,6 +145,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                       <span className="text-[10px] font-bold text-wade-text-muted">Meds</span>
                    </button>
 
+                   <button onClick={() => handleMenuClick('journal')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
+                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Journal className="w-5 h-5 stroke-[1.5px]" /></div>
+                      <span className="text-[10px] font-bold text-wade-text-muted">Journal</span>
+                   </button>
+
                  </div>
                  {/* Mobile Triangle (Pointing Down) */}
                  {!isDesktop && (
