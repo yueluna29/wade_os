@@ -634,13 +634,13 @@ export const ChatInterface: React.FC = () => {
       if (effectiveLlm?.apiKey) { generateChatTitle(currentInput, effectiveLlm.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
     }
     if (activeMode === 'sms') {
-      // SMS: 5s debounce so Luna can send multiple texts before Wade replies
+      // SMS: 10s debounce so Luna can send multiple texts before Wade replies
       setWaitingForSMS(true);
       if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
       setWadeStatus('typing');
       smsDebounceTimer.current = setTimeout(() => {
         if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput);
-      }, 5000);
+      }, 10000);
     } else {
       // Deep & Roleplay: fire immediately, no reason to make Wade stand in the corner
       setIsTyping(true);

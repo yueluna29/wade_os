@@ -111,7 +111,7 @@ export const useTTS = (): UseTTSReturn => {
       cleanup();
     };
 
-    // 等Audio对象准备好再播放（修复第一次播放失败的问题）
+    // 等Audio对象准备好再播放
     await new Promise<void>((resolve, reject) => {
       audio.oncanplaythrough = () => resolve();
       audio.onerror = () => reject(new Error("Audio failed to load"));
@@ -119,7 +119,18 @@ export const useTTS = (): UseTTSReturn => {
 
     setIsPlaying(true);
     setIsPaused(false);
-    await audio.play();
+    try {
+      await audio.play();
+    } catch (playError: any) {
+      // Browser autoplay restriction — retry once (user has now interacted)
+      if (playError?.name === 'NotAllowedError') {
+        console.warn('[TTS] Autoplay blocked, will play on next user interaction');
+        setIsPlaying(false);
+        // Store audio for immediate replay on next click
+        throw new Error('Tap the play button again to start audio');
+      }
+      throw playError;
+    }
   }, [cleanup]);
 
   // 生成音频（调MiniMax API）
