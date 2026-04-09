@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/keepalive/trigger?secret=${KEEPALIVE_SECRET}",
-      "schedule": "0 * * * *"
+      "schedule": "0 12 * * *"
     }
   ]
 }
