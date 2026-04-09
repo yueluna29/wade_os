@@ -215,7 +215,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             <div className="text-[9px] uppercase tracking-widest text-wade-accent font-bold">Current Default</div>
             {syncError ? (
               <div className="flex items-center gap-1.5 text-[9px] text-red-500 font-bold">
-                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                <div className="w-2 h-2 bg-wade-text-muted/40 rounded-full"></div>
                 Disconnected
               </div>
             ) : (
@@ -234,7 +234,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="text-xs font-bold text-wade-text-main truncate">{activeLlm ? activeLlm.name : 'No model selected'}</div>
                 <div className="text-[10px] text-wade-text-muted truncate">{activeLlm ? activeLlm.model || 'Auto' : 'Add a connection below'}</div>
               </div>
-              {activeLlm && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>}
+              {activeLlm && <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>}
             </div>
             {activeTts && (
               <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
@@ -245,7 +245,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                   <div className="text-xs font-bold text-wade-text-main truncate">{activeTts.name}</div>
                   <div className="text-[10px] text-wade-text-muted truncate">{activeTts.model || 'Standard'} • x{activeTts.speed}</div>
                 </div>
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>
+                <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
               </div>
             )}
             {/* Memory Eval AI */}
@@ -258,8 +258,8 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="text-[10px] text-wade-text-muted truncate">Memory Evaluation{!settings.memoryEvalLlmId && activeMemEval ? ' (default)' : ''}</div>
               </div>
               {activeMemEval?.apiKey
-                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>
-                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0"></div>}
+                ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
+                : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
             </div>
             {/* Vector Embedding AI */}
             <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
@@ -271,8 +271,8 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="text-[10px] text-wade-text-muted truncate">Vector Embedding{!settings.embeddingLlmId && activeEmb ? ' (default)' : ''}</div>
               </div>
               {activeEmb?.apiKey
-                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0"></div>
-                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0"></div>}
+                ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
+                : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
             </div>
             {syncError && (
               <div className="pt-2 border-t border-wade-border/40">

@@ -358,8 +358,8 @@ export const JournalView: React.FC = () => {
                 ))}
               </select>
               {keepaliveLlm?.apiKey
-                ? <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                : <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
+                ? <div className="w-1.5 h-1.5 rounded-full bg-wade-accent animate-pulse shrink-0" />
+                : <div className="w-1.5 h-1.5 rounded-full bg-wade-text-muted/40 shrink-0" />}
             </div>
             <div className="flex items-center gap-1 flex-1 min-w-0">
               <Icons.Translate size={12} className="text-wade-text-muted shrink-0" />
@@ -374,8 +374,8 @@ export const JournalView: React.FC = () => {
                 ))}
               </select>
               {translationLlm?.apiKey
-                ? <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                : <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
+                ? <div className="w-1.5 h-1.5 rounded-full bg-wade-accent animate-pulse shrink-0" />
+                : <div className="w-1.5 h-1.5 rounded-full bg-wade-text-muted/40 shrink-0" />}
             </div>
           </div>
         </div>
@@ -452,7 +452,7 @@ export const JournalView: React.FC = () => {
                                   {item.log.action === 'none' ? 'quiet' : item.log.action}
                                 </span>
                                 <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${
-                                  item.log.mode === 'free' ? 'bg-purple-50 text-purple-500' : 'bg-gray-50 text-gray-400'
+                                  item.log.mode === 'free' ? 'bg-wade-accent-light text-wade-accent' : 'bg-wade-bg-base text-wade-text-muted/50'
                                 }`}>
                                   {item.log.mode}
                                 </span>
@@ -515,8 +515,8 @@ export const JournalView: React.FC = () => {
                                         onClick={e => { e.stopPropagation(); handleTTS(`${id}-thoughts-tts`, item.log.thoughts); }}
                                         className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
                                           playingId === `${id}-thoughts-tts`
-                                            ? 'bg-purple-500 text-white'
-                                            : 'bg-wade-bg-base text-wade-text-muted hover:text-purple-500 hover:bg-purple-50'
+                                            ? 'bg-wade-accent-hover text-white'
+                                            : 'bg-wade-bg-base text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent-light'
                                         }`}
                                       >
                                         <Icons.Voice size={12} />
@@ -544,8 +544,8 @@ export const JournalView: React.FC = () => {
                                         disabled={translatingId === `${id}-thoughts`}
                                         className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
                                           showTranslation[`${id}-thoughts`]
-                                            ? 'bg-purple-500 text-white'
-                                            : 'bg-wade-bg-base text-wade-text-muted hover:text-purple-500 hover:bg-purple-50'
+                                            ? 'bg-wade-accent-hover text-white'
+                                            : 'bg-wade-bg-base text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent-light'
                                         }`}
                                       >
                                         {translatingId === `${id}-thoughts` ? <span className="animate-pulse">...</span> : <><Icons.Translate size={12} /><span>{showTranslation[`${id}-thoughts`] ? 'Hide' : 'Thoughts'}</span></>}
@@ -556,8 +556,8 @@ export const JournalView: React.FC = () => {
 
                                 {/* Thoughts translation */}
                                 {showTranslation[`${id}-thoughts`] && translations[`${id}-thoughts`] && (
-                                  <div className="p-2.5 bg-purple-50 rounded-xl border border-purple-100">
-                                    <p className="text-[9px] font-bold text-purple-400 uppercase tracking-wider mb-1">Inner thoughts (CN)</p>
+                                  <div className="p-2.5 bg-wade-accent-light rounded-xl border border-wade-border">
+                                    <p className="text-[9px] font-bold text-wade-accent uppercase tracking-wider mb-1">Inner thoughts (CN)</p>
                                     <p className="text-[11px] text-wade-text-main/80 leading-relaxed">{translations[`${id}-thoughts`]}</p>
                                   </div>
                                 )}

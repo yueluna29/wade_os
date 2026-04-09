@@ -170,11 +170,11 @@ export const XRayModal: React.FC<XRayModalProps> = ({
               <div className="text-lg font-black text-wade-text-main tracking-tight line-clamp-1 px-1">{wadeCard?.name || 'None'}</div>
               <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">{modeKey}</div>
             </div>
-            <div className={`bg-wade-bg-card p-4 rounded-2xl border shadow-sm flex flex-col items-center justify-center text-center ${memorySystemActive ? 'border-green-500/30' : 'border-red-400/30'}`}>
+            <div className={`bg-wade-bg-card p-4 rounded-2xl border shadow-sm flex flex-col items-center justify-center text-center ${memorySystemActive ? 'border-wade-accent/30' : 'border-wade-border'}`}>
               <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Smart Memory</div>
               <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${memorySystemActive ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`} />
-                <div className={`text-sm font-black tracking-tight ${memorySystemActive ? 'text-green-600' : 'text-red-400'}`}>
+                <div className={`w-2 h-2 rounded-full ${memorySystemActive ? 'bg-wade-accent animate-pulse' : 'bg-wade-text-muted/40'}`} />
+                <div className={`text-sm font-black tracking-tight ${memorySystemActive ? 'text-wade-accent' : 'text-wade-text-muted'}`}>
                   {memorySystemActive ? 'Active' : 'Off'}
                 </div>
               </div>
