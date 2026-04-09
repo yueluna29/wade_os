@@ -48,6 +48,13 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const [systemInstruction, setSystemInstruction] = useState(settings.systemInstruction || '');
   const [smsInstructions, setSmsInstructions] = useState(settings.smsInstructions || '');
   const [roleplayInstructions, setRoleplayInstructions] = useState(settings.roleplayInstructions || '');
+  const [keepalivePrompt, setKeepalivePrompt] = useState('');
+
+  // Load keepalive prompt from Supabase (not in store)
+  useEffect(() => {
+    supabase.from('app_settings').select('keepalive_prompt').limit(1).single()
+      .then(({ data }) => { if (data?.keepalive_prompt) setKeepalivePrompt(data.keepalive_prompt); });
+  }, []);
 
   const wadeFileRef = useRef<HTMLInputElement>(null);
   const lunaFileRef = useRef<HTMLInputElement>(null);
@@ -242,9 +249,14 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
         });
       }
 
+      // Save keepalive prompt to app_settings
+      if (keepalivePrompt) {
+        await supabase.from('app_settings').update({ keepalive_prompt: keepalivePrompt }).eq('id', 1);
+      }
+
       setTimeout(() => {
          setIsSaving(false);
-         alert("Data injected into the brainpan and Supabase successfully! 🌮"); 
+         alert("Data injected into the brainpan and Supabase successfully!");
       }, 600);
 
     } catch (error) {
@@ -351,6 +363,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
               systemInstruction={systemInstruction} setSystemInstruction={setSystemInstruction}
               smsInstructions={smsInstructions} setSmsInstructions={setSmsInstructions}
               roleplayInstructions={roleplayInstructions} setRoleplayInstructions={setRoleplayInstructions}
+              keepalivePrompt={keepalivePrompt} setKeepalivePrompt={setKeepalivePrompt}
               setFocusModal={setFocusModal}
             />
           )}

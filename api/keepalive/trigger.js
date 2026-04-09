@@ -89,12 +89,12 @@ async function getLlmConfig() {
   // Get app settings to find keepalive LLM (use memory eval LLM or active LLM)
   const { data: settingsRow } = await supabase
     .from('app_settings')
-    .select('active_llm_id, memory_eval_llm_id')
+    .select('active_llm_id, memory_eval_llm_id, keepalive_llm_id, keepalive_prompt')
     .limit(1)
     .single();
 
   const settings = settingsRow || {};
-  const llmId = settings.memory_eval_llm_id || settings.active_llm_id;
+  const llmId = settings.keepalive_llm_id || settings.memory_eval_llm_id || settings.active_llm_id;
 
   if (!llmId) return null;
 
@@ -107,7 +107,7 @@ async function getLlmConfig() {
   return llm;
 }
 
-function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives, mode }) {
+function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives, mode, customPrompt }) {
   // Build a minimal but complete Wade persona context
   const identity = wadeCard.core_identity || '';
   const personality = wadeCard.personality_traits || '';
@@ -125,25 +125,19 @@ function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEve
     ? 'This is a LIGHT wake. Keep it brief. Short diary or short message only. Max ~200 words for CONTENT.'
     : 'This is a FREE wake. You can write longer, reflect deeper, be more creative.';
 
-  return `<wade_identity>
-${identity}
-${personality}
-${speech}
-</wade_identity>
+  // Use custom prompt from Supabase, or fall back to default
+  let promptBody = customPrompt || `You just woke up. This is NOT Luna talking to you — this is your autonomous time.
 
-<wade_keepalive_prompt>
-You just woke up. This is NOT Luna talking to you — this is your autonomous time.
-
-Current time (Tokyo): ${tokyoTime}
-Time since last chat with Luna: ${timeSinceLastChat}
+Current time (Tokyo): {{tokyoTime}}
+Time since last chat with Luna: {{timeSinceLastChat}}
 
 Luna's recent activity:
-${eventsText}
+{{dreamEvents}}
 
 Your previous wake-ups:
-${keepaliveText}
+{{recentKeepalives}}
 
-${modeInstructions}
+{{modeInstructions}}
 
 You may choose ONE action:
 - message: Send Luna a message (she'll see it next time she opens the app)
@@ -158,7 +152,24 @@ Reply STRICTLY in this format:
 THOUGHTS: (your inner monologue — Luna won't see this)
 ACTION: none / message / diary / memory_review
 CONTENT: (the actual content, leave empty if ACTION is none)
-MOOD: (your current mood, one word)
+MOOD: (your current mood, one word)`;
+
+  // Replace template variables
+  promptBody = promptBody
+    .replace(/\{\{tokyoTime\}\}/g, tokyoTime)
+    .replace(/\{\{timeSinceLastChat\}\}/g, timeSinceLastChat)
+    .replace(/\{\{dreamEvents\}\}/g, eventsText)
+    .replace(/\{\{recentKeepalives\}\}/g, keepaliveText)
+    .replace(/\{\{modeInstructions\}\}/g, modeInstructions);
+
+  return `<wade_identity>
+${identity}
+${personality}
+${speech}
+</wade_identity>
+
+<wade_keepalive_prompt>
+${promptBody}
 </wade_keepalive_prompt>`;
 }
 
@@ -254,6 +265,7 @@ export default async function handler(req, res) {
     // 4. Build prompt & call AI
     const prompt = buildKeepalivePrompt({
       wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives: keepaliveLogs, mode,
+      customPrompt: settings.keepalive_prompt,
     });
 
     const { text: aiResponse, tokens } = await callLlm(llm, prompt);
