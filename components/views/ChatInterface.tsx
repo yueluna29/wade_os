@@ -284,7 +284,20 @@ export const ChatInterface: React.FC = () => {
     });
 
   // === NAVIGATION HANDLERS ===
-  const handleModeSelect = (mode: ChatMode) => { setMode(mode); setViewState('list'); setSessionPage(1); };
+  const handleModeSelect = (mode: ChatMode) => {
+    setMode(mode);
+    setSessionPage(1);
+    // SMS: auto-enter most recent session (like c.ai)
+    if (mode === 'sms') {
+      const smsSessions = sessions.filter(s => s.mode === 'sms').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      if (smsSessions.length > 0) {
+        setActiveSessionId(smsSessions[0].id);
+        setViewState('chat');
+        return;
+      }
+    }
+    setViewState('list');
+  };
   const handleOpenSession = (sessionId: string) => { setActiveSessionId(sessionId); setViewState('chat'); };
   
   const handleOpenArchive = async (archiveId: string) => {
@@ -307,7 +320,12 @@ export const ChatInterface: React.FC = () => {
       if (activeMode === 'archive' && activeArchiveId && messagesContainerRef.current) {
         setArchiveScrollPositions(prev => ({ ...prev, [activeArchiveId]: messagesContainerRef.current!.scrollTop }));
       }
-      setViewState('list'); setActiveSessionId(null); setActiveArchiveId(null); setArchiveMessages([]);
+      // SMS: back from chat goes straight to menu (skips list)
+      if (activeMode === 'sms') {
+        setViewState('menu'); setActiveSessionId(null);
+      } else {
+        setViewState('list'); setActiveSessionId(null); setActiveArchiveId(null); setArchiveMessages([]);
+      }
     } else if (viewState === 'list') { setViewState('menu'); }
   };
 
@@ -818,7 +836,7 @@ export const ChatInterface: React.FC = () => {
             {activeMode === 'sms' && (
               <div className="relative">
                 <img src={settings.wadeAvatar} className="w-10 h-10 rounded-full object-cover border border-wade-border shadow-md flex-shrink-0" />
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 border-2 border-wade-bg-card rounded-full"></div>
+                <div className="absolute bottom-0 right-0 w-3 h-3 bg-wade-accent border-2 border-wade-bg-card rounded-full"></div>
               </div>
             )}
             <div className="flex flex-col min-w-0">
@@ -836,6 +854,7 @@ export const ChatInterface: React.FC = () => {
         )}
         <div className="flex items-center gap-2">
           <button onClick={() => { setShowSearch(!showSearch); setShowMap(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Search /></button>
+          {activeMode === 'sms' && <button onClick={() => setViewState('list')} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors" title="Chat history"><Icons.Clock /></button>}
           <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Map /></button>
           <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative"><Icons.More /></button>
         </div>
