@@ -654,9 +654,9 @@ export const ChatInterface: React.FC = () => {
     scrollToBottom();
     if (textareaRef.current) { textareaRef.current.style.height = '48px'; textareaRef.current.focus(); }
     if (isFirstMessage) {
-      // Title generation uses Gemini — find any Gemini preset, or fall back to first preset with key
-      const geminiPreset = llmPresets.find(p => p.provider === 'Gemini' && p.apiKey) || llmPresets.find(p => p.apiKey);
-      if (geminiPreset?.apiKey) { generateChatTitle(currentInput, geminiPreset.apiKey).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
+      // Use any available LLM for title generation (prefer Gemini for speed/cost)
+      const titleLlm = llmPresets.find(p => p.provider === 'Gemini' && p.apiKey) || llmPresets.find(p => p.apiKey);
+      if (titleLlm?.apiKey) { generateChatTitle(currentInput, titleLlm).then(title => { if (targetSessionId) updateSessionTitle(targetSessionId, title); }).catch(err => console.error("Failed to generate title:", err)); }
     }
     if (activeMode === 'sms') {
       // SMS: 10s debounce so Luna can send multiple texts before Wade replies
@@ -878,7 +878,7 @@ export const ChatInterface: React.FC = () => {
               { icon: <Icons.Fire />, label: "Add Special Sauce", action: () => { setShowPromptEditor(true); setShowMenu(false); const cs = sessions.find(s => s.id === activeSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
               { icon: <Icons.Skin />, label: "Chat Style", action: () => { setIsChatThemeOpen(true); setShowMenu(false); } },
               { icon: <Icons.Bug />, label: "X-Ray Vision", action: () => { setShowDebug(true); setShowMenu(false); } },
-              ...(activeMode === 'sms' ? [{ icon: <Icons.Clock />, label: "Chat History", action: () => { setViewState('list'); setShowMenu(false); } }] : []),
+              ...(activeMode === 'sms' ? [{ icon: <Icons.Clock size={14} />, label: "Chat History", action: () => { setViewState('list'); setShowMenu(false); } }] : []),
             ].map((item, i) => (
               <button key={i} onClick={item.action} className="w-full text-left px-3 py-2 rounded-lg hover:bg-wade-bg-card/60 transition-colors text-wade-text-main text-[11px] flex items-center gap-2.5 whitespace-nowrap">
                 <div className="w-5 flex justify-center">{item.icon}</div>

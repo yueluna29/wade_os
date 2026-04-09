@@ -693,18 +693,37 @@ export const generateTextResponse = async (
   return { text: finalText, thinking };
 };
 
-export const generateChatTitle = async (firstMessage: string, apiKey?: string): Promise<string> => {
-  const ai = getClient(apiKey);
-  const prompt = `Summarize the following user message into a very short title (max 10 Chinese characters or 5 English words). It's for a chat history list. Message: "${firstMessage}"`;
-  
+export const generateChatTitle = async (firstMessage: string, apiKeyOrPreset?: string | { provider: string; model: string; apiKey: string; baseUrl: string }): Promise<string> => {
+  const prompt = `Summarize the following user message into a very short title (max 10 Chinese characters or 5 English words). It's for a chat history list. Output ONLY the title. Message: "${firstMessage}"`;
+
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt
-    });
+    // If a full preset is passed and it's not Gemini, use OpenAI-compatible path
+    if (typeof apiKeyOrPreset === 'object') {
+      const preset = apiKeyOrPreset;
+      const isGemini = !preset.baseUrl || preset.baseUrl.includes('google');
+
+      if (isGemini) {
+        const ai = getClient(preset.apiKey);
+        const response = await ai.models.generateContent({ model: preset.model || 'gemini-3-flash-preview', contents: prompt });
+        let title = response.text?.trim() || "New Chat";
+        return title.replace(/^["']|["']$/g, '');
+      } else {
+        const res = await fetch(`${preset.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${preset.apiKey}` },
+          body: JSON.stringify({ model: preset.model, messages: [{ role: 'user', content: prompt }], temperature: 0.3, max_tokens: 30 }),
+        });
+        const json = await res.json();
+        let title = json.choices?.[0]?.message?.content?.trim() || "New Chat";
+        return title.replace(/^["']|["']$/g, '');
+      }
+    }
+
+    // Legacy: plain API key, assume Gemini
+    const ai = getClient(typeof apiKeyOrPreset === 'string' ? apiKeyOrPreset : undefined);
+    const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
     let title = response.text?.trim() || "New Chat";
-    title = title.replace(/^["']|["']$/g, '');
-    return title;
+    return title.replace(/^["']|["']$/g, '');
   } catch (e) {
     return "New Chat";
   }
