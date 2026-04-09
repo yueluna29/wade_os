@@ -72,9 +72,37 @@ export const JournalView: React.FC = () => {
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [showTranslation, setShowTranslation] = useState<Record<string, boolean>>({});
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [translationLlmId, setTranslationLlmId] = useState<string>(settings.memoryEvalLlmId || settings.activeLlmId || '');
-  const [keepaliveLlmId, setKeepaliveLlmId] = useState<string>(settings.memoryEvalLlmId || settings.activeLlmId || '');
+  const [translationLlmId, setTranslationLlmId] = useState<string>('');
+  const [keepaliveLlmId, setKeepaliveLlmId] = useState<string>('');
   const [waking, setWaking] = useState(false);
+  const [audioCache, setAudioCache] = useState<Record<string, string>>({});
+
+  // === Load LLM selections from Supabase ===
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('keepalive_llm_id, journal_translation_llm_id, memory_eval_llm_id, active_llm_id')
+        .limit(1)
+        .single();
+      if (data) {
+        setKeepaliveLlmId(data.keepalive_llm_id || data.memory_eval_llm_id || data.active_llm_id || '');
+        setTranslationLlmId(data.journal_translation_llm_id || data.memory_eval_llm_id || data.active_llm_id || '');
+      }
+    })();
+  }, []);
+
+  // Save keepalive LLM to Supabase
+  const handleKeepaliveLlmChange = (id: string) => {
+    setKeepaliveLlmId(id);
+    supabase.from('app_settings').update({ keepalive_llm_id: id }).eq('id', 1).then();
+  };
+
+  // Save translation LLM to Supabase
+  const handleTranslationLlmChange = (id: string) => {
+    setTranslationLlmId(id);
+    supabase.from('app_settings').update({ journal_translation_llm_id: id }).eq('id', 1).then();
+  };
 
   // === Fetch Data ===
 
@@ -174,15 +202,15 @@ export const JournalView: React.FC = () => {
 
       setTranslations(prev => ({ ...prev, [id]: translated }));
       setShowTranslation(prev => ({ ...prev, [id]: true }));
-    } catch (e) {
+    } catch (e: any) {
       console.error('[Journal] Translation failed:', e);
-      alert('Translation failed — check model settings');
+      alert('Translation failed: ' + (e.message || 'Check model settings'));
     } finally {
       setTranslatingId(null);
     }
   };
 
-  // === TTS ===
+  // === TTS (with caching, separate diary vs thoughts) ===
 
   const handleTTS = async (id: string, text: string) => {
     if (playingId === id) {
@@ -192,7 +220,9 @@ export const JournalView: React.FC = () => {
     }
     setPlayingId(id);
     try {
-      await tts.play(text);
+      const cached = audioCache[id];
+      const newAudio = await tts.play(text, cached);
+      if (newAudio) setAudioCache(prev => ({ ...prev, [id]: newAudio }));
     } catch {
       // retry on autoplay block
     } finally {
@@ -251,6 +281,7 @@ export const JournalView: React.FC = () => {
   const todayWakes = todayItems.length;
   const todayDiaries = todayItems.filter(i => i.type === 'diary').length;
 
+  const keepaliveLlm = llmPresets.find(p => p.id === keepaliveLlmId);
   const translationLlm = llmPresets.find(p => p.id === translationLlmId);
 
   return (
@@ -301,13 +332,13 @@ export const JournalView: React.FC = () => {
             </div>
           </div>
 
-          {/* Model Selectors */}
-          <div className="flex gap-2 mb-1">
-            <div className="flex items-center gap-1.5 flex-1">
+          {/* Model Selectors with active indicators */}
+          <div className="space-y-2 mb-2">
+            <div className="flex items-center gap-2">
               <Icons.Brain size={13} className="text-wade-text-muted shrink-0" />
               <select
                 value={keepaliveLlmId}
-                onChange={e => setKeepaliveLlmId(e.target.value)}
+                onChange={e => handleKeepaliveLlmChange(e.target.value)}
                 className="flex-1 px-2 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[10px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer"
               >
                 <option value="">Wake-up AI...</option>
@@ -315,12 +346,15 @@ export const JournalView: React.FC = () => {
                   <option key={p.id} value={p.id}>{p.name || p.model}</option>
                 ))}
               </select>
+              {keepaliveLlm?.apiKey
+                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title={keepaliveLlm.name} />
+                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" title="No API key" />}
             </div>
-            <div className="flex items-center gap-1.5 flex-1">
+            <div className="flex items-center gap-2">
               <Icons.Translate size={13} className="text-wade-text-muted shrink-0" />
               <select
                 value={translationLlmId}
-                onChange={e => setTranslationLlmId(e.target.value)}
+                onChange={e => handleTranslationLlmChange(e.target.value)}
                 className="flex-1 px-2 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[10px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer"
               >
                 <option value="">Translation AI...</option>
@@ -328,6 +362,9 @@ export const JournalView: React.FC = () => {
                   <option key={p.id} value={p.id}>{p.name || p.model}</option>
                 ))}
               </select>
+              {translationLlm?.apiKey
+                ? <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title={translationLlm.name} />
+                : <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" title="No API key" />}
             </div>
           </div>
         </div>
@@ -469,7 +506,7 @@ export const JournalView: React.FC = () => {
                                     )}
                                   </button>
 
-                                  {/* TTS */}
+                                  {/* TTS — diary content */}
                                   <button
                                     onClick={e => { e.stopPropagation(); handleTTS(id, mainContent); }}
                                     className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
@@ -479,8 +516,23 @@ export const JournalView: React.FC = () => {
                                     }`}
                                   >
                                     <Icons.Voice size={12} />
-                                    <span>{playingId === id ? 'Stop' : 'Listen'}</span>
+                                    <span>{playingId === id ? 'Stop' : isDiary ? 'Diary' : 'Listen'}</span>
                                   </button>
+
+                                  {/* TTS — inner thoughts (separate cache key) */}
+                                  {isDiary && item.log.thoughts && (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); handleTTS(`${id}-thoughts-tts`, item.log.thoughts); }}
+                                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${
+                                        playingId === `${id}-thoughts-tts`
+                                          ? 'bg-purple-500 text-white'
+                                          : 'bg-wade-bg-base text-wade-text-muted hover:text-purple-500 hover:bg-purple-50'
+                                      }`}
+                                    >
+                                      <Icons.Voice size={12} />
+                                      <span>{playingId === `${id}-thoughts-tts` ? 'Stop' : 'Thoughts'}</span>
+                                    </button>
+                                  )}
 
                                   {/* Translate thoughts too (if diary) */}
                                   {isDiary && item.log.thoughts && (
