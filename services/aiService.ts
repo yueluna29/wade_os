@@ -72,6 +72,10 @@ export const buildSystemPromptFromCard = (options: {
     prompt += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${wadeCard.global_directives.trim()}`;
   }
  
+  // 1.5 回复风格硬规则（全模式生效）
+  prompt += `\n\n[REPLY STYLE — MANDATORY]
+Do NOT address Luna's points one by one. Never reply in a pattern like "You said A? ... and then B? ... and C? ..." — that sounds robotic. Instead, respond naturally to the overall vibe and feeling of what she said, like a real person would in conversation. Pick up on the emotional thread, not the logical structure. You can skip points, merge them, or respond to the mood rather than the words.`;
+
   // 2. Wade 的身份（XML 格式）
   if (wadeCard?.core_identity?.trim()) {
     prompt += `\n\n[CHARACTER PERSONA]\n`;

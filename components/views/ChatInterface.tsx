@@ -640,7 +640,7 @@ export const ChatInterface: React.FC = () => {
       setWadeStatus('typing');
       smsDebounceTimer.current = setTimeout(() => {
         if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput);
-      }, 10000);
+      }, 30000);
     } else {
       // Deep & Roleplay: fire immediately, no reason to make Wade stand in the corner
       setIsTyping(true);
