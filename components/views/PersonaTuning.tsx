@@ -5,6 +5,7 @@ import { uploadToImgBB } from '../../services/imgbb';
 import { Icons } from '../ui/Icons';
 import { FocusModalEditor } from '../ui/FocusModalEditor';
 import { WadePersonaTab } from './persona/WadePersonaTab';
+import { WadePersonaTabCompact } from './persona/WadePersonaTabCompact';
 import { WadeCardCarousel } from './persona/WadeCardCarousel';
 import { LunaPersonaTab } from './persona/LunaPersonaTab';
 import { SystemPersonaTab } from './persona/SystemPersonaTab';
@@ -17,6 +18,13 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const [activeTab, setActiveTab] = useState<TabState>('wade');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [wadeFormStyle, setWadeFormStyle] = useState<'classic' | 'compact'>(() => {
+    return (localStorage.getItem('wade_form_style') as 'classic' | 'compact') || 'compact';
+  });
+  const toggleWadeFormStyle = (s: 'classic' | 'compact') => {
+    setWadeFormStyle(s);
+    localStorage.setItem('wade_form_style', s);
+  };
   
   const [focusModal, setFocusModal] = useState<{label: string, value: string, onSave: (val: string) => void} | null>(null);
 
@@ -389,6 +397,46 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
                 await updateFunctionBinding(fnKey, { personaCardId: currentlyBound ? null : cardId });
               }}
             />
+
+            {/* Form style toggle */}
+            <div className="flex items-center justify-end gap-1 mb-3">
+              <span className="text-[9px] text-wade-text-muted/60 uppercase tracking-wider font-bold mr-1">Form</span>
+              <div className="bg-wade-bg-card border border-wade-border rounded-full p-0.5 flex shadow-sm">
+                <button
+                  onClick={() => toggleWadeFormStyle('compact')}
+                  className={`px-3 py-1 rounded-full text-[9px] font-bold transition-colors ${
+                    wadeFormStyle === 'compact' ? 'bg-wade-accent text-white' : 'text-wade-text-muted hover:text-wade-accent'
+                  }`}
+                >Compact</button>
+                <button
+                  onClick={() => toggleWadeFormStyle('classic')}
+                  className={`px-3 py-1 rounded-full text-[9px] font-bold transition-colors ${
+                    wadeFormStyle === 'classic' ? 'bg-wade-accent text-white' : 'text-wade-text-muted hover:text-wade-accent'
+                  }`}
+                >Classic</button>
+              </div>
+            </div>
+
+            {wadeFormStyle === 'compact' ? (
+            <WadePersonaTabCompact
+              settings={settings}
+              wadeBirthday={wadeBirthday} setWadeBirthday={setWadeBirthday}
+              wadeMbti={wadeMbti} setWadeMbti={setWadeMbti}
+              wadeHeight={wadeHeight} setWadeHeight={setWadeHeight}
+              wadeAppearance={wadeAppearance} setWadeAppearance={setWadeAppearance}
+              wadeClothing={wadeClothing} setWadeClothing={setWadeClothing}
+              wadeHobbies={wadeHobbies} setWadeHobbies={setWadeHobbies}
+              wadeLikes={wadeLikes} setWadeLikes={setWadeLikes}
+              wadeDislikes={wadeDislikes} setWadeDislikes={setWadeDislikes}
+              wadeDefinition={wadeDefinition} setWadeDefinition={setWadeDefinition}
+              wadeSingleExamples={wadeSingleExamples} setWadeSingleExamples={setWadeSingleExamples}
+              wadeExample={wadeExample} setWadeExample={setWadeExample}
+              smsExampleDialogue={smsExampleDialogue} setSmsExampleDialogue={setSmsExampleDialogue}
+              wadeFileRef={wadeFileRef}
+              handleAvatarChange={handleAvatarChange}
+              setFocusModal={setFocusModal}
+            />
+            ) : (
             <WadePersonaTab
               settings={settings}
               wadeBirthday={wadeBirthday} setWadeBirthday={setWadeBirthday}
@@ -407,6 +455,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
               handleAvatarChange={handleAvatarChange}
               setFocusModal={setFocusModal}
             />
+            )}
             </>
           )}
 
