@@ -954,7 +954,7 @@ export const ChatInterface: React.FC = () => {
                   <div className="flex items-center gap-3 my-3 px-4 select-none">
                     <div className="flex-1 h-px bg-wade-accent/20" />
                     <span className="text-[9px] text-wade-accent/50 font-medium whitespace-nowrap italic">
-                      Wade was here · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      Wade was here · {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{msg.model ? ` · ${msg.model}` : ''}
                     </span>
                     <div className="flex-1 h-px bg-wade-accent/20" />
                   </div>
