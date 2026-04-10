@@ -106,7 +106,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
           const isEditingDesc = descEditingId === card.id;
 
           return (
-            <div key={card.id} className="shrink-0 snap-center w-[85%] md:w-[280px] px-1 group perspective-1000">
+            <div key={card.id} className="min-w-full snap-center px-1 group perspective-1000">
               <div
                 className={`relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:-translate-y-1 h-full bg-wade-bg-card ${
                   isActive
@@ -252,7 +252,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
         })}
 
         {/* "+" new card tile — envelope style */}
-        <div className="shrink-0 snap-center w-[85%] md:w-[280px] px-1 group perspective-1000">
+        <div className="min-w-full snap-center px-1 group perspective-1000">
           <button
             onClick={onCreateNew}
             className="relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:-translate-y-1 h-full w-full bg-wade-bg-card/40 border-2 border-dashed border-wade-border hover:border-wade-accent hover:bg-wade-accent-light/30 flex flex-col items-center justify-center py-14 gap-2 text-wade-text-muted hover:text-wade-accent"
