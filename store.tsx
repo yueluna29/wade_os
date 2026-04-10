@@ -387,6 +387,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                         likes: p.like !== undefined ? p.like : (p.likes || 0),
                         comments: typeof p.comments === 'string' ? JSON.parse(p.comments) : (p.comments || []),
                         isBookmarked: p.is_bookmarked || false,
+                        wadeBookmarked: p.wade_bookmarked || false,
                      };
                  }));
              }
@@ -1059,7 +1060,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       images: p.images,
       likes: p.likes,
       comments: p.comments,
-      is_bookmarked: p.isBookmarked
+      is_bookmarked: p.isBookmarked,
+      wade_bookmarked: p.wadeBookmarked
     }).eq('id', p.id);
     if (error) console.error('updatePost failed:', error);
   };

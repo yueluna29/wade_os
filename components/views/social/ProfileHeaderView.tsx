@@ -53,8 +53,8 @@ export const ProfileHeaderView: React.FC<ProfileHeaderViewProps> = ({
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'memories' | 'echoes' | 'vault'>('memories');
 
-  // ─── Vault: 收藏过的帖子 ───
-  const bookmarkedPosts = allPosts.filter(p => p.isBookmarked);
+  // ─── Vault: 根据当前profile显示对应的收藏 ───
+  const bookmarkedPosts = allPosts.filter(p => isLuna ? p.isBookmarked : p.wadeBookmarked);
 
   // ─── Echoes: 这个人在所有帖子下发过的评论 ───
   const userEchoes: { comment: any; post: SocialPost }[] = [];

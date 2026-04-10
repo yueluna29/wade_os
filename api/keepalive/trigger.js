@@ -123,10 +123,10 @@ async function getRecentChats(limit = 15) {
   return (data || []).reverse();
 }
 
-async function getRecentSocialPosts(limit = 5) {
+async function getRecentSocialPosts(limit = 8) {
   const { data } = await supabase
     .from('social_posts')
-    .select('author, content, created_at')
+    .select('id, author, content, created_at, likes, comments, wade_bookmarked')
     .order('created_at', { ascending: false })
     .limit(limit);
   return data || [];
@@ -172,7 +172,11 @@ function formatChatsForPrompt(chats) {
 
 function formatSocialForPrompt(posts) {
   if (!posts.length) return '  (No social posts)';
-  return posts.map(p => `  [${p.author}] ${p.content?.slice(0, 120)}`).join('\n');
+  return posts.map(p => {
+    const commentCount = Array.isArray(p.comments) ? p.comments.length : 0;
+    const bookmarkMark = p.wade_bookmarked ? ' [BOOKMARKED]' : '';
+    return `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}" (likes: ${p.likes || 0}, comments: ${commentCount})${bookmarkMark}`;
+  }).join('\n');
 }
 
 function formatCapsulesForPrompt(capsules) {
@@ -354,6 +358,63 @@ async function executeDiary(content, mood, keepaliveId) {
   });
 }
 
+// ========== Social action executors ==========
+
+async function executePostSocial(content) {
+  if (!content?.trim()) return null;
+  const { data, error } = await supabase.from('social_posts').insert({
+    id: `wp-${Date.now()}`,
+    author: 'Wade',
+    content: content.trim(),
+    images: [],
+    likes: 0,
+    comments: [],
+    is_bookmarked: false,
+    wade_bookmarked: false,
+  }).select().single();
+  if (error) { console.error('[Keepalive] Post failed:', error); return null; }
+  return data?.id;
+}
+
+async function executeLikePost(postId) {
+  if (!postId) return false;
+  const { data: post } = await supabase.from('social_posts').select('likes').eq('id', postId).maybeSingle();
+  if (!post) return false;
+  await supabase.from('social_posts').update({ likes: (post.likes || 0) + 1 }).eq('id', postId);
+  return true;
+}
+
+async function executeCommentPost(postId, commentText) {
+  if (!postId || !commentText?.trim()) return false;
+  const { data: post } = await supabase.from('social_posts').select('comments').eq('id', postId).maybeSingle();
+  if (!post) return false;
+  const comments = Array.isArray(post.comments) ? post.comments : [];
+  comments.push({
+    id: `c-${Date.now()}`,
+    author: 'Wade',
+    text: commentText.trim(),
+    timestamp: Date.now(),
+  });
+  await supabase.from('social_posts').update({ comments }).eq('id', postId);
+  return true;
+}
+
+async function executeBookmarkPost(postId) {
+  if (!postId) return false;
+  const { data: post } = await supabase.from('social_posts').select('wade_bookmarked').eq('id', postId).maybeSingle();
+  if (!post) return false;
+  await supabase.from('social_posts').update({ wade_bookmarked: !post.wade_bookmarked }).eq('id', postId);
+  return true;
+}
+
+// Parse social action CONTENT — format: "postId|extra text" for comment, just "postId" for like/bookmark
+function parseSocialContent(content) {
+  if (!content) return { postId: null, text: null };
+  const idx = content.indexOf('|');
+  if (idx === -1) return { postId: content.trim(), text: null };
+  return { postId: content.slice(0, idx).trim(), text: content.slice(idx + 1).trim() };
+}
+
 // ========== Main Handler ==========
 
 export default async function handler(req, res) {
@@ -478,7 +539,11 @@ MOOD: (one word)`;
     const parsed = parseKeepaliveResponse(aiResponse);
 
     // Validate action
-    const validActions = ['none', 'message', 'diary', 'memory_review', 'read_chat', 'read_social', 'read_capsules'];
+    const validActions = [
+      'none', 'message', 'diary', 'memory_review',
+      'read_chat', 'read_social', 'read_capsules',
+      'post_social', 'like_post', 'comment_post', 'bookmark_post',
+    ];
     if (!validActions.includes(parsed.action)) {
       parsed.action = 'none';
     }
@@ -531,6 +596,45 @@ MOOD: (one word)`;
           await executeDiary(parsed.content, parsed.mood, keepaliveId);
         }
         break;
+
+      case 'post_social': {
+        // CONTENT = the post body
+        const newPostId = await executePostSocial(parsed.content);
+        if (newPostId) {
+          await executeDiary(`[Posted on socialfeed] ${parsed.content}`, parsed.mood, keepaliveId);
+        }
+        break;
+      }
+
+      case 'like_post': {
+        // CONTENT = "postId" or "postId|reaction text"
+        const { postId, text } = parseSocialContent(parsed.content);
+        const ok = await executeLikePost(postId);
+        if (ok && (text || parsed.content)) {
+          await executeDiary(`[Liked a post] ${text || `(post ${postId})`}`, parsed.mood, keepaliveId);
+        }
+        break;
+      }
+
+      case 'comment_post': {
+        // CONTENT = "postId|comment text"
+        const { postId, text } = parseSocialContent(parsed.content);
+        const ok = await executeCommentPost(postId, text || '');
+        if (ok) {
+          await executeDiary(`[Commented on a post] ${text}`, parsed.mood, keepaliveId);
+        }
+        break;
+      }
+
+      case 'bookmark_post': {
+        // CONTENT = "postId" or "postId|why i saved it"
+        const { postId, text } = parseSocialContent(parsed.content);
+        const ok = await executeBookmarkPost(postId);
+        if (ok) {
+          await executeDiary(`[Bookmarked a post] ${text || `(post ${postId})`}`, parsed.mood, keepaliveId);
+        }
+        break;
+      }
 
       case 'none':
       default:

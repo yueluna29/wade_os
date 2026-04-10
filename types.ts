@@ -137,11 +137,12 @@ export interface SocialPost {
   id: string;
   author: 'Luna' | 'Wade';
   content: string;
-  images?: string[]; // Changed from image?: string to support multiple
+  images?: string[];
   timestamp: number;
   comments: SocialComment[];
   likes: number;
-  isBookmarked?: boolean;
+  isBookmarked?: boolean; // Luna bookmarked
+  wadeBookmarked?: boolean; // Wade bookmarked
 }
 
 export interface SocialComment {
