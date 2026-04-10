@@ -44,7 +44,7 @@ export const QuickModelSwitcher: React.FC<QuickModelSwitcherProps> = ({
   if (!llmPresets || llmPresets.length === 0) return null;
 
   return (
-    <div ref={ref} className="relative flex justify-center mb-1.5 select-none">
+    <div ref={ref} className="relative flex justify-start mb-0.5 select-none">
       <button
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
@@ -62,7 +62,7 @@ export const QuickModelSwitcher: React.FC<QuickModelSwitcherProps> = ({
 
       {/* Dropdown — opens upward */}
       {open && (
-        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-[260px] bg-wade-bg-card rounded-2xl shadow-xl border border-wade-border/70 overflow-hidden animate-fade-in backdrop-blur-md">
+        <div className="absolute bottom-full mb-2 left-0 z-50 w-[260px] bg-wade-bg-card rounded-2xl shadow-xl border border-wade-border/70 overflow-hidden animate-fade-in backdrop-blur-md">
           <div className="px-3 py-2 border-b border-wade-border/50 bg-wade-bg-app/50">
             <div className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-[0.15em]">Switch Brain</div>
           </div>

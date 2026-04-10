@@ -1039,7 +1039,7 @@ export const ChatInterface: React.FC = () => {
 
       {/* Quick model switcher — above input */}
       {activeMode !== 'archive' && (
-        <div className="px-4 pt-2 bg-wade-bg-card border-t border-wade-border/50">
+        <div className="px-4 pt-1.5 bg-wade-bg-card border-t border-wade-border/50">
           <QuickModelSwitcher
             llmPresets={llmPresets}
             activeSession={sessions.find(s => s.id === activeSessionId)}
