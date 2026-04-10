@@ -110,6 +110,7 @@ export const ChatInterface: React.FC = () => {
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [showMap, setShowMap] = useState(false);
   const [showLlmSelector, setShowLlmSelector] = useState(false);
+  const [showHeaderBrain, setShowHeaderBrain] = useState(false);
   const [isChatThemeOpen, setIsChatThemeOpen] = useState(false);
   const [showMemorySelector, setShowMemorySelector] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
@@ -874,9 +875,51 @@ export const ChatInterface: React.FC = () => {
         )}
         <div className="flex items-center gap-2">
           <button onClick={() => { setShowSearch(!showSearch); setShowMap(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Search /></button>
+          <button onClick={() => { setShowHeaderBrain(!showHeaderBrain); setShowMap(false); setShowSearch(false); }} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${showHeaderBrain ? 'bg-wade-accent text-white' : 'bg-wade-bg-app text-wade-text-muted hover:bg-wade-accent hover:text-white'}`}><Icons.Brain size={15} /></button>
           <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Map /></button>
           <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative"><Icons.More /></button>
         </div>
+
+        {/* Option 3: Header Brain popover */}
+        {showHeaderBrain && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowHeaderBrain(false)} />
+            <div className="absolute top-full right-4 mt-1 z-50 w-[260px] bg-wade-bg-card rounded-2xl shadow-xl border border-wade-border/70 overflow-hidden animate-fade-in backdrop-blur-md">
+              <div className="px-3 py-2 border-b border-wade-border/50 bg-wade-bg-app/50">
+                <div className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-[0.15em]">Switch Brain · Option 3</div>
+              </div>
+              <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                {llmPresets.map(preset => {
+                  const currentSession = sessions.find(s => s.id === activeSessionId);
+                  const binding = getBinding(activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep');
+                  const activeLlmId = currentSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
+                  const isActive = preset.id === activeLlmId;
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => {
+                        if (activeSessionId) updateSession(activeSessionId, { customLlmId: preset.id });
+                        setShowHeaderBrain(false);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors border-b border-wade-border/30 last:border-0 ${
+                        isActive ? 'bg-wade-accent-light' : 'hover:bg-wade-bg-app/60'
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-wade-accent text-white' : 'bg-wade-bg-app text-wade-text-muted'}`}>
+                        <Icons.Brain size={13} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[11px] font-bold truncate ${isActive ? 'text-wade-accent' : 'text-wade-text-main'}`}>{preset.name || preset.model}</div>
+                        <div className="text-[9px] text-wade-text-muted/60 truncate font-mono">{preset.model}</div>
+                      </div>
+                      {isActive && <div className="shrink-0 text-wade-accent"><Icons.Check size={12} /></div>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Menu Dropdown */}
@@ -1037,18 +1080,20 @@ export const ChatInterface: React.FC = () => {
         </div>
       )}
 
-      {/* Quick model switcher — above input */}
+      {/* Option 2: floating model badge above input right-aligned */}
       {activeMode !== 'archive' && (
-        <div className="px-4 pt-1.5 bg-wade-bg-card border-t border-wade-border/50">
-          <QuickModelSwitcher
-            llmPresets={llmPresets}
-            activeSession={sessions.find(s => s.id === activeSessionId)}
-            settings={settings}
-            binding={getBinding(activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep')}
-            onSelect={(presetId) => {
-              if (activeSessionId) updateSession(activeSessionId, { customLlmId: presetId });
-            }}
-          />
+        <div className="relative px-4 bg-wade-bg-card border-t border-wade-border/50 z-30">
+          <div className="absolute -top-3 right-6 z-40">
+            <QuickModelSwitcher
+              llmPresets={llmPresets}
+              activeSession={sessions.find(s => s.id === activeSessionId)}
+              settings={settings}
+              binding={getBinding(activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep')}
+              onSelect={(presetId) => {
+                if (activeSessionId) updateSession(activeSessionId, { customLlmId: presetId });
+              }}
+            />
+          </div>
         </div>
       )}
 
