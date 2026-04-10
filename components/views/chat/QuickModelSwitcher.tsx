@@ -26,6 +26,8 @@ export const QuickModelSwitcher: React.FC<QuickModelSwitcherProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const activeItemRef = useRef<HTMLButtonElement>(null);
 
   // Resolve the current model — priority: session customLlmId > binding > global active
   const activeLlmId = activeSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
@@ -39,6 +41,16 @@ export const QuickModelSwitcher: React.FC<QuickModelSwitcherProps> = ({
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Scroll active item into view (centered) when dropdown opens
+  useEffect(() => {
+    if (open && activeItemRef.current) {
+      // Use requestAnimationFrame to ensure the dropdown is rendered first
+      requestAnimationFrame(() => {
+        activeItemRef.current?.scrollIntoView({ block: 'center', behavior: 'auto' });
+      });
+    }
   }, [open]);
 
   if (!llmPresets || llmPresets.length === 0) return null;
@@ -64,14 +76,15 @@ export const QuickModelSwitcher: React.FC<QuickModelSwitcherProps> = ({
       {open && (
         <div className="absolute bottom-full mb-2 right-0 z-50 w-[260px] bg-wade-bg-card rounded-2xl shadow-xl border border-wade-border/70 overflow-hidden animate-fade-in backdrop-blur-md">
           <div className="px-3 py-2 border-b border-wade-border/50 bg-wade-bg-app/50">
-            <div className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-[0.15em]">Switch Brain · Option 2</div>
+            <div className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-[0.15em]">Switch Brain</div>
           </div>
-          <div className="max-h-64 overflow-y-auto custom-scrollbar">
+          <div ref={listRef} className="max-h-64 overflow-y-auto custom-scrollbar">
             {llmPresets.map(preset => {
               const isActive = preset.id === activeLlmId;
               return (
                 <button
                   key={preset.id}
+                  ref={isActive ? activeItemRef : null}
                   onClick={() => { onSelect(preset.id); setOpen(false); }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors border-b border-wade-border/30 last:border-0 ${
                     isActive ? 'bg-wade-accent-light' : 'hover:bg-wade-bg-app/60'
