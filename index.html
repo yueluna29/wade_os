@@ -83,6 +83,14 @@
           scrollbar-width: none;
         }
       }
+      /* Utility class to hide scrollbars on any element */
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
       /* Markdown Styles - Tighter for Novel Feel */
       .markdown-content { white-space: pre-wrap; }
       .markdown-content p { margin-bottom: 0.33em; line-height: 1.6; }

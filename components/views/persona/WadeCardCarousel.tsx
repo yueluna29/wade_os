@@ -37,6 +37,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [activeIdx, setActiveIdx] = useState(0);
 
   // Auto-scroll to currently selected card
   useEffect(() => {
@@ -60,6 +61,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
       const dist = Math.abs(cardCenter - centerX);
       if (dist < closestDist) { closestDist = dist; closestIdx = i; }
     });
+    setActiveIdx(closestIdx);
     const card = cards[closestIdx];
     if (card && card.id !== currentCardId) onSelectCard(card.id);
   };
@@ -81,8 +83,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-3 custom-scrollbar"
-        style={{ scrollbarWidth: 'thin' }}
+        className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scrollbar-hide"
       >
         {cards.map(card => {
           const isActive = card.id === currentCardId;
@@ -215,6 +216,20 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
           <span className="text-[10px] font-bold uppercase tracking-wider">New Wade File</span>
         </button>
       </div>
+
+      {/* Pagination dots (cards + the "+" tile) */}
+      {cards.length > 0 && (
+        <div className="flex justify-center gap-1.5 mt-1">
+          {[...cards, null].map((_, idx) => (
+            <div
+              key={idx}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                idx === activeIdx ? 'bg-wade-accent w-4' : 'bg-wade-accent/30 w-1.5'
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
