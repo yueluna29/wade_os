@@ -18,6 +18,7 @@ import { ArchiveItem } from './chat/ArchiveItem';
 import { SearchBar } from './chat/SearchBar';
 import { ChatInputArea } from './chat/ChatInputArea';
 import { LlmSelectorPanel } from './chat/LlmSelectorPanel';
+import { QuickModelSwitcher } from './chat/QuickModelSwitcher';
 import { ActionSheet } from './chat/ActionSheet';
 import { TextSelectionModal } from './chat/TextSelectionModal';
 import { ConversationMapModal } from './chat/ConversationMapModal';
@@ -1033,6 +1034,21 @@ export const ChatInterface: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Quick model switcher — above input */}
+      {activeMode !== 'archive' && (
+        <div className="px-4 pt-2 bg-wade-bg-card border-t border-wade-border/50">
+          <QuickModelSwitcher
+            llmPresets={llmPresets}
+            activeSession={sessions.find(s => s.id === activeSessionId)}
+            settings={settings}
+            binding={getBinding(activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep')}
+            onSelect={(presetId) => {
+              if (activeSessionId) updateSession(activeSessionId, { customLlmId: presetId });
+            }}
+          />
         </div>
       )}
 

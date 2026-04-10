@@ -40,7 +40,7 @@ export const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   if (activeMode === 'archive') return null;
 
   return (
-    <div className="p-3 pb-6 md:pb-3 bg-wade-bg-card border-t border-wade-border z-30 shrink-0">
+    <div className="p-3 pb-6 md:pb-3 bg-wade-bg-card z-30 shrink-0">
       <div className="max-w-4xl mx-auto">
         <div className="bg-wade-bg-app border border-wade-border rounded-3xl px-2 py-2 focus-within:border-wade-accent shadow-inner flex flex-col gap-2 transition-colors">
           {/* Reply Preview */}
