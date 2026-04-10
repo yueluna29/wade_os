@@ -106,147 +106,167 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
           const isEditingDesc = descEditingId === card.id;
 
           return (
-            <div
-              key={card.id}
-              className={`shrink-0 snap-center w-[85%] md:w-[280px] bg-wade-bg-card rounded-[24px] border transition-all ${
-                isActive ? 'border-wade-accent shadow-md ring-1 ring-wade-accent/20' : 'border-wade-border shadow-sm'
-              }`}
-            >
-              {/* Header — avatar + name */}
-              <div className="flex items-start gap-3 p-4 pb-3">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-wade-bg-card shadow-sm shrink-0 bg-wade-bg-app">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt={card.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-wade-text-muted">
-                      <Icons.User size={20} />
+            <div key={card.id} className="shrink-0 snap-center w-[85%] md:w-[280px] px-1 group perspective-1000">
+              <div
+                className={`relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:-translate-y-1 h-full bg-wade-bg-card ${
+                  isActive
+                    ? 'shadow-[0_10px_40px_-10px_rgba(213,143,153,0.3)] border border-wade-accent'
+                    : 'shadow-[0_10px_40px_-10px_rgba(213,143,153,0.15)] border border-wade-accent-light'
+                }`}
+              >
+                {/* Envelope decorative corners */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-wade-accent-light via-wade-accent-light to-transparent rounded-bl-[100px] -mr-8 -mt-8 opacity-60 pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-20 h-20 bg-wade-accent-light rounded-tr-[80px] -ml-6 -mb-6 opacity-40 pointer-events-none" />
+
+                <div className="relative p-5 flex flex-col h-full">
+                  {/* Header: avatar box + name/description */}
+                  <div className="flex items-start gap-4 mb-4">
+                    {/* Icon/avatar box with gradient (like TimeCapsules) */}
+                    <div className="w-12 h-12 rounded-2xl overflow-hidden shrink-0 shadow-md shadow-wade-accent/20 bg-gradient-to-br from-wade-accent to-wade-border-light flex items-center justify-center text-white transition-transform duration-300 group-hover:scale-105">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={card.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Icons.User size={20} />
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0 pt-0.5">
-                  {isRenaming ? (
-                    <input
-                      value={renameDraft}
-                      onChange={e => setRenameDraft(e.target.value)}
-                      onBlur={() => {
-                        if (renameDraft.trim()) onRename(card.id, renameDraft.trim());
-                        setRenamingId(null);
-                      }}
-                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                      autoFocus
-                      className="w-full bg-wade-bg-app border border-wade-accent rounded-lg px-2 py-1 text-sm font-bold text-wade-text-main outline-none"
-                    />
-                  ) : (
-                    <button
-                      onClick={() => { setRenamingId(card.id); setRenameDraft(card.name); }}
-                      className="text-left font-bold text-wade-text-main text-sm truncate hover:text-wade-accent transition-colors w-full"
-                    >
-                      {card.name}
-                    </button>
-                  )}
-                  {isEditingDesc ? (
-                    <textarea
-                      value={descDraft}
-                      onChange={e => setDescDraft(e.target.value)}
-                      onBlur={() => {
-                        onUpdateDescription(card.id, descDraft.trim());
-                        setDescEditingId(null);
-                      }}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
-                      autoFocus
-                      rows={2}
-                      className="w-full bg-wade-bg-app border border-wade-accent rounded-lg px-2 py-1 text-[10px] text-wade-text-main outline-none resize-none mt-0.5"
-                    />
-                  ) : (
-                    <button
-                      onClick={() => { setDescEditingId(card.id); setDescDraft(card.description || ''); }}
-                      className="text-left text-[10px] text-wade-text-muted line-clamp-2 mt-0.5 leading-snug hover:text-wade-accent transition-colors w-full"
-                    >
-                      {card.description || <span className="italic text-wade-text-muted/40">tap to add description</span>}
-                    </button>
-                  )}
-                </div>
-                {isActive && (
-                  <div className="shrink-0">
-                    <span className="text-[8px] font-black uppercase tracking-wider bg-wade-accent text-white px-1.5 py-0.5 rounded">viewing</span>
+
+                    {/* Name + description */}
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex justify-between items-start gap-2">
+                        {isRenaming ? (
+                          <input
+                            value={renameDraft}
+                            onChange={e => setRenameDraft(e.target.value)}
+                            onBlur={() => {
+                              if (renameDraft.trim()) onRename(card.id, renameDraft.trim());
+                              setRenamingId(null);
+                            }}
+                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                            autoFocus
+                            className="flex-1 bg-wade-bg-app border border-wade-accent rounded-lg px-2 py-1 text-base font-bold text-wade-text-main outline-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => { setRenamingId(card.id); setRenameDraft(card.name); }}
+                            className="text-left font-bold text-base leading-tight text-wade-text-main truncate hover:text-wade-accent transition-colors flex-1 min-w-0"
+                          >
+                            {card.name}
+                          </button>
+                        )}
+                        {isActive && (
+                          <span className="text-[9px] font-bold font-mono text-wade-accent bg-wade-bg-app px-2 py-1 rounded-full border border-wade-border/50 whitespace-nowrap flex-shrink-0">
+                            viewing
+                          </span>
+                        )}
+                      </div>
+                      {isEditingDesc ? (
+                        <textarea
+                          value={descDraft}
+                          onChange={e => setDescDraft(e.target.value)}
+                          onBlur={() => {
+                            onUpdateDescription(card.id, descDraft.trim());
+                            setDescEditingId(null);
+                          }}
+                          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
+                          autoFocus
+                          rows={2}
+                          className="w-full bg-wade-bg-app border border-wade-accent rounded-lg px-2 py-1 text-[10px] text-wade-text-main outline-none resize-none mt-1"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => { setDescEditingId(card.id); setDescDraft(card.description || ''); }}
+                          className="text-left text-[10px] text-wade-text-muted/80 line-clamp-2 mt-1 leading-snug hover:text-wade-accent transition-colors w-full"
+                        >
+                          {card.description || <span className="italic text-wade-text-muted/40">tap to add description</span>}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* Identity preview */}
-              <div className="px-4 pb-3">
-                <div className="text-[10px] text-wade-text-muted/70 italic line-clamp-2 leading-relaxed">
-                  {identity ? `"${identity}${identity.length >= 80 ? '...' : ''}"` : '(empty identity)'}
-                </div>
-              </div>
+                  {/* Identity preview */}
+                  <p className="text-xs line-clamp-3 mb-auto leading-relaxed text-wade-text-muted/80 italic">
+                    {identity
+                      ? `"${identity}${identity.length >= 80 ? '...' : ''}"`
+                      : <span className="not-italic">(empty identity — tap fields below to fill in)</span>}
+                  </p>
 
-              {/* Function binding buttons */}
-              <div className="px-4 pb-3">
-                <div className="text-[8px] font-bold text-wade-text-muted/60 uppercase tracking-wider mb-1.5">Use for</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {FUNCTIONS.map(fn => {
-                    const active = isBindingActive(fn.key, card.id);
-                    return (
-                      <button
-                        key={fn.key}
-                        onClick={() => onToggleBinding(fn.key, card.id)}
-                        className={`px-2.5 py-1 rounded-full text-[9px] font-bold transition-colors ${
-                          active
-                            ? 'bg-wade-accent text-white'
-                            : 'bg-wade-bg-app text-wade-text-muted/70 hover:bg-wade-accent-light hover:text-wade-accent'
-                        }`}
-                      >
-                        {active && '✓ '}{fn.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="px-4 pb-3 border-t border-wade-border/50 pt-2 flex items-center justify-between">
-                <button
-                  onClick={() => onDuplicate(card.id)}
-                  className="text-[9px] font-bold text-wade-text-muted hover:text-wade-accent transition-colors flex items-center gap-1"
-                >
-                  <Icons.Plus size={10} /> Duplicate
-                </button>
-                {cards.length > 1 && (
-                  deleteConfirmId === card.id ? (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setDeleteConfirmId(null)}
-                        className="text-[9px] font-bold text-wade-text-muted"
-                      >Cancel</button>
-                      <button
-                        onClick={() => { onDelete(card.id); setDeleteConfirmId(null); }}
-                        className="text-[9px] font-bold text-red-500"
-                      >Confirm</button>
+                  {/* Function bindings */}
+                  <div className="mt-4">
+                    <div className="text-[8px] font-bold text-wade-text-muted/60 uppercase tracking-[0.15em] mb-1.5">Use for</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {FUNCTIONS.map(fn => {
+                        const active = isBindingActive(fn.key, card.id);
+                        return (
+                          <button
+                            key={fn.key}
+                            onClick={() => onToggleBinding(fn.key, card.id)}
+                            className={`px-2.5 py-1 rounded-full text-[9px] font-bold transition-colors ${
+                              active
+                                ? 'bg-wade-accent text-white shadow-sm'
+                                : 'bg-wade-bg-app/80 text-wade-text-muted/70 hover:bg-wade-accent-light hover:text-wade-accent'
+                            }`}
+                          >
+                            {active && '✓ '}{fn.label}
+                          </button>
+                        );
+                      })}
                     </div>
-                  ) : (
+                  </div>
+
+                  {/* Footer actions */}
+                  <div className="flex items-center justify-between border-t border-wade-border/40 pt-3 mt-4">
                     <button
-                      onClick={() => setDeleteConfirmId(card.id)}
-                      className="text-[9px] font-bold text-wade-text-muted/60 hover:text-red-500 transition-colors"
+                      onClick={() => onDuplicate(card.id)}
+                      className="text-[10px] font-bold tracking-wider uppercase text-wade-accent hover:text-wade-accent-hover transition-colors flex items-center gap-1"
                     >
-                      Delete
+                      <Icons.Plus size={11} /> Duplicate
                     </button>
-                  )
-                )}
+                    {cards.length > 1 && (
+                      deleteConfirmId === card.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="text-[10px] font-bold text-wade-text-muted"
+                          >Cancel</button>
+                          <button
+                            onClick={() => { onDelete(card.id); setDeleteConfirmId(null); }}
+                            className="w-7 h-7 rounded-full bg-wade-bg-card border border-wade-border text-red-400 flex items-center justify-center hover:text-red-500 hover:border-red-300 transition-colors"
+                          >
+                            <Icons.Trash size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirmId(card.id)}
+                          className="w-7 h-7 rounded-full bg-wade-bg-card border border-wade-border text-wade-text-muted/60 flex items-center justify-center hover:text-red-400 hover:border-wade-accent transition-colors"
+                        >
+                          <Icons.Trash size={12} />
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           );
         })}
 
-        {/* "+" new card tile */}
-        <button
-          onClick={onCreateNew}
-          className="shrink-0 snap-center w-[85%] md:w-[280px] bg-wade-bg-card/50 rounded-[24px] border-2 border-dashed border-wade-border hover:border-wade-accent hover:bg-wade-accent-light transition-colors flex flex-col items-center justify-center py-12 gap-2 text-wade-text-muted hover:text-wade-accent"
-        >
-          <div className="w-12 h-12 rounded-full border-2 border-current flex items-center justify-center">
-            <Icons.Plus size={20} />
-          </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">{newCardLabel}</span>
-        </button>
+        {/* "+" new card tile — envelope style */}
+        <div className="shrink-0 snap-center w-[85%] md:w-[280px] px-1 group perspective-1000">
+          <button
+            onClick={onCreateNew}
+            className="relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:-translate-y-1 h-full w-full bg-wade-bg-card/40 border-2 border-dashed border-wade-border hover:border-wade-accent hover:bg-wade-accent-light/30 flex flex-col items-center justify-center py-14 gap-2 text-wade-text-muted hover:text-wade-accent"
+          >
+            {/* Matching envelope corners (lighter) */}
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-wade-accent-light via-wade-accent-light to-transparent rounded-bl-[80px] -mr-6 -mt-6 opacity-30 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-16 h-16 bg-wade-accent-light rounded-tr-[60px] -ml-5 -mb-5 opacity-25 pointer-events-none" />
+
+            <div className="relative w-12 h-12 rounded-2xl border-2 border-current flex items-center justify-center">
+              <Icons.Plus size={20} />
+            </div>
+            <span className="relative text-[10px] font-bold uppercase tracking-wider">{newCardLabel}</span>
+          </button>
+        </div>
       </div>
 
       {/* Pagination dots (cards + the "+" tile) */}
