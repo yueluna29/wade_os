@@ -1143,7 +1143,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         createdAt: new Date(data.created_at).getTime(),
         updatedAt: new Date(data.updated_at).getTime()
       };
-      setPersonaCards(prev => [newCard, ...prev]);
+      setPersonaCards(prev => [...prev, newCard]);
       return data.id;
     };
    

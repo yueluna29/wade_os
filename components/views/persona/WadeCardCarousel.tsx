@@ -10,6 +10,7 @@ interface WadeCardCarouselProps {
   onCreateNew: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  onUpdateDescription: (id: string, description: string) => void;
   functionBindings: Array<{ functionKey: string; label: string; personaCardId: string | null }>;
   onToggleBinding: (functionKey: string, cardId: string) => void;
 }
@@ -30,6 +31,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
   onCreateNew,
   onDelete,
   onRename,
+  onUpdateDescription,
   functionBindings,
   onToggleBinding,
 }) => {
@@ -37,6 +39,8 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [descEditingId, setDescEditingId] = useState<string | null>(null);
+  const [descDraft, setDescDraft] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
 
   // Auto-scroll to currently selected card
@@ -90,6 +94,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
           const identity = (card.cardData?.core_identity || '').slice(0, 80);
           const avatarUrl = card.cardData?.avatar_url;
           const isRenaming = renamingId === card.id;
+          const isEditingDesc = descEditingId === card.id;
 
           return (
             <div
@@ -130,9 +135,27 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
                       {card.name}
                     </button>
                   )}
-                  <div className="text-[10px] text-wade-text-muted line-clamp-2 mt-0.5 leading-snug">
-                    {card.description || 'No description'}
-                  </div>
+                  {isEditingDesc ? (
+                    <textarea
+                      value={descDraft}
+                      onChange={e => setDescDraft(e.target.value)}
+                      onBlur={() => {
+                        onUpdateDescription(card.id, descDraft.trim());
+                        setDescEditingId(null);
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
+                      autoFocus
+                      rows={2}
+                      className="w-full bg-wade-bg-app border border-wade-accent rounded-lg px-2 py-1 text-[10px] text-wade-text-main outline-none resize-none mt-0.5"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setDescEditingId(card.id); setDescDraft(card.description || ''); }}
+                      className="text-left text-[10px] text-wade-text-muted line-clamp-2 mt-0.5 leading-snug hover:text-wade-accent transition-colors w-full"
+                    >
+                      {card.description || <span className="italic text-wade-text-muted/40">tap to add description</span>}
+                    </button>
+                  )}
                 </div>
                 {isActive && (
                   <div className="shrink-0">

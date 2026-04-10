@@ -43,7 +43,9 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const [smsExampleDialogue, setSmsExampleDialogue] = useState(settings.smsExampleDialogue || '');
 
   // --- Currently editing Wade card (for carousel) ---
-  const wadeCards = personaCards.filter(c => c.character === 'Wade');
+  const wadeCards = personaCards
+    .filter(c => c.character === 'Wade')
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   const [currentWadeCardId, setCurrentWadeCardId] = useState<string | null>(null);
 
   // Initialize to default Wade card once cards load
@@ -389,6 +391,9 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
               }}
               onRename={async (id, name) => {
                 await updatePersonaCard(id, { name });
+              }}
+              onUpdateDescription={async (id, description) => {
+                await updatePersonaCard(id, { description });
               }}
               functionBindings={functionBindings as any}
               onToggleBinding={async (fnKey, cardId) => {
