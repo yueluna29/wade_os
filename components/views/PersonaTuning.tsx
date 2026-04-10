@@ -5,13 +5,14 @@ import { uploadToImgBB } from '../../services/imgbb';
 import { Icons } from '../ui/Icons';
 import { FocusModalEditor } from '../ui/FocusModalEditor';
 import { WadePersonaTab } from './persona/WadePersonaTab';
+import { WadeCardCarousel } from './persona/WadeCardCarousel';
 import { LunaPersonaTab } from './persona/LunaPersonaTab';
 import { SystemPersonaTab } from './persona/SystemPersonaTab';
 
 type TabState = 'wade' | 'luna' | 'system';
 
 export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
-  const { settings, updateSettings, personaCards, updatePersonaCard } = useStore();
+  const { settings, updateSettings, personaCards, updatePersonaCard, addPersonaCard, deletePersonaCard, duplicatePersonaCard, functionBindings, updateFunctionBinding } = useStore();
   
   const [activeTab, setActiveTab] = useState<TabState>('wade');
   const [isSaving, setIsSaving] = useState(false);
@@ -32,6 +33,38 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const [wadeSingleExamples, setWadeSingleExamples] = useState(settings.wadeSingleExamples || '');
   const [wadeExample, setWadeExample] = useState(settings.exampleDialogue || '');
   const [smsExampleDialogue, setSmsExampleDialogue] = useState(settings.smsExampleDialogue || '');
+
+  // --- Currently editing Wade card (for carousel) ---
+  const wadeCards = personaCards.filter(c => c.character === 'Wade');
+  const [currentWadeCardId, setCurrentWadeCardId] = useState<string | null>(null);
+
+  // Initialize to default Wade card once cards load
+  useEffect(() => {
+    if (!currentWadeCardId && wadeCards.length > 0) {
+      const def = wadeCards.find(c => c.isDefault) || wadeCards[0];
+      setCurrentWadeCardId(def.id);
+    }
+  }, [wadeCards.length]);
+
+  // When currentWadeCardId changes, reload form fields from that card
+  useEffect(() => {
+    if (!currentWadeCardId) return;
+    const card = wadeCards.find(c => c.id === currentWadeCardId);
+    if (!card) return;
+    const cd = card.cardData || {};
+    setWadeBirthday(cd.birthday || '');
+    setWadeMbti(cd.mbti || '');
+    setWadeHeight(cd.height || '');
+    setWadeAppearance(cd.appearance || '');
+    setWadeClothing(cd.clothing || '');
+    setWadeHobbies(cd.hobbies || '');
+    setWadeLikes(cd.likes || '');
+    setWadeDislikes(cd.dislikes || '');
+    setWadeDefinition(cd.core_identity || '');
+    setWadeSingleExamples(cd.example_punchlines || '');
+    setWadeExample(cd.example_dialogue_general || '');
+    setSmsExampleDialogue(cd.example_dialogue_sms || '');
+  }, [currentWadeCardId]);
 
   // --- Luna 专属字段 ---
   const [lunaBirthday, setLunaBirthday] = useState(settings.lunaBirthday || '');
@@ -205,12 +238,14 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
       if (error) throw error;
 
-      // 同步到角色卡（让 generateFromCard 和 XRayModal 也能读到最新数据）
-      const defaultWade = personaCards.find(c => c.character === 'Wade' && c.isDefault);
-      if (defaultWade) {
-        await updatePersonaCard(defaultWade.id, {
+      // Save to the currently viewed Wade card (not necessarily the default)
+      const targetWade = currentWadeCardId
+        ? personaCards.find(c => c.id === currentWadeCardId)
+        : personaCards.find(c => c.character === 'Wade' && c.isDefault);
+      if (targetWade) {
+        await updatePersonaCard(targetWade.id, {
           cardData: {
-            ...defaultWade.cardData,
+            ...targetWade.cardData,
             global_directives: systemInstruction,
             core_identity: wadeDefinition,
             appearance: wadeAppearance,
@@ -320,6 +355,30 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
         <div className="max-w-3xl mx-auto animate-fade-in">
           
           {activeTab === 'wade' && (
+            <>
+            <WadeCardCarousel
+              cards={wadeCards}
+              currentCardId={currentWadeCardId}
+              onSelectCard={setCurrentWadeCardId}
+              onDuplicate={async (id) => {
+                const newId = await duplicatePersonaCard(id);
+                if (newId) setCurrentWadeCardId(newId);
+              }}
+              onDelete={async (id) => {
+                await deletePersonaCard(id);
+                const remaining = wadeCards.filter(c => c.id !== id);
+                if (remaining.length > 0) setCurrentWadeCardId(remaining[0].id);
+              }}
+              onRename={async (id, name) => {
+                await updatePersonaCard(id, { name });
+              }}
+              functionBindings={functionBindings as any}
+              onToggleBinding={async (fnKey, cardId) => {
+                const binding = functionBindings.find(b => b.functionKey === fnKey);
+                const currentlyBound = binding?.personaCardId === cardId;
+                await updateFunctionBinding(fnKey, { personaCardId: currentlyBound ? null : cardId });
+              }}
+            />
             <WadePersonaTab
               settings={settings}
               wadeBirthday={wadeBirthday} setWadeBirthday={setWadeBirthday}
@@ -338,6 +397,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
               handleAvatarChange={handleAvatarChange}
               setFocusModal={setFocusModal}
             />
+            </>
           )}
 
           {activeTab === 'luna' && (
