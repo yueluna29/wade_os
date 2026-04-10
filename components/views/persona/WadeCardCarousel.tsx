@@ -7,6 +7,7 @@ interface WadeCardCarouselProps {
   currentCardId: string | null;
   onSelectCard: (id: string) => void;
   onDuplicate: (id: string) => void;
+  onCreateNew: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   functionBindings: Array<{ functionKey: string; label: string; personaCardId: string | null }>;
@@ -26,6 +27,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
   currentCardId,
   onSelectCard,
   onDuplicate,
+  onCreateNew,
   onDelete,
   onRename,
   functionBindings,
@@ -66,15 +68,20 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
     functionBindings.find(b => b.functionKey === functionKey)?.personaCardId === cardId;
 
   return (
-    <div className="mb-4 -mx-6 md:-mx-0">
-      <div className="flex items-center justify-between px-6 md:px-0 mb-2">
+    <div className="mb-4 overflow-hidden">
+      <div className="flex items-center justify-between mb-2">
         <div className="text-[9px] font-bold text-wade-text-muted uppercase tracking-[0.2em]">Wade Files · {cards.length}</div>
-        <div className="text-[9px] text-wade-text-muted/60">swipe →</div>
+        <button
+          onClick={onCreateNew}
+          className="text-[9px] font-bold text-wade-accent hover:text-wade-accent-hover transition-colors flex items-center gap-1"
+        >
+          <Icons.Plus size={10} /> New blank card
+        </button>
       </div>
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-6 md:px-0 pb-3 custom-scrollbar"
+        className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-3 custom-scrollbar"
         style={{ scrollbarWidth: 'thin' }}
       >
         {cards.map(card => {
@@ -196,6 +203,17 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
             </div>
           );
         })}
+
+        {/* "+" new card tile */}
+        <button
+          onClick={onCreateNew}
+          className="shrink-0 snap-center w-[85%] md:w-[280px] bg-wade-bg-card/50 rounded-[24px] border-2 border-dashed border-wade-border hover:border-wade-accent hover:bg-wade-accent-light transition-colors flex flex-col items-center justify-center py-12 gap-2 text-wade-text-muted hover:text-wade-accent"
+        >
+          <div className="w-12 h-12 rounded-full border-2 border-current flex items-center justify-center">
+            <Icons.Plus size={20} />
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider">New Wade File</span>
+        </button>
       </div>
     </div>
   );

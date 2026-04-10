@@ -364,6 +364,16 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
                 const newId = await duplicatePersonaCard(id);
                 if (newId) setCurrentWadeCardId(newId);
               }}
+              onCreateNew={async () => {
+                const newId = await addPersonaCard({
+                  name: 'New Wade File',
+                  character: 'Wade',
+                  description: 'A blank slate.',
+                  cardData: {},
+                  isDefault: false,
+                });
+                if (newId) setCurrentWadeCardId(newId);
+              }}
               onDelete={async (id) => {
                 await deletePersonaCard(id);
                 const remaining = wadeCards.filter(c => c.id !== id);
