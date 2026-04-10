@@ -41,6 +41,7 @@ export const ChatInterface: React.FC = () => {
   // Memory live indicator
   const [newMemories, setNewMemories] = useState<WadeMemory[]>([]);
   const [lastWadeMemoriesXml, setLastWadeMemoriesXml] = useState<string>('');
+  const [memoryError, setMemoryError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadSummary = async () => {
@@ -551,7 +552,11 @@ export const ChatInterface: React.FC = () => {
         if (userText.trim()) {
           evaluateAndStoreMemory(userText, responseText, targetSessionId, memoryEvalLlm, embLlm2)
             .then(stored => { if (stored.length > 0) setNewMemories(stored); })
-            .catch(console.error);
+            .catch(err => {
+              console.error('[WadeMemory] Eval failed:', err);
+              setMemoryError(err.message || 'Memory eval failed');
+              setTimeout(() => setMemoryError(null), 15000);
+            });
         }
       }
 
@@ -1005,6 +1010,26 @@ export const ChatInterface: React.FC = () => {
 
       {/* Memory Live Indicator */}
       <MemoryLiveIndicator newMemories={newMemories} onDismiss={() => setNewMemories([])} />
+
+      {/* Memory Eval Error Toast */}
+      {memoryError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md animate-fade-in">
+          <div className="bg-wade-bg-card/95 backdrop-blur-md border border-wade-accent/30 rounded-2xl shadow-lg overflow-hidden">
+            <div className="flex items-start gap-2 px-3.5 py-2.5">
+              <div className="w-5 h-5 rounded-full bg-wade-accent-light flex items-center justify-center shrink-0 mt-0.5">
+                <Icons.Warning size={11} className="text-wade-accent" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-wade-text-main">Memory eval failed</div>
+                <div className="text-[10px] text-wade-text-muted mt-0.5 break-words">{memoryError}</div>
+              </div>
+              <button onClick={() => setMemoryError(null)} className="text-wade-text-muted hover:text-wade-text-main transition-colors p-0.5">
+                <Icons.Close size={12} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input Area */}
       <ChatInputArea inputText={inputText} setInputText={setInputText} textareaRef={textareaRef} messagesEndRef={messagesEndRef} placeholderText={placeholderText} isTyping={isTyping} activeMode={activeMode} attachments={attachments} removeAttachment={removeAttachment} showUploadMenu={showUploadMenu} setShowUploadMenu={setShowUploadMenu} imageInputRef={imageInputRef} fileInputRef={fileInputRef} handleImageSelect={handleImageSelect} handleFileSelect={handleFileSelect} handleSend={handleSend} handleCancel={handleCancel} handleKeyDown={handleKeyDown} replyingTo={replyingToId ? (() => { const m = messages.find(msg => msg.id === replyingToId); return m ? { id: m.id, role: m.role, text: m.text.slice(0, 100) } : null; })() : null} onCancelReply={() => setReplyingToId(null)} />

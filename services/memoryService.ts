@@ -290,13 +290,36 @@ export async function evaluateAndStoreMemory(
     const userPrompt = buildMemoryEvalUserPrompt(userMessage, wadeReply);
     const rawResponse = await callLlmForEval(evalPreset, MEMORY_EVAL_SYSTEM, userPrompt);
 
-    // 解析 JSON — 处理可能的 markdown code block 包裹
+    console.log('[WadeMemory] Raw eval response:', rawResponse.slice(0, 300));
+
+    // 健壮的 JSON 解析：尝试多种提取方式
+    let memories: ExtractedMemory[] = [];
+    const tryParse = (txt: string): ExtractedMemory[] | null => {
+      try { const r = JSON.parse(txt); return Array.isArray(r) ? r : null; } catch { return null; }
+    };
+
     let cleaned = rawResponse.trim();
+    // 去掉 markdown code block 包裹
     if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+    }
+    // 尝试直接解析
+    let parsed = tryParse(cleaned);
+    // 如果失败，尝试从文本中提取 [...] 数组
+    if (!parsed) {
+      const match = cleaned.match(/\[[\s\S]*\]/);
+      if (match) parsed = tryParse(match[0]);
+    }
+    // 如果还失败，检查是否是空数组的各种写法
+    if (!parsed) {
+      if (/^\s*\[\s*\]\s*$/.test(cleaned) || /无|没有|空|none|empty/i.test(cleaned.slice(0, 100))) {
+        return [];
+      }
+      console.error('[WadeMemory] Failed to parse response as JSON:', rawResponse);
+      throw new Error(`Memory eval returned invalid JSON. Model: ${evalPreset.model}. Response: ${rawResponse.slice(0, 200)}`);
     }
 
-    const memories: ExtractedMemory[] = JSON.parse(cleaned);
+    memories = parsed;
 
     if (!Array.isArray(memories) || memories.length === 0) {
       return [];
