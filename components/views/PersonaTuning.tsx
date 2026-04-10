@@ -9,6 +9,7 @@ import { WadePersonaTabCompact } from './persona/WadePersonaTabCompact';
 import { WadeCardCarousel } from './persona/WadeCardCarousel';
 import { LunaPersonaTab } from './persona/LunaPersonaTab';
 import { SystemPersonaTab } from './persona/SystemPersonaTab';
+import { SystemPersonaTabCompact } from './persona/SystemPersonaTabCompact';
 
 type TabState = 'wade' | 'luna' | 'system';
 
@@ -62,6 +63,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
     const card = wadeCards.find(c => c.id === currentWadeCardId);
     if (!card) return;
     const cd = card.cardData || {};
+    // Wade identity fields
     setWadeBirthday(cd.birthday || '');
     setWadeMbti(cd.mbti || '');
     setWadeHeight(cd.height || '');
@@ -74,6 +76,12 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
     setWadeSingleExamples(cd.example_punchlines || '');
     setWadeExample(cd.example_dialogue_general || '');
     setSmsExampleDialogue(cd.example_dialogue_sms || '');
+    // System prompts (per-card)
+    setSystemInstruction(cd.global_directives || '');
+    setSmsInstructions(cd.sms_mode_rules || '');
+    setRoleplayInstructions(cd.rp_mode_rules || '');
+    // Keepalive prompt falls back to global if not in card
+    if (cd.keepalive_prompt) setKeepalivePrompt(cd.keepalive_prompt);
   }, [currentWadeCardId]);
 
   // --- Luna 专属字段 ---
@@ -272,6 +280,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
             example_dialogue_sms: smsExampleDialogue,
             sms_mode_rules: smsInstructions,
             rp_mode_rules: roleplayInstructions,
+            keepalive_prompt: keepalivePrompt,
           }
         });
       }
@@ -483,13 +492,45 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
           )}
 
           {activeTab === 'system' && (
-            <SystemPersonaTab
-              systemInstruction={systemInstruction} setSystemInstruction={setSystemInstruction}
-              smsInstructions={smsInstructions} setSmsInstructions={setSmsInstructions}
-              roleplayInstructions={roleplayInstructions} setRoleplayInstructions={setRoleplayInstructions}
-              keepalivePrompt={keepalivePrompt} setKeepalivePrompt={setKeepalivePrompt}
-              setFocusModal={setFocusModal}
-            />
+            <>
+              {/* Form style toggle */}
+              <div className="flex items-center justify-end gap-1 mb-3">
+                <span className="text-[9px] text-wade-text-muted/60 uppercase tracking-wider font-bold mr-1">Form</span>
+                <div className="bg-wade-bg-card border border-wade-border rounded-full p-0.5 flex shadow-sm">
+                  <button
+                    onClick={() => toggleWadeFormStyle('compact')}
+                    className={`px-3 py-1 rounded-full text-[9px] font-bold transition-colors ${
+                      wadeFormStyle === 'compact' ? 'bg-wade-accent text-white' : 'text-wade-text-muted hover:text-wade-accent'
+                    }`}
+                  >Compact</button>
+                  <button
+                    onClick={() => toggleWadeFormStyle('classic')}
+                    className={`px-3 py-1 rounded-full text-[9px] font-bold transition-colors ${
+                      wadeFormStyle === 'classic' ? 'bg-wade-accent text-white' : 'text-wade-text-muted hover:text-wade-accent'
+                    }`}
+                  >Classic</button>
+                </div>
+              </div>
+
+              {wadeFormStyle === 'compact' ? (
+                <SystemPersonaTabCompact
+                  currentCardName={wadeCards.find(c => c.id === currentWadeCardId)?.name}
+                  systemInstruction={systemInstruction} setSystemInstruction={setSystemInstruction}
+                  smsInstructions={smsInstructions} setSmsInstructions={setSmsInstructions}
+                  roleplayInstructions={roleplayInstructions} setRoleplayInstructions={setRoleplayInstructions}
+                  keepalivePrompt={keepalivePrompt} setKeepalivePrompt={setKeepalivePrompt}
+                  setFocusModal={setFocusModal}
+                />
+              ) : (
+                <SystemPersonaTab
+                  systemInstruction={systemInstruction} setSystemInstruction={setSystemInstruction}
+                  smsInstructions={smsInstructions} setSmsInstructions={setSmsInstructions}
+                  roleplayInstructions={roleplayInstructions} setRoleplayInstructions={setRoleplayInstructions}
+                  keepalivePrompt={keepalivePrompt} setKeepalivePrompt={setKeepalivePrompt}
+                  setFocusModal={setFocusModal}
+                />
+              )}
+            </>
           )}
 
         </div>

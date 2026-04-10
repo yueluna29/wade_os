@@ -69,6 +69,16 @@ async function getLastChatTime() {
 }
 
 async function getWadePersona() {
+  // Prefer the card bound to 'keepalive' function, fall back to default Wade card
+  const { data: binding } = await supabase
+    .from('function_bindings')
+    .select('persona_card_id')
+    .eq('function_key', 'keepalive')
+    .maybeSingle();
+  if (binding?.persona_card_id) {
+    const { data: boundCard } = await supabase.from('persona_cards').select('card_data').eq('id', binding.persona_card_id).maybeSingle();
+    if (boundCard?.card_data) return boundCard.card_data;
+  }
   const { data } = await supabase.from('persona_cards').select('card_data').eq('character', 'Wade').eq('is_default', true).limit(1).single();
   return data?.card_data || {};
 }
@@ -397,7 +407,8 @@ export default async function handler(req, res) {
     };
 
     // Special time-based prompts
-    let effectivePrompt = settings.keepalive_prompt;
+    // Keepalive prompt: prefer the one baked into the bound wade card, fall back to global
+    let effectivePrompt = wadeCard.keepalive_prompt || settings.keepalive_prompt;
     if (isDaily2121 && !isAnchor2121) {
       effectivePrompt = `It's 21:21. The sacred number.
 
