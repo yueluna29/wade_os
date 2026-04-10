@@ -333,7 +333,7 @@ export interface PersonaCardData {
 export interface PersonaCard {
   id: string;
   name: string;
-  character: 'Wade' | 'Luna';
+  character: 'Wade' | 'Luna' | 'System';
   description: string;
   cardData: PersonaCardData;
   isDefault: boolean;
@@ -347,6 +347,7 @@ export interface FunctionBinding {
   functionKey: string;
   label: string;
   personaCardId?: string;
+  systemCardId?: string;
   llmPresetId?: string;
 }
 
@@ -449,7 +450,7 @@ updatePersonaCard: (id: string, updates: Partial<Omit<PersonaCard, 'id' | 'creat
 deletePersonaCard: (id: string) => Promise<void>;
 duplicatePersonaCard: (id: string) => Promise<string>;
 setDefaultPersonaCard: (id: string) => Promise<void>;
-getDefaultPersonaCard: (character: 'Wade' | 'Luna') => PersonaCard | undefined;
+getDefaultPersonaCard: (character: 'Wade' | 'Luna' | 'System') => PersonaCard | undefined;
 
 // --- 功能绑定 ---
 functionBindings: FunctionBinding[];

@@ -49,6 +49,19 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   const [currentWadeCardId, setCurrentWadeCardId] = useState<string | null>(null);
 
+  // --- Currently editing System card (for carousel) ---
+  const systemCards = personaCards
+    .filter(c => c.character === 'System')
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  const [currentSystemCardId, setCurrentSystemCardId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!currentSystemCardId && systemCards.length > 0) {
+      const def = systemCards.find(c => c.isDefault) || systemCards[0];
+      setCurrentSystemCardId(def.id);
+    }
+  }, [systemCards.length]);
+
   // Initialize to default Wade card once cards load
   useEffect(() => {
     if (!currentWadeCardId && wadeCards.length > 0) {
@@ -57,13 +70,12 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
     }
   }, [wadeCards.length]);
 
-  // When currentWadeCardId changes, reload form fields from that card
+  // When currentWadeCardId changes, reload Wade identity fields from that card
   useEffect(() => {
     if (!currentWadeCardId) return;
     const card = wadeCards.find(c => c.id === currentWadeCardId);
     if (!card) return;
     const cd = card.cardData || {};
-    // Wade identity fields
     setWadeBirthday(cd.birthday || '');
     setWadeMbti(cd.mbti || '');
     setWadeHeight(cd.height || '');
@@ -76,13 +88,19 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
     setWadeSingleExamples(cd.example_punchlines || '');
     setWadeExample(cd.example_dialogue_general || '');
     setSmsExampleDialogue(cd.example_dialogue_sms || '');
-    // System prompts (per-card)
+  }, [currentWadeCardId]);
+
+  // When currentSystemCardId changes, reload system prompt fields
+  useEffect(() => {
+    if (!currentSystemCardId) return;
+    const card = systemCards.find(c => c.id === currentSystemCardId);
+    if (!card) return;
+    const cd = card.cardData || {};
     setSystemInstruction(cd.global_directives || '');
     setSmsInstructions(cd.sms_mode_rules || '');
     setRoleplayInstructions(cd.rp_mode_rules || '');
-    // Keepalive prompt falls back to global if not in card
-    if (cd.keepalive_prompt) setKeepalivePrompt(cd.keepalive_prompt);
-  }, [currentWadeCardId]);
+    setKeepalivePrompt(cd.keepalive_prompt || '');
+  }, [currentSystemCardId]);
 
   // --- Luna 专属字段 ---
   const [lunaBirthday, setLunaBirthday] = useState(settings.lunaBirthday || '');
@@ -100,12 +118,6 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const [smsInstructions, setSmsInstructions] = useState(settings.smsInstructions || '');
   const [roleplayInstructions, setRoleplayInstructions] = useState(settings.roleplayInstructions || '');
   const [keepalivePrompt, setKeepalivePrompt] = useState('');
-
-  // Load keepalive prompt from Supabase (not in store)
-  useEffect(() => {
-    supabase.from('app_settings').select('keepalive_prompt').limit(1).single()
-      .then(({ data }) => { if (data?.keepalive_prompt) setKeepalivePrompt(data.keepalive_prompt); });
-  }, []);
 
   const wadeFileRef = useRef<HTMLInputElement>(null);
   const lunaFileRef = useRef<HTMLInputElement>(null);
@@ -256,7 +268,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
       if (error) throw error;
 
-      // Save to the currently viewed Wade card (not necessarily the default)
+      // Save Wade identity fields to the currently viewed Wade card
       const targetWade = currentWadeCardId
         ? personaCards.find(c => c.id === currentWadeCardId)
         : personaCards.find(c => c.character === 'Wade' && c.isDefault);
@@ -264,7 +276,6 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
         await updatePersonaCard(targetWade.id, {
           cardData: {
             ...targetWade.cardData,
-            global_directives: systemInstruction,
             core_identity: wadeDefinition,
             appearance: wadeAppearance,
             clothing: wadeClothing,
@@ -278,6 +289,19 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
             example_dialogue_general: wadeExample,
             example_punchlines: wadeSingleExamples,
             example_dialogue_sms: smsExampleDialogue,
+          }
+        });
+      }
+
+      // Save system prompts to the currently viewed System card
+      const targetSystem = currentSystemCardId
+        ? personaCards.find(c => c.id === currentSystemCardId)
+        : personaCards.find(c => c.character === 'System' && c.isDefault);
+      if (targetSystem) {
+        await updatePersonaCard(targetSystem.id, {
+          cardData: {
+            ...targetSystem.cardData,
+            global_directives: systemInstruction,
             sms_mode_rules: smsInstructions,
             rp_mode_rules: roleplayInstructions,
             keepalive_prompt: keepalivePrompt,
@@ -301,11 +325,6 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
             height: lunaHeight,
           }
         });
-      }
-
-      // Save keepalive prompt to app_settings
-      if (keepalivePrompt) {
-        await supabase.from('app_settings').update({ keepalive_prompt: keepalivePrompt }).eq('id', 1);
       }
 
       setTimeout(() => {
@@ -493,6 +512,42 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
           {activeTab === 'system' && (
             <>
+              <WadeCardCarousel
+                cards={systemCards}
+                currentCardId={currentSystemCardId}
+                onSelectCard={setCurrentSystemCardId}
+                label="System Files"
+                newCardLabel="New System File"
+                bindingType="system"
+                onDuplicate={async (id) => {
+                  const newId = await duplicatePersonaCard(id);
+                  if (newId) setCurrentSystemCardId(newId);
+                }}
+                onCreateNew={async () => {
+                  const newId = await addPersonaCard({
+                    name: 'New System File',
+                    character: 'System',
+                    description: 'A blank system ruleset.',
+                    cardData: {},
+                    isDefault: false,
+                  });
+                  if (newId) setCurrentSystemCardId(newId);
+                }}
+                onDelete={async (id) => {
+                  await deletePersonaCard(id);
+                  const remaining = systemCards.filter(c => c.id !== id);
+                  if (remaining.length > 0) setCurrentSystemCardId(remaining[0].id);
+                }}
+                onRename={async (id, name) => { await updatePersonaCard(id, { name }); }}
+                onUpdateDescription={async (id, description) => { await updatePersonaCard(id, { description }); }}
+                functionBindings={functionBindings as any}
+                onToggleBinding={async (fnKey, cardId) => {
+                  const binding = functionBindings.find(b => b.functionKey === fnKey);
+                  const currentlyBound = binding?.systemCardId === cardId;
+                  await updateFunctionBinding(fnKey, { systemCardId: currentlyBound ? null : cardId });
+                }}
+              />
+
               {/* Form style toggle */}
               <div className="flex items-center justify-end gap-1 mb-3">
                 <span className="text-[9px] text-wade-text-muted/60 uppercase tracking-wider font-bold mr-1">Form</span>
@@ -514,7 +569,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
               {wadeFormStyle === 'compact' ? (
                 <SystemPersonaTabCompact
-                  currentCardName={wadeCards.find(c => c.id === currentWadeCardId)?.name}
+                  currentCardName={systemCards.find(c => c.id === currentSystemCardId)?.name}
                   systemInstruction={systemInstruction} setSystemInstruction={setSystemInstruction}
                   smsInstructions={smsInstructions} setSmsInstructions={setSmsInstructions}
                   roleplayInstructions={roleplayInstructions} setRoleplayInstructions={setRoleplayInstructions}

@@ -55,21 +55,27 @@ export const cardDataToXML = (cardData: PersonaCardData, character: 'Wade' | 'Lu
 export const buildSystemPromptFromCard = (options: {
   wadeCard?: PersonaCardData;
   lunaCard?: PersonaCardData;
+  systemCard?: PersonaCardData; // Separate system card for rules/jailbreak
   chatMode: 'deep' | 'sms' | 'roleplay';
   coreMemories?: CoreMemory[];
   isRetry?: boolean;
-  sessionSummary?: string;      // ← 加这一行，buildSystemPromptFromCard 也需要接收这个参数。
+  sessionSummary?: string;
   customPrompt?: string;
-  formattedHistory?: any[]; // 只有 sms retry 时需要
-  wadeMemoriesXml?: string; // 智能记忆注入（放在 prompt 最后）
+  formattedHistory?: any[];
+  wadeMemoriesXml?: string;
 }): string => {
-  const { wadeCard, lunaCard, chatMode, coreMemories, isRetry, formattedHistory } = options;
- 
+  const { wadeCard, lunaCard, systemCard, chatMode, coreMemories, isRetry, formattedHistory } = options;
+
+  // Prefer system card values, fall back to wade card (backward compat)
+  const globalDirectives = systemCard?.global_directives?.trim() || wadeCard?.global_directives?.trim();
+  const smsRulesEffective = systemCard?.sms_mode_rules?.trim() || wadeCard?.sms_mode_rules?.trim();
+  const rpRulesEffective = systemCard?.rp_mode_rules?.trim() || wadeCard?.rp_mode_rules?.trim();
+
   let prompt = '';
- 
-  // 1. 全局系统指令（如果角色卡里有）
-  if (wadeCard?.global_directives?.trim()) {
-    prompt += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${wadeCard.global_directives.trim()}`;
+
+  // 1. 全局系统指令
+  if (globalDirectives) {
+    prompt += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${globalDirectives}`;
   }
  
   // 1.5 回复风格硬规则（全模式生效）
@@ -139,8 +145,7 @@ Do NOT address Luna's points one by one. Never reply in a pattern like "You said
  
   // 7. 模式专属规则
   if (chatMode === 'sms') {
-    const smsRules = wadeCard?.sms_mode_rules?.trim();
-    if (smsRules) prompt += `\n\n${smsRules}`;
+    if (smsRulesEffective) prompt += `\n\n${smsRulesEffective}`;
     prompt += `\n\n[SMS MODE — HARD RULES]
 - You are texting on a phone. Dialogue ONLY. No action narration, no asterisks (*action*), no stage directions.
 - Split separate texts with |||. Each segment must contain actual spoken words.
@@ -154,15 +159,13 @@ Do NOT address Luna's points one by one. Never reply in a pattern like "You said
   5. Good example: [VOICE] Hey babe, you're killing me here — CORRECT
 - Keep the vibe casual and natural, like real phone texting.`;
   } else if (chatMode === 'roleplay') {
-    const rpRules = wadeCard?.rp_mode_rules?.trim();
-    prompt += rpRules
-      ? `\n\n${rpRules}`
+    prompt += rpRulesEffective
+      ? `\n\n${rpRulesEffective}`
       : `\n\n[OUTPUT FORMAT: Internal monologue in <think> tags first. Then immersive response.]`;
   } else {
     // deep 模式：如果有 RP 规则也加上（因为 deep 模式也需要 CoT）
-    const rpRules = wadeCard?.rp_mode_rules?.trim();
-    if (rpRules) {
-      prompt += `\n\n${rpRules}`;
+    if (rpRulesEffective) {
+      prompt += `\n\n${rpRulesEffective}`;
     }
   }
 
@@ -194,6 +197,7 @@ Do NOT address Luna's points one by one. Never reply in a pattern like "You said
 export const generateFromCard = async (config: {
   wadeCard?: PersonaCardData;
   lunaCard?: PersonaCardData;
+  systemCard?: PersonaCardData;
   chatMode: 'deep' | 'sms' | 'roleplay';
   prompt: string;
   history: { role: string; parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] }[];
@@ -217,16 +221,17 @@ export const generateFromCard = async (config: {
   };
 }): Promise<GeminiResponse> => {
  
-  const { wadeCard, lunaCard, chatMode, prompt, history, coreMemories, isRetry, sessionSummary, customPrompt, wadeMemoriesXml, llmPreset } = config;
- 
+  const { wadeCard, lunaCard, systemCard, chatMode, prompt, history, coreMemories, isRetry, sessionSummary, customPrompt, wadeMemoriesXml, llmPreset } = config;
+
   if (!llmPreset) {
     throw new Error("No LLM preset provided. Configure a brain in Mission Control!");
   }
- 
+
   // 用新的构建器生成 system prompt
   const systemPrompt = buildSystemPromptFromCard({
     wadeCard,
     lunaCard,
+    systemCard,
     chatMode,
     coreMemories,
     isRetry,

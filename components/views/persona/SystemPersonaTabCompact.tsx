@@ -52,17 +52,16 @@ export const SystemPersonaTabCompact: React.FC<SystemPersonaTabCompactProps> = (
   return (
     <div className="space-y-5">
 
-      {/* Header banner — which card's system prompts are these */}
+      {/* Header banner — which system card you're editing */}
       {currentCardName && (
         <div className="bg-wade-accent-light/50 border border-wade-accent/20 rounded-2xl px-4 py-3 flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-wade-accent-light flex items-center justify-center text-wade-accent shrink-0">
             <Icons.Brain size={14} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[9px] font-bold text-wade-accent/70 uppercase tracking-wider">Editing system prompts for</div>
+            <div className="text-[9px] font-bold text-wade-accent/70 uppercase tracking-wider">Editing system card</div>
             <div className="text-sm font-bold text-wade-text-main truncate">{currentCardName}</div>
           </div>
-          <div className="text-[9px] text-wade-text-muted/60 italic">switch on Wade tab</div>
         </div>
       )}
 

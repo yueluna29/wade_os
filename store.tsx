@@ -483,6 +483,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               functionKey: b.function_key,
               label: b.label || b.function_key,
               personaCardId: b.persona_card_id,
+              systemCardId: b.system_card_id,
               llmPresetId: b.llm_preset_id
             })));
           }
@@ -1198,7 +1199,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       }));
     };
    
-    const getDefaultPersonaCard = (character: 'Wade' | 'Luna'): PersonaCard | undefined => {
+    const getDefaultPersonaCard = (character: 'Wade' | 'Luna' | 'System'): PersonaCard | undefined => {
       return personaCards.find(c => c.character === character && c.isDefault);
     };
    
@@ -1208,8 +1209,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       const dbUpdates: any = { updated_at: new Date().toISOString() };
       if (updates.label !== undefined) dbUpdates.label = updates.label;
       if (updates.personaCardId !== undefined) dbUpdates.persona_card_id = updates.personaCardId || null;
+      if (updates.systemCardId !== undefined) dbUpdates.system_card_id = updates.systemCardId || null;
       if (updates.llmPresetId !== undefined) dbUpdates.llm_preset_id = updates.llmPresetId || null;
-   
+
       await supabase.from('function_bindings').update(dbUpdates).eq('function_key', functionKey);
       setFunctionBindings(prev => prev.map(b => b.functionKey === functionKey ? { ...b, ...updates } : b));
     };

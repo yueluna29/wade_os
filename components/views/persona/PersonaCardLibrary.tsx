@@ -20,7 +20,7 @@ export const PersonaCardLibrary: React.FC<PersonaCardLibraryProps> = ({ setFocus
   // 临时状态，用来在未保存时双向绑定输入框
   const [tempName, setTempName] = useState('');
   const [tempDescription, setTempDescription] = useState('');
-  const [tempCharacter, setTempCharacter] = useState<'Wade' | 'Luna'>('Wade');
+  const [tempCharacter, setTempCharacter] = useState<'Wade' | 'Luna' | 'System'>('Wade');
   const [tempCardData, setTempCardData] = useState<PersonaCardData>({});
 
   const handleEdit = (card: PersonaCard) => {

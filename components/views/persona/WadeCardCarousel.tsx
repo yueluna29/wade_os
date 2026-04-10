@@ -11,12 +11,15 @@ interface WadeCardCarouselProps {
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onUpdateDescription: (id: string, description: string) => void;
-  functionBindings: Array<{ functionKey: string; label: string; personaCardId: string | null }>;
+  functionBindings: Array<{ functionKey: string; label: string; personaCardId?: string | null; systemCardId?: string | null }>;
   onToggleBinding: (functionKey: string, cardId: string) => void;
+  label?: string;              // e.g. "Wade Files" or "System Files"
+  newCardLabel?: string;       // e.g. "New Wade File" or "New System File"
+  bindingType?: 'persona' | 'system'; // which field in function_bindings to check
 }
 
-// Functions that Wade cards can be assigned to
-const WADE_FUNCTIONS = [
+// Functions that cards can be assigned to
+const FUNCTIONS = [
   { key: 'chat_sms', label: 'SMS' },
   { key: 'chat_deep', label: 'Deep' },
   { key: 'chat_roleplay', label: 'RP' },
@@ -34,6 +37,9 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
   onUpdateDescription,
   functionBindings,
   onToggleBinding,
+  label = 'Wade Files',
+  newCardLabel = 'New Wade File',
+  bindingType = 'persona',
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -70,13 +76,16 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
     if (card && card.id !== currentCardId) onSelectCard(card.id);
   };
 
-  const isBindingActive = (functionKey: string, cardId: string) =>
-    functionBindings.find(b => b.functionKey === functionKey)?.personaCardId === cardId;
+  const isBindingActive = (functionKey: string, cardId: string) => {
+    const b = functionBindings.find(x => x.functionKey === functionKey);
+    if (!b) return false;
+    return bindingType === 'system' ? b.systemCardId === cardId : b.personaCardId === cardId;
+  };
 
   return (
     <div className="mb-4 overflow-hidden">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-[9px] font-bold text-wade-text-muted uppercase tracking-[0.2em]">Wade Files · {cards.length}</div>
+        <div className="text-[9px] font-bold text-wade-text-muted uppercase tracking-[0.2em]">{label} · {cards.length}</div>
         <button
           onClick={onCreateNew}
           className="text-[9px] font-bold text-wade-accent hover:text-wade-accent-hover transition-colors flex items-center gap-1"
@@ -175,7 +184,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
               <div className="px-4 pb-3">
                 <div className="text-[8px] font-bold text-wade-text-muted/60 uppercase tracking-wider mb-1.5">Use for</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {WADE_FUNCTIONS.map(fn => {
+                  {FUNCTIONS.map(fn => {
                     const active = isBindingActive(fn.key, card.id);
                     return (
                       <button
@@ -236,7 +245,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
           <div className="w-12 h-12 rounded-full border-2 border-current flex items-center justify-center">
             <Icons.Plus size={20} />
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-wider">New Wade File</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider">{newCardLabel}</span>
         </button>
       </div>
 

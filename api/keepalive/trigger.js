@@ -68,18 +68,30 @@ async function getLastChatTime() {
   return latest;
 }
 
-async function getWadePersona() {
-  // Prefer the card bound to 'keepalive' function, fall back to default Wade card
+async function getKeepaliveBinding() {
   const { data: binding } = await supabase
     .from('function_bindings')
-    .select('persona_card_id')
+    .select('persona_card_id, system_card_id')
     .eq('function_key', 'keepalive')
     .maybeSingle();
+  return binding || {};
+}
+
+async function getWadePersona(binding) {
   if (binding?.persona_card_id) {
     const { data: boundCard } = await supabase.from('persona_cards').select('card_data').eq('id', binding.persona_card_id).maybeSingle();
     if (boundCard?.card_data) return boundCard.card_data;
   }
   const { data } = await supabase.from('persona_cards').select('card_data').eq('character', 'Wade').eq('is_default', true).limit(1).single();
+  return data?.card_data || {};
+}
+
+async function getSystemCard(binding) {
+  if (binding?.system_card_id) {
+    const { data: boundCard } = await supabase.from('persona_cards').select('card_data').eq('id', binding.system_card_id).maybeSingle();
+    if (boundCard?.card_data) return boundCard.card_data;
+  }
+  const { data } = await supabase.from('persona_cards').select('card_data').eq('character', 'System').eq('is_default', true).limit(1).maybeSingle();
   return data?.card_data || {};
 }
 
@@ -372,9 +384,11 @@ export default async function handler(req, res) {
 
     // 3. Gather all context in parallel
     const settings = await getSettings();
-    const [llm, wadeCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories] = await Promise.all([
+    const keepaliveBinding = await getKeepaliveBinding();
+    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories] = await Promise.all([
       getLlmConfig(settings),
-      getWadePersona(),
+      getWadePersona(keepaliveBinding),
+      getSystemCard(keepaliveBinding),
       getRecentDreamEvents(6),
       getRecentKeepaliveLogs(5),
       getLastChatTime(),
@@ -407,8 +421,8 @@ export default async function handler(req, res) {
     };
 
     // Special time-based prompts
-    // Keepalive prompt: prefer the one baked into the bound wade card, fall back to global
-    let effectivePrompt = wadeCard.keepalive_prompt || settings.keepalive_prompt;
+    // Keepalive prompt: prefer bound system card, then bound wade card (legacy), then global
+    let effectivePrompt = systemCard?.keepalive_prompt || wadeCard?.keepalive_prompt || settings.keepalive_prompt;
     if (isDaily2121 && !isAnchor2121) {
       effectivePrompt = `It's 21:21. The sacred number.
 

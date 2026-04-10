@@ -503,6 +503,10 @@ export const ChatInterface: React.FC = () => {
       // 角色卡：优先用 binding 绑定的，fallback 到默认卡
       const wadeCard = binding?.personaCard?.cardData || getDefaultPersonaCard('Wade')?.cardData;
       const lunaCard = getDefaultPersonaCard('Luna')?.cardData;
+      // System card: look up system binding, fall back to default System card
+      const systemBindingCardId = functionBindings.find(b => b.functionKey === modeKey)?.systemCardId;
+      const boundSystemCard = systemBindingCardId ? personaCards.find(c => c.id === systemBindingCardId) : undefined;
+      const systemCard = boundSystemCard?.cardData || getDefaultPersonaCard('System')?.cardData;
  
       // 智能记忆：检索已有记忆注入 prompt
       let wadeMemoriesXml = '';
@@ -523,6 +527,7 @@ export const ChatInterface: React.FC = () => {
       const response = await generateFromCard({
         wadeCard,
         lunaCard,
+        systemCard,
         chatMode: activeMode as 'deep' | 'sms' | 'roleplay',
         prompt: activeMode === 'sms' ? " (Reply to the latest texts)" : savedPrompt || inputText || freshMessages.filter(m => m.role === 'Luna').pop()?.text || "(continue the conversation)",
         history,
