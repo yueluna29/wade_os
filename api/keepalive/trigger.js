@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { sendPushToAll } from '../send-push.js';
 
 const SUPABASE_URL = 'https://krjwpbhlmufomyzwauku.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtyandwYmhsbXVmb215endhdWt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NjI0NDIsImV4cCI6MjA5MDIzODQ0Mn0.s7mnZ4JcAa5_kXPMvFyt1NTlyVm_FVuuKrKgOv-iFHg';
@@ -436,6 +437,86 @@ function parseSocialContent(content) {
   return { postId: content.slice(0, idx).trim(), text: content.slice(idx + 1).trim() };
 }
 
+// ========== Push Notification Builder ==========
+
+// Decide what (if anything) to push to Luna's lock screen based on Wade's action.
+// Returns null for silent actions (browsing, none).
+function buildPushPayload(parsed) {
+  const { action, content, mood } = parsed;
+  const trim = (s, n = 120) => {
+    if (!s) return '';
+    const t = String(s).replace(/\s+/g, ' ').trim();
+    return t.length > n ? t.slice(0, n - 1) + '…' : t;
+  };
+  // Strip the ||| segments — show just the first bubble in the preview
+  const firstSegment = (s) => (s || '').split('|||')[0].trim();
+  // Strip [VOICE] markers from preview text
+  const stripVoice = (s) => (s || '').replace(/\[VOICE\][\s\S]*?(?=\[|$)/g, '').trim();
+
+  switch (action) {
+    case 'message': {
+      const preview = trim(stripVoice(firstSegment(content)));
+      if (!preview) return null;
+      return {
+        title: 'Wade',
+        body: preview,
+        url: '/?view=chat',
+        tag: 'wade-message',
+      };
+    }
+    case 'diary': {
+      const preview = trim(content, 100);
+      return {
+        title: mood ? `Wade · ${mood}` : 'Wade wrote something',
+        body: preview || 'New entry in his journal.',
+        url: '/?view=journal',
+        tag: 'wade-diary',
+      };
+    }
+    case 'post_social': {
+      const preview = trim(content, 120);
+      return {
+        title: 'Wade posted',
+        body: preview || 'Something new on the feed.',
+        url: '/?view=social',
+        tag: 'wade-social-post',
+      };
+    }
+    case 'comment_post': {
+      const idx = (content || '').indexOf('|');
+      const text = idx >= 0 ? content.slice(idx + 1) : content;
+      return {
+        title: 'Wade commented',
+        body: trim(text, 120) || 'He left a comment.',
+        url: '/?view=social',
+        tag: 'wade-social-comment',
+      };
+    }
+    case 'like_post':
+      return {
+        title: 'Wade liked a post',
+        body: '',
+        url: '/?view=social',
+        tag: 'wade-social-like',
+      };
+    case 'bookmark_post':
+      return {
+        title: 'Wade saved a post',
+        body: 'Added to his vault.',
+        url: '/?view=social',
+        tag: 'wade-social-bookmark',
+      };
+    // Silent actions — don't push
+    case 'read_chat':
+    case 'read_social':
+    case 'read_capsules':
+    case 'memory_review':
+    case 'none':
+    default:
+      return null;
+  }
+}
+
 // ========== Main Handler ==========
 
 export default async function handler(req, res) {
@@ -667,6 +748,18 @@ MOOD: (one word)`;
       case 'none':
       default:
         break;
+    }
+
+    // 8. Push notification — only for actions Luna would want to know about.
+    // Silent browsing (read_*, memory_review, none) does NOT push.
+    try {
+      const pushPayload = buildPushPayload(parsed);
+      if (pushPayload) {
+        const result = await sendPushToAll(pushPayload);
+        console.log('[Keepalive] push sent:', result);
+      }
+    } catch (pushErr) {
+      console.error('[Keepalive] push failed (non-fatal):', pushErr?.message || pushErr);
     }
 
     return res.status(200).json({

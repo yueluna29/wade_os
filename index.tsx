@@ -13,3 +13,14 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// Register the service worker so PWA install + Web Push work.
+// Only in production builds — Vite dev doesn't serve /sw.js cleanly and we
+// don't want a stale SW caching dev assets.
+if ('serviceWorker' in navigator && (import.meta as any).env?.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((err) => console.warn('[SW] registration failed', err));
+  });
+}

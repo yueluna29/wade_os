@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { generateMinimaxTTS } from "../../services/minimaxService";
 import { Icons } from '../ui/Icons';
 import { FunctionBindings } from '../views/persona/FunctionBindings';
+import { PushNotificationsCard } from './PushNotificationsCard';
 
 // Provider Presets
 const PROVIDERS = [
@@ -489,6 +490,35 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 This only converts text to numbers -- use a cheap model (Gemini Flash is free for this). Does not need to be smart.
               </p>
             </div>
+
+            {/* Image Describer Model Selector */}
+            <div className="bg-wade-bg-card rounded-2xl border border-wade-border p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-wade-accent-light flex items-center justify-center text-wade-accent">
+                  <Icons.Image size={14} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-wade-text-main">Image Describer</h3>
+                  <p className="text-[10px] text-wade-text-muted">The vision model that captions uploaded images so old chats stay light</p>
+                </div>
+              </div>
+              <select
+                value={settings.descriptionLlmId || ''}
+                onChange={(e) => updateSettings({ descriptionLlmId: e.target.value || undefined })}
+                className="w-full px-3 py-2.5 rounded-xl border border-wade-border bg-wade-bg-base text-wade-text-main text-xs focus:outline-none focus:border-wade-accent transition-colors appearance-none cursor-pointer"
+              >
+                <option value="">Off (don't auto-describe images)</option>
+                {llmPresets.filter(p => p.isVision).map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.model} ({p.provider})</option>
+                ))}
+              </select>
+              <p className="text-[9px] text-wade-text-muted mt-2 leading-relaxed">
+                Only vision-capable models appear here. When Luna sends a photo, Wade sees the real image first -- then this model quietly writes a detailed caption so older images in history travel as text (saves tokens, works with non-vision models). Leave Off to always resend the real image.
+              </p>
+            </div>
+
+            {/* Push Notifications */}
+            <PushNotificationsCard />
           </div>
         )}
 
