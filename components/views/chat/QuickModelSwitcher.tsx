@@ -72,9 +72,9 @@ export const QuickModelSwitcher: React.FC<QuickModelSwitcherProps> = ({
         <Icons.ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Dropdown — opens upward */}
+      {/* Dropdown — opens downward */}
       {open && (
-        <div className="absolute bottom-full mb-2 right-0 z-50 w-[260px] bg-wade-bg-card rounded-2xl shadow-xl border border-wade-border/70 overflow-hidden animate-fade-in backdrop-blur-md">
+        <div className="absolute top-full mt-2 right-0 z-50 w-[260px] bg-wade-bg-card rounded-2xl shadow-xl border border-wade-border/70 overflow-hidden animate-fade-in backdrop-blur-md">
           <div className="px-3 py-2 border-b border-wade-border/50 bg-wade-bg-app/50">
             <div className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-[0.15em]">Switch Brain</div>
           </div>

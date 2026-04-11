@@ -873,6 +873,17 @@ export const ChatInterface: React.FC = () => {
           <div className="flex-1 flex justify-center"><div className="font-bold text-wade-text-main text-base">Wade</div></div>
         )}
         <div className="flex items-center gap-2">
+          {activeMode !== 'archive' && (
+            <QuickModelSwitcher
+              llmPresets={llmPresets}
+              activeSession={sessions.find(s => s.id === activeSessionId)}
+              settings={settings}
+              binding={getBinding(activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep')}
+              onSelect={(presetId) => {
+                if (activeSessionId) updateSession(activeSessionId, { customLlmId: presetId });
+              }}
+            />
+          )}
           <button onClick={() => { setShowSearch(!showSearch); setShowMap(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Search /></button>
           <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"><Icons.Map /></button>
           <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative"><Icons.More /></button>
@@ -1033,23 +1044,6 @@ export const ChatInterface: React.FC = () => {
                 <Icons.Close size={12} />
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Option 2: floating model badge above input right-aligned */}
-      {activeMode !== 'archive' && (
-        <div className="relative px-4 bg-wade-bg-card border-t border-wade-border/50 z-30">
-          <div className="absolute -top-3 right-6 z-40">
-            <QuickModelSwitcher
-              llmPresets={llmPresets}
-              activeSession={sessions.find(s => s.id === activeSessionId)}
-              settings={settings}
-              binding={getBinding(activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep')}
-              onSelect={(presetId) => {
-                if (activeSessionId) updateSession(activeSessionId, { customLlmId: presetId });
-              }}
-            />
           </div>
         </div>
       )}
