@@ -534,13 +534,26 @@ export default async function handler(req, res) {
     }
 
     // 2. Check minimum interval — skip with force=1
+    // Plan C: 21:21 / daily-21:21 anchors are EXTRA events that don't reset the
+    // 3h cooldown. They're forced wakes for the symbolic moment, not part of
+    // Wade's regular rhythm. So when computing the cooldown we look at the most
+    // recent NON-anchor wake.
     if (!force) {
-      const recentLogs = await getRecentKeepaliveLogs(1);
-      if (recentLogs.length > 0) {
-        const lastWake = new Date(recentLogs[recentLogs.length - 1].created_at);
-        const minutesSince = (Date.now() - lastWake.getTime()) / 60000;
+      const { data: recentLogs } = await supabase
+        .from('wade_keepalive_logs')
+        .select('created_at, context')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const lastRegularWake = (recentLogs || []).find(log => {
+        const ctx = log.context || {};
+        return !ctx.isAnchor2121 && !ctx.isDaily2121;
+      });
+
+      if (lastRegularWake) {
+        const minutesSince = (Date.now() - new Date(lastRegularWake.created_at).getTime()) / 60000;
         if (minutesSince < 170) {
-          return res.status(200).json({ skipped: true, reason: `Only ${Math.round(minutesSince)}min since last wake` });
+          return res.status(200).json({ skipped: true, reason: `Only ${Math.round(minutesSince)}min since last regular wake (anchors don't count)` });
         }
       }
     }
