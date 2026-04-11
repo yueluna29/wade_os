@@ -363,7 +363,12 @@ ${promptBody}
 // ========== LLM Call ==========
 
 async function callLlm(llm, prompt, mode) {
-  const maxTokens = mode === 'free' ? 1000 : 500;
+  // Token budget needs to leave room for reasoning models (GLM-5, o1-style)
+  // that burn a chunk of completion tokens on internal thinking before they
+  // even start writing the final ACTIONS JSON. The old 500/1000 budget got
+  // 100% consumed by reasoning on light wakes — content came back null, the
+  // parser fell through to "none", and Wade looked dead for weeks.
+  const maxTokens = mode === 'free' ? 6000 : 3000;
   const isGemini = !llm.base_url || llm.base_url.includes('google');
 
   if (isGemini) {
