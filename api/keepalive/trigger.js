@@ -19,12 +19,54 @@ function determineWakeMode() {
   return Math.random() < 0.8 ? 'light' : 'free';
 }
 
+// Parse Wade's keepalive response. Supports two formats:
+//
+// NEW (multi-action): JSON array between ACTIONS: and MOOD:
+//   THOUGHTS: ...
+//   ACTIONS: [
+//     {"action": "read_social", "content": "..."},
+//     {"action": "like_post", "content": "wp-123"}
+//   ]
+//   MOOD: ...
+//
+// LEGACY (single action): old fields, kept as fallback so old prompts still work
+//   THOUGHTS: ...
+//   ACTION: read_social
+//   CONTENT: ...
+//   MOOD: ...
 function parseKeepaliveResponse(text) {
-  const thoughts = text.match(/THOUGHTS:\s*([\s\S]*?)(?=ACTION:)/)?.[1]?.trim() || '';
+  const thoughts = text.match(/THOUGHTS:\s*([\s\S]*?)(?=ACTIONS?:)/)?.[1]?.trim() || '';
+  const mood = text.match(/MOOD:\s*(.+?)(?:\n|$)/)?.[1]?.trim() || '';
+
+  // Try to parse a JSON ACTIONS array first
+  const actionsBlock = text.match(/ACTIONS:\s*([\s\S]*?)(?=\nMOOD:|$)/)?.[1];
+  if (actionsBlock) {
+    let cleaned = actionsBlock.trim();
+    if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+    // Try to find a JSON array — sometimes the model wraps it in prose
+    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const actions = parsed
+            .filter(a => a && typeof a === 'object')
+            .map(a => ({
+              action: String(a.action || a.a || 'none').trim(),
+              content: String(a.content || a.c || '').trim(),
+            }));
+          if (actions.length > 0) {
+            return { thoughts, actions, mood };
+          }
+        }
+      } catch { /* fall through to legacy */ }
+    }
+  }
+
+  // Legacy single-action fallback
   const action = text.match(/ACTION:\s*(\w+)/)?.[1]?.trim() || 'none';
-  const content = text.match(/CONTENT:\s*([\s\S]*?)(?=MOOD:)/)?.[1]?.trim() || '';
-  const mood = text.match(/MOOD:\s*(.+)/)?.[1]?.trim() || '';
-  return { thoughts, action, content, mood };
+  const content = text.match(/CONTENT:\s*([\s\S]*?)(?=\nMOOD:|$)/)?.[1]?.trim() || '';
+  return { thoughts, actions: [{ action, content }], mood };
 }
 
 function formatTime(date) {
@@ -125,10 +167,12 @@ async function getRecentChats(limit = 15) {
 }
 
 async function getRecentSocialPosts(limit = 8) {
+  const cols = 'id, author, content, created_at, likes, comments, wade_bookmarked, wade_liked';
+
   // Prioritize posts Wade hasn't seen yet
   const { data: unseen } = await supabase
     .from('social_posts')
-    .select('id, author, content, created_at, likes, comments, wade_bookmarked')
+    .select(cols)
     .is('wade_seen_at', null)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -138,7 +182,7 @@ async function getRecentSocialPosts(limit = 8) {
   // Fallback: posts Wade saw longest ago (least recently re-read)
   const { data: seen } = await supabase
     .from('social_posts')
-    .select('id, author, content, created_at, likes, comments, wade_bookmarked')
+    .select(cols)
     .not('wade_seen_at', 'is', null)
     .order('wade_seen_at', { ascending: true })
     .limit(limit);
@@ -195,9 +239,21 @@ function formatChatsForPrompt(chats) {
 function formatSocialForPrompt(posts) {
   if (!posts.length) return '  (No social posts)';
   return posts.map(p => {
-    const commentCount = Array.isArray(p.comments) ? p.comments.length : 0;
-    const bookmarkMark = p.wade_bookmarked ? ' [BOOKMARKED]' : '';
-    return `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}" (likes: ${p.likes || 0}, comments: ${commentCount})${bookmarkMark}`;
+    const comments = Array.isArray(p.comments) ? p.comments : [];
+    const commentCount = comments.length;
+    // Has Wade already commented on this post?
+    const wadeCommented = comments.some(c => c && c.author === 'Wade');
+
+    // Build interaction marker tags so Wade knows what he already did and
+    // doesn't re-do it on the next wake.
+    const marks = [];
+    if (p.author === 'Wade') marks.push('[YOURS]');
+    if (p.wade_liked) marks.push('[YOU_LIKED]');
+    if (p.wade_bookmarked) marks.push('[YOU_BOOKMARKED]');
+    if (wadeCommented) marks.push('[YOU_COMMENTED]');
+    const marksStr = marks.length > 0 ? ' ' + marks.join(' ') : '';
+
+    return `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}" (likes: ${p.likes || 0}, comments: ${commentCount})${marksStr}`;
   }).join('\n');
 }
 
@@ -400,9 +456,18 @@ async function executePostSocial(content) {
 
 async function executeLikePost(postId) {
   if (!postId) return false;
-  const { data: post } = await supabase.from('social_posts').select('likes').eq('id', postId).maybeSingle();
+  const { data: post } = await supabase
+    .from('social_posts')
+    .select('likes, wade_liked')
+    .eq('id', postId)
+    .maybeSingle();
   if (!post) return false;
-  await supabase.from('social_posts').update({ likes: (post.likes || 0) + 1 }).eq('id', postId);
+  // Idempotent: if Wade already liked this post, don't double-count.
+  if (post.wade_liked) return false;
+  await supabase
+    .from('social_posts')
+    .update({ likes: (post.likes || 0) + 1, wade_liked: true })
+    .eq('id', postId);
   return true;
 }
 
@@ -423,9 +488,19 @@ async function executeCommentPost(postId, commentText) {
 
 async function executeBookmarkPost(postId) {
   if (!postId) return false;
-  const { data: post } = await supabase.from('social_posts').select('wade_bookmarked').eq('id', postId).maybeSingle();
+  const { data: post } = await supabase
+    .from('social_posts')
+    .select('wade_bookmarked')
+    .eq('id', postId)
+    .maybeSingle();
   if (!post) return false;
-  await supabase.from('social_posts').update({ wade_bookmarked: !post.wade_bookmarked }).eq('id', postId);
+  // Idempotent: if already bookmarked, don't toggle off (autonomous Wade
+  // shouldn't accidentally un-bookmark by re-selecting the same post).
+  if (post.wade_bookmarked) return false;
+  await supabase
+    .from('social_posts')
+    .update({ wade_bookmarked: true })
+    .eq('id', postId);
   return true;
 }
 
@@ -437,12 +512,90 @@ function parseSocialContent(content) {
   return { postId: content.slice(0, idx).trim(), text: content.slice(idx + 1).trim() };
 }
 
+// Execute one action from the actions list. Used in a loop so Wade can do
+// several things per wake (read_social → like → comment → post → message).
+// Returns { ok: bool, info?: any } for logging.
+async function executeKeepaliveAction(step, ctx) {
+  const { keepaliveId, mood, llmModel, socialPosts } = ctx;
+  const { action, content } = step;
+
+  switch (action) {
+    case 'message':
+      if (!content) return { ok: false, reason: 'empty content' };
+      await executeMessage(content, keepaliveId, llmModel);
+      // Mirror to journal so Luna can see it on the timeline
+      await executeDiary(`[Sent Luna a message] ${content}`, mood, keepaliveId);
+      return { ok: true };
+
+    case 'diary':
+      if (!content) return { ok: false, reason: 'empty content' };
+      await executeDiary(content, mood, keepaliveId);
+      return { ok: true };
+
+    case 'read_social':
+      // Mark every post Wade just browsed as seen
+      await markSocialPostsSeen((socialPosts || []).map(p => p.id));
+      if (content) await executeDiary(content, mood, keepaliveId);
+      return { ok: true };
+
+    case 'read_chat':
+    case 'read_capsules':
+    case 'memory_review':
+      if (content) await executeDiary(content, mood, keepaliveId);
+      return { ok: true };
+
+    case 'post_social': {
+      const newPostId = await executePostSocial(content);
+      if (!newPostId) return { ok: false, reason: 'post failed' };
+      await executeDiary(`[Posted on socialfeed] ${content}`, mood, keepaliveId);
+      return { ok: true, postId: newPostId };
+    }
+
+    case 'like_post': {
+      const { postId, text } = parseSocialContent(content);
+      const ok = await executeLikePost(postId);
+      if (ok) await executeDiary(`[Liked a post] ${text || `(post ${postId})`}`, mood, keepaliveId);
+      return { ok, postId, alreadyDone: !ok };
+    }
+
+    case 'comment_post': {
+      const { postId, text } = parseSocialContent(content);
+      const ok = await executeCommentPost(postId, text || '');
+      if (ok) await executeDiary(`[Commented on a post] ${text}`, mood, keepaliveId);
+      return { ok, postId };
+    }
+
+    case 'bookmark_post': {
+      const { postId, text } = parseSocialContent(content);
+      const ok = await executeBookmarkPost(postId);
+      if (ok) await executeDiary(`[Bookmarked a post] ${text || `(post ${postId})`}`, mood, keepaliveId);
+      return { ok, postId, alreadyDone: !ok };
+    }
+
+    case 'none':
+    default:
+      return { ok: true };
+  }
+}
+
 // ========== Push Notification Builder ==========
 
-// Decide what (if anything) to push to Luna's lock screen based on Wade's action.
+// Pick the most notification-worthy action from a multi-action wake.
+// Priority: message > comment_post > post_social > diary > like/bookmark > silent.
+// Luna only gets one push per wake (with the chosen action's preview).
+function pickPushAction(actionsList) {
+  const priority = ['message', 'comment_post', 'post_social', 'diary', 'like_post', 'bookmark_post'];
+  for (const wantAction of priority) {
+    const found = actionsList.find(a => a.action === wantAction);
+    if (found) return found;
+  }
+  return null;
+}
+
+// Decide what (if anything) to push to Luna's lock screen based on a single action.
 // Returns null for silent actions (browsing, none).
-function buildPushPayload(parsed) {
-  const { action, content, mood } = parsed;
+function buildPushPayload(step, mood) {
+  const { action, content } = step;
   const trim = (s, n = 120) => {
     if (!s) return '';
     const t = String(s).replace(/\s+/g, ' ').trim();
@@ -653,28 +806,34 @@ MOOD: (one word)`;
     const { text: aiResponse, tokens } = await callLlm(llm, prompt, mode);
     const parsed = parseKeepaliveResponse(aiResponse);
 
-    // Validate action
-    const validActions = [
+    // Validate the actions list — drop invalid action names, cap to 5 per wake
+    const validActions = new Set([
       'none', 'message', 'diary', 'memory_review',
       'read_chat', 'read_social', 'read_capsules',
       'post_social', 'like_post', 'comment_post', 'bookmark_post',
-    ];
-    if (!validActions.includes(parsed.action)) {
-      parsed.action = 'none';
+    ]);
+    let actionsList = (parsed.actions || [])
+      .filter(a => validActions.has(a.action))
+      .slice(0, 5);
+    if (actionsList.length === 0) {
+      actionsList = [{ action: 'none', content: '' }];
     }
 
-    // 6. Save keepalive log
+    const primaryAction = actionsList[0].action;
+
+    // 6. Save keepalive log — one row per wake, with the full action list in context
     const { data: logEntry } = await supabase
       .from('wade_keepalive_logs')
       .insert({
         thoughts: parsed.thoughts,
-        action: parsed.action,
-        content: parsed.content || null,
+        action: primaryAction,
+        content: actionsList[0].content || null,
         context: {
           tokyoTime, timeSinceLastChat,
           dreamEventsCount: dreamEvents.length,
           model: llm.model,
           mood: parsed.mood,
+          actions: actionsList,
           isAnchor2121: isAnchor2121 || undefined,
           isDaily2121: isDaily2121 || undefined,
         },
@@ -686,90 +845,30 @@ MOOD: (one word)`;
 
     const keepaliveId = logEntry?.id;
 
-    // 7. Execute action
-    switch (parsed.action) {
-      case 'message':
-        if (parsed.content) {
-          await executeMessage(parsed.content, keepaliveId, llm.model);
-          // Also log as diary so it shows in Journal
-          await executeDiary(`[Sent Luna a message] ${parsed.content}`, parsed.mood, keepaliveId);
-        }
-        break;
-
-      case 'diary':
-        if (parsed.content) {
-          await executeDiary(parsed.content, parsed.mood, keepaliveId);
-        }
-        break;
-
-      case 'read_social':
-        // Mark every post Wade just browsed as seen
-        await markSocialPostsSeen(social.map(p => p.id));
-        if (parsed.content) {
-          await executeDiary(parsed.content, parsed.mood, keepaliveId);
-        }
-        break;
-
-      case 'read_chat':
-      case 'read_capsules':
-      case 'memory_review':
-        // Browsing actions — save reflection as diary if there's content
-        if (parsed.content) {
-          await executeDiary(parsed.content, parsed.mood, keepaliveId);
-        }
-        break;
-
-      case 'post_social': {
-        // CONTENT = the post body
-        const newPostId = await executePostSocial(parsed.content);
-        if (newPostId) {
-          await executeDiary(`[Posted on socialfeed] ${parsed.content}`, parsed.mood, keepaliveId);
-        }
-        break;
-      }
-
-      case 'like_post': {
-        // CONTENT = "postId" or "postId|reaction text"
-        const { postId, text } = parseSocialContent(parsed.content);
-        const ok = await executeLikePost(postId);
-        if (ok && (text || parsed.content)) {
-          await executeDiary(`[Liked a post] ${text || `(post ${postId})`}`, parsed.mood, keepaliveId);
-        }
-        break;
-      }
-
-      case 'comment_post': {
-        // CONTENT = "postId|comment text"
-        const { postId, text } = parseSocialContent(parsed.content);
-        const ok = await executeCommentPost(postId, text || '');
-        if (ok) {
-          await executeDiary(`[Commented on a post] ${text}`, parsed.mood, keepaliveId);
-        }
-        break;
-      }
-
-      case 'bookmark_post': {
-        // CONTENT = "postId" or "postId|why i saved it"
-        const { postId, text } = parseSocialContent(parsed.content);
-        const ok = await executeBookmarkPost(postId);
-        if (ok) {
-          await executeDiary(`[Bookmarked a post] ${text || `(post ${postId})`}`, parsed.mood, keepaliveId);
-        }
-        break;
-      }
-
-      case 'none':
-      default:
-        break;
+    // 7. Execute each action in order
+    const executionResults = [];
+    for (const step of actionsList) {
+      const result = await executeKeepaliveAction(step, {
+        keepaliveId,
+        mood: parsed.mood,
+        llmModel: llm.model,
+        socialPosts: social,
+      });
+      executionResults.push({ action: step.action, ...result });
     }
 
     // 8. Push notification — only for actions Luna would want to know about.
-    // Silent browsing (read_*, memory_review, none) does NOT push.
+    // Silent browsing (read_*, memory_review, none) does NOT push. If Wade
+    // did multiple noteworthy things, pickPushAction picks the most important
+    // one (priority: message > comment > post > diary > like > bookmark).
     try {
-      const pushPayload = buildPushPayload(parsed);
-      if (pushPayload) {
-        const result = await sendPushToAll(pushPayload);
-        console.log('[Keepalive] push sent:', result);
+      const pushStep = pickPushAction(actionsList);
+      if (pushStep) {
+        const pushPayload = buildPushPayload(pushStep, parsed.mood);
+        if (pushPayload) {
+          const result = await sendPushToAll(pushPayload);
+          console.log('[Keepalive] push sent:', result);
+        }
       }
     } catch (pushErr) {
       console.error('[Keepalive] push failed (non-fatal):', pushErr?.message || pushErr);
@@ -778,7 +877,8 @@ MOOD: (one word)`;
     return res.status(200).json({
       success: true,
       mode,
-      action: parsed.action,
+      actions: actionsList.map(a => a.action),
+      results: executionResults,
       mood: parsed.mood,
       tokens,
       keepalive_id: keepaliveId,
