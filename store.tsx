@@ -735,6 +735,18 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setSessions(prev => prev.filter(s => s.id !== id));
     setMessages(prev => prev.filter(m => m.sessionId !== id));
     if (activeSessionId === id) setActiveSessionId(null);
+
+    // Delete messages from all three mode tables before deleting the session
+    // itself. We don't know which mode this session was, so just hit all three
+    // — it's cheap and idempotent. The DB also has ON DELETE CASCADE as a
+    // safety net (see migration 20260412_messages_session_cascade.sql) but the
+    // explicit deletes here keep the local state and DB in sync immediately
+    // even if the migration hasn't been applied yet.
+    await Promise.all([
+      supabase.from('messages_sms').delete().eq('session_id', id),
+      supabase.from('messages_deep').delete().eq('session_id', id),
+      supabase.from('messages_roleplay').delete().eq('session_id', id),
+    ]);
     await supabase.from('chat_sessions').delete().eq('id', id);
   };
 
