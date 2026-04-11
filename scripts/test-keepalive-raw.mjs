@@ -127,7 +127,7 @@ if (isGemini) {
       model: llm.model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.9,
-      max_tokens: 500,
+      max_tokens: 6000,
     }),
   });
   const json = await res.json();
