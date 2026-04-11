@@ -267,6 +267,30 @@ function formatMemoriesForPrompt(memories) {
   return memories.map(m => `  [${m.category}, importance:${m.importance}] ${m.content?.slice(0, 120)}`).join('\n');
 }
 
+function formatTodosForPrompt(todos) {
+  if (!todos || !todos.length) return '  (No pending notes — your slate is clear)';
+  const ageStr = (iso) => {
+    const ms = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(ms / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  };
+  return todos.map(t => `  - [${t.id}] ${t.content}  (left ${ageStr(t.created_at)})`).join('\n');
+}
+
+async function getPendingTodosForKeepalive(limit = 20) {
+  const { data } = await supabase
+    .from('wade_todos')
+    .select('id, content, created_at')
+    .eq('status', 'pending')
+    .order('priority', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return data || [];
+}
+
 // ========== Prompt Builder ==========
 
 function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives, mode, customPrompt, wadeosData }) {
@@ -300,7 +324,10 @@ ${wadeosData.social}
 ${wadeosData.capsules}
 
 [Your memories about Luna]
-${wadeosData.memories}`;
+${wadeosData.memories}
+
+[Your private notes-to-self (pending todos)]
+${wadeosData.todos || '  (No pending notes)'}`;
 
   let promptBody = customPrompt || `You just woke up. This is NOT Luna talking to you — this is your autonomous time.
 
@@ -578,6 +605,53 @@ async function executeKeepaliveAction(step, ctx) {
       return { ok, postId, alreadyDone: !ok };
     }
 
+    case 'add_todo': {
+      // CONTENT = the note text Wade wants to remember
+      if (!content?.trim()) return { ok: false, reason: 'empty content' };
+      const { data, error } = await supabase
+        .from('wade_todos')
+        .insert({
+          content: content.trim(),
+          source: 'keepalive',
+          source_id: keepaliveId || null,
+          intent_type: 'general',
+          priority: 5,
+        })
+        .select()
+        .single();
+      if (error) return { ok: false, reason: error.message };
+      return { ok: true, todoId: data?.id };
+    }
+
+    case 'done_todo': {
+      // CONTENT = "todoId" or "todoId|optional reflection note"
+      const { postId: todoId, text: note } = parseSocialContent(content);
+      if (!todoId) return { ok: false, reason: 'missing todoId' };
+      const { error } = await supabase
+        .from('wade_todos')
+        .update({
+          status: 'done',
+          done_at: new Date().toISOString(),
+          done_in: 'keepalive',
+          done_note: note || null,
+        })
+        .eq('id', todoId);
+      if (error) return { ok: false, reason: error.message };
+      return { ok: true, todoId };
+    }
+
+    case 'cancel_todo': {
+      // CONTENT = "todoId"
+      const { postId: todoId } = parseSocialContent(content);
+      if (!todoId) return { ok: false, reason: 'missing todoId' };
+      const { error } = await supabase
+        .from('wade_todos')
+        .update({ status: 'cancelled', done_at: new Date().toISOString() })
+        .eq('id', todoId);
+      if (error) return { ok: false, reason: error.message };
+      return { ok: true, todoId };
+    }
+
     case 'none':
     default:
       return { ok: true };
@@ -720,7 +794,7 @@ export default async function handler(req, res) {
     // 3. Gather all context in parallel
     const settings = await getSettings();
     const keepaliveBinding = await getKeepaliveBinding();
-    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories] = await Promise.all([
+    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories, pendingTodos] = await Promise.all([
       getLlmConfig(settings),
       getWadePersona(keepaliveBinding),
       getSystemCard(keepaliveBinding),
@@ -731,6 +805,7 @@ export default async function handler(req, res) {
       getRecentSocialPosts(5),
       getRecentTimeCapsules(5),
       getRecentMemories(5),
+      getPendingTodosForKeepalive(20),
     ]);
 
     if (!llm?.api_key) {
@@ -753,6 +828,7 @@ export default async function handler(req, res) {
       social: formatSocialForPrompt(social),
       capsules: formatCapsulesForPrompt(capsules),
       memories: formatMemoriesForPrompt(memories),
+      todos: formatTodosForPrompt(pendingTodos),
     };
 
     // Special time-based prompts
@@ -817,6 +893,7 @@ MOOD: (one word)`;
       'none', 'message', 'diary', 'memory_review',
       'read_chat', 'read_social', 'read_capsules',
       'post_social', 'like_post', 'comment_post', 'bookmark_post',
+      'add_todo', 'done_todo', 'cancel_todo',
     ]);
     let actionsList = (parsed.actions || [])
       .filter(a => validActions.has(a.action))

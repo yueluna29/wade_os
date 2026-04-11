@@ -9,6 +9,7 @@ import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
 import { ChatThemePanel } from './chat/ChatThemePanel';
 import { supabase } from '../../services/supabase';
 import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, WadeMemory } from '../../services/memoryService';
+import { getPendingTodos, formatTodosForChatPrompt, extractTodoTags, writeExtractedFromChat } from '../../services/todoService';
 import { MemoryLiveIndicator } from './memory/MemoryLiveIndicator';
 
 // Chat subcomponents
@@ -585,6 +586,14 @@ export const ChatInterface: React.FC = () => {
         setLastWadeMemoriesXml(wadeMemoriesXml);
       } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
 
+      // Pending todos — fetched fresh each turn so Wade always sees the latest.
+      // Injected at the very end of the system prompt (after memories) for cache.
+      let wadeTodosXml = '';
+      try {
+        const pending = await getPendingTodos(20);
+        wadeTodosXml = formatTodosForChatPrompt(pending);
+      } catch (e) { console.error('[WadeTodos] Fetch failed:', e); }
+
       // 🔥 用新的 generateFromCard 统一入口！
       const response = await generateFromCard({
         wadeCard,
@@ -598,10 +607,21 @@ export const ChatInterface: React.FC = () => {
         sessionSummary,
         customPrompt: currentSession?.customPrompt,
         wadeMemoriesXml,
+        wadeTodosXml,
         llmPreset: activeLlm,
       });
 
-      const responseText = response.text;
+      // Strip <todo> / <done> tags from Wade's reply BEFORE displaying or
+      // splitting into bubbles. The extracted notes are async-written to the
+      // wade_todos table so Wade sees them on his next wake / chat turn.
+      const rawResponseText = response.text;
+      const extracted = extractTodoTags(rawResponseText);
+      const responseText = extracted.cleanText;
+      if (extracted.todos.length > 0 || extracted.doneIds.length > 0) {
+        writeExtractedFromChat(extracted, targetSessionId).catch(err => {
+          console.error('[WadeTodos] writeExtractedFromChat failed:', err);
+        });
+      }
       const thinking = response.thinking;
       const currentModel = activeLlm?.model || (activeMode === 'roleplay' ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview');
 
