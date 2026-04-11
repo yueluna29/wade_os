@@ -59,17 +59,11 @@ export const QuickModelSwitcher: React.FC<QuickModelSwitcherProps> = ({
     <div ref={ref} className="relative select-none">
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all shadow-sm ${
-          open
-            ? 'bg-wade-accent text-white'
-            : 'bg-wade-bg-card border border-wade-border text-wade-text-muted hover:border-wade-accent/50 hover:text-wade-accent'
+        className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+          open ? 'bg-wade-accent text-white' : 'bg-wade-bg-app text-wade-text-muted hover:bg-wade-accent hover:text-white'
         }`}
       >
-        <span className={open ? 'text-white' : 'text-wade-accent'}>
-          {activeLlm ? providerIcon(activeLlm.provider, 11) : <Icons.Brain size={11} />}
-        </span>
-        <span className="truncate max-w-[140px]">{activeLlm?.name || activeLlm?.model || 'Pick a brain'}</span>
-        <Icons.ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <Icons.Brain size={15} />
       </button>
 
       {/* Dropdown — opens downward */}
