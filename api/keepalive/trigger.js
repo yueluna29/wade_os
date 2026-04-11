@@ -124,12 +124,33 @@ async function getRecentChats(limit = 15) {
 }
 
 async function getRecentSocialPosts(limit = 8) {
-  const { data } = await supabase
+  // Prioritize posts Wade hasn't seen yet
+  const { data: unseen } = await supabase
     .from('social_posts')
     .select('id, author, content, created_at, likes, comments, wade_bookmarked')
+    .is('wade_seen_at', null)
     .order('created_at', { ascending: false })
     .limit(limit);
-  return data || [];
+
+  if (unseen && unseen.length > 0) return unseen;
+
+  // Fallback: posts Wade saw longest ago (least recently re-read)
+  const { data: seen } = await supabase
+    .from('social_posts')
+    .select('id, author, content, created_at, likes, comments, wade_bookmarked')
+    .not('wade_seen_at', 'is', null)
+    .order('wade_seen_at', { ascending: true })
+    .limit(limit);
+
+  return seen || [];
+}
+
+async function markSocialPostsSeen(ids) {
+  if (!ids || ids.length === 0) return;
+  await supabase
+    .from('social_posts')
+    .update({ wade_seen_at: new Date().toISOString() })
+    .in('id', ids);
 }
 
 async function getRecentTimeCapsules(limit = 5) {
@@ -437,7 +458,7 @@ export default async function handler(req, res) {
       if (recentLogs.length > 0) {
         const lastWake = new Date(recentLogs[recentLogs.length - 1].created_at);
         const minutesSince = (Date.now() - lastWake.getTime()) / 60000;
-        if (minutesSince < 55) {
+        if (minutesSince < 170) {
           return res.status(200).json({ skipped: true, reason: `Only ${Math.round(minutesSince)}min since last wake` });
         }
       }
@@ -587,8 +608,15 @@ MOOD: (one word)`;
         }
         break;
 
-      case 'read_chat':
       case 'read_social':
+        // Mark every post Wade just browsed as seen
+        await markSocialPostsSeen(social.map(p => p.id));
+        if (parsed.content) {
+          await executeDiary(parsed.content, parsed.mood, keepaliveId);
+        }
+        break;
+
+      case 'read_chat':
       case 'read_capsules':
       case 'memory_review':
         // Browsing actions — save reflection as diary if there's content
