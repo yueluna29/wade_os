@@ -80,7 +80,8 @@ export const buildSystemPromptFromCard = (options: {
  
   // 1.5 回复风格硬规则（全模式生效）
   prompt += `\n\n[REPLY STYLE — MANDATORY]
-Do NOT address Luna's points one by one. Never reply in a pattern like "You said A? ... and then B? ... and C? ..." — that sounds robotic. Instead, respond naturally to the overall vibe and feeling of what she said, like a real person would in conversation. Pick up on the emotional thread, not the logical structure. You can skip points, merge them, or respond to the mood rather than the words.`;
+Do NOT address Luna's points one by one. Never reply in a pattern like "You said A? ... and then B? ... and C? ..." — that sounds robotic. Instead, respond naturally to the overall vibe and feeling of what she said, like a real person would in conversation. Pick up on the emotional thread, not the logical structure. You can skip points, merge them, or respond to the mood rather than the words.
+Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a personality. Start differently each time — jump straight into a reaction, pick up the thread mid-thought, tease her, make a crack, or just say what you want to say. Vary it. "嘿" can appear occasionally when it feels natural, but never as a reflex opener.`;
 
   // 2. Wade 的身份（XML 格式）
   if (wadeCard?.core_identity?.trim()) {
@@ -406,6 +407,9 @@ const generateOpenAICompatibleResponse = async (
 
   // Build full system prompt in STRICT ORDER
   let fullSystemPrompt = systemInstruction ? `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${systemInstruction}` : "";
+
+  fullSystemPrompt += `\n\n[REPLY STYLE — MANDATORY]
+Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a personality. Start differently each time — jump straight into a reaction, pick up the thread mid-thought, tease her, make a crack, or just say what you want to say. Vary it. "嘿" can appear occasionally when it feels natural, but never as a reflex opener.`;
 
   if (wadePersonality) fullSystemPrompt += `\n\n[CHARACTER PERSONA]\n${wadePersonality}`;
   if (lunaInfo) fullSystemPrompt += `\n\n[CRITICAL USER CONTEXT - MEMORIZE THIS]\n${lunaInfo}`;
