@@ -28,3 +28,33 @@ export const uploadToImgBB = async (file: File): Promise<string | null> => {
     return null;
   }
 };
+
+/**
+ * Silent upload used by the chat pipeline. Unlike `uploadToImgBB`, this:
+ *   - accepts a raw base64 string (with or without a `data:` prefix)
+ *   - never pops a blocking alert() — it just returns null on failure so the
+ *     caller can fall back to base64-in-memory without interrupting Luna
+ * Returns the imgbb direct URL or null.
+ */
+export const uploadBase64ToImgBB = async (base64: string): Promise<string | null> => {
+  // imgbb accepts raw base64 in the `image` form field. Strip the data: prefix if present.
+  const stripped = base64.includes(',') ? base64.split(',')[1] : base64;
+  if (!stripped) return null;
+
+  const formData = new FormData();
+  formData.append('image', stripped);
+
+  try {
+    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (data.success) return data.data.url;
+    console.error('[imgbb] silent upload failed:', data);
+    return null;
+  } catch (error) {
+    console.error('[imgbb] silent upload network error:', error);
+    return null;
+  }
+};

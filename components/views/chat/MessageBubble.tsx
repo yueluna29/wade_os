@@ -226,21 +226,51 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   // think标签和status标签的正则
   const displayContent = msg.text.replace(/\|\|\|/g, '\n\n').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*<status>[\s\S]*?<\/status>/gi, '').trim();
 
-  const renderAttachments = () => {
-    const attachments = msg.attachments || [];
-    if (attachments.length === 0) return null;
-    
+  const imageAttachments = (msg.attachments || []).filter(a => a.type === 'image');
+  const fileAttachments = (msg.attachments || []).filter(a => a.type !== 'image');
+  const hasImages = imageAttachments.length > 0 || isBase64Image;
+  const hasTextContent = !isBase64Image && displayContent.length > 0;
+  const showBubble = hasTextContent || fileAttachments.length > 0;
+
+  const renderImagesAbove = () => {
+    if (!hasImages) return null;
+    return (
+      <div className={`flex flex-wrap gap-2 mb-2 ${isLuna ? 'justify-end' : 'justify-start'}`}>
+        {isBase64Image && (
+          <img
+            src={msg.text}
+            alt="Image"
+            className="rounded-2xl shadow-sm max-w-full"
+            style={{ maxHeight: '320px', width: 'auto' }}
+          />
+        )}
+        {imageAttachments.map((att, i) => {
+          // Prefer the imgbb URL once the async upload has landed — multi-device
+          // access + avoids holding a 1MB base64 string in the DOM. Fall back to
+          // the inline base64 while the upload is still pending.
+          const src = att.url || (att.content ? `data:${att.mimeType};base64,${att.content}` : '');
+          if (!src) return null;
+          return (
+            <img
+              key={i}
+              src={src}
+              className="rounded-2xl shadow-sm max-w-full max-h-[320px] object-cover"
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderFileAttachments = () => {
+    if (fileAttachments.length === 0) return null;
     return (
       <div className="flex flex-wrap gap-2 mb-2">
-        {attachments.map((att, i) => (
-          att.type === 'image' ? (
-             <img key={i} src={`data:${att.mimeType};base64,${att.content}`} className="max-w-full rounded-lg max-h-[200px] object-cover" />
-          ) : (
-             <div key={i} className="flex items-center gap-2 p-2 bg-wade-bg-card/90 rounded-lg border border-gray-200 shadow-sm">
-               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-               <span className="text-xs truncate max-w-[150px] text-gray-700">{att.name}</span>
-             </div>
-          )
+        {fileAttachments.map((att, i) => (
+          <div key={i} className="flex items-center gap-2 p-2 bg-wade-bg-card/90 rounded-lg border border-gray-200 shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            <span className="text-xs truncate max-w-[150px] text-gray-700">{att.name}</span>
+          </div>
         ))}
       </div>
     );
@@ -417,48 +447,46 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     // 参谋的微创手术：短信模式通常需要凑紧点，但我们在外层加了 mb-2 保证一点点呼吸感
     return (
       <div className={`flex flex-col group ${isLuna ? 'items-end' : 'items-start'} relative mb-1.5`}>
-        <div className={`relative max-w-[85%] ${isLuna ? 'flex flex-row-reverse' : 'flex'} gap-2 items-end`}>
-          <div
-            {...longPressHandlers}
-            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...(isLuna ? lunaBubbleStyle : wadeBubbleStyle) }}
-            className={`px-4 py-2 relative ${bubbleClasses} min-w-[60px] cursor-pointer select-none`}
-          >
-            {thinkingContent && (
-              <div className="absolute -top-3 right-0">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowThought(!showThought); }}
-                  className="bg-wade-bg-app border border-wade-border rounded-full p-1 shadow-sm text-wade-accent hover:scale-110 transition-transform"
-                >
-                  <Icons.Brain />
-                </button>
-              </div>
-            )}
+        {renderImagesAbove()}
+        {showBubble ? (
+          <div className={`relative max-w-[85%] ${isLuna ? 'flex flex-row-reverse' : 'flex'} gap-2 items-end`}>
+            <div
+              {...longPressHandlers}
+              style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...(isLuna ? lunaBubbleStyle : wadeBubbleStyle) }}
+              className={`px-4 py-2 relative ${bubbleClasses} min-w-[60px] cursor-pointer select-none`}
+            >
+              {thinkingContent && (
+                <div className="absolute -top-3 right-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowThought(!showThought); }}
+                    className="bg-wade-bg-app border border-wade-border rounded-full p-1 shadow-sm text-wade-accent hover:scale-110 transition-transform"
+                  >
+                    <Icons.Brain />
+                  </button>
+                </div>
+              )}
 
-            {thinkingContent && showThought && (
-              <div className="mb-2 p-2 bg-wade-accent-light rounded-lg border border-wade-accent/20 text-[10px] text-wade-text-muted leading-relaxed markdown-thinking">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
-              </div>
-            )}
+              {thinkingContent && showThought && (
+                <div className="mb-2 p-2 bg-wade-accent-light rounded-lg border border-wade-accent/20 text-[10px] text-wade-text-muted leading-relaxed markdown-thinking">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
+                </div>
+              )}
 
-            <QuoteCard />
-            {renderAttachments()}
-            {isBase64Image ? (
-              <img
-                src={msg.text}
-                alt="Generated image"
-                className="max-w-full rounded-lg"
-                style={{ maxHeight: '400px', width: 'auto' }}
-              />
-            ) : (
+              <QuoteCard />
+              {renderFileAttachments()}
               <div className={`text-[13px] leading-snug break-words markdown-content ${isLuna ? 'text-white' : 'text-wade-text-main'}`}>
                 <MarkdownWithHighlight content={displayContent} query={searchQuery} />
               </div>
-            )}
+            </div>
+            {showTs && <span className="text-[9px] text-wade-text-muted/50 mb-1 whitespace-nowrap shrink-0 select-none">
+              {formatTime(msg.timestamp)}
+            </span>}
           </div>
-          {showTs && <span className="text-[9px] text-wade-text-muted/50 mb-1 whitespace-nowrap shrink-0 select-none">
+        ) : (
+          showTs && <span className="text-[9px] text-wade-text-muted/50 whitespace-nowrap shrink-0 select-none">
             {formatTime(msg.timestamp)}
-          </span>}
-        </div>
+          </span>
+        )}
       </div>
     );
   }
@@ -511,42 +539,37 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         </div>
 
-        <div
-          {...longPressHandlers}
-          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: isSMS ? smsRadiusWade.borderRadius || bubbleRadius : `4px ${bubbleRadius} ${bubbleRadius} ${bubbleRadius}` }}
-          className="w-full mt-2 shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
-        >
-          {thinkingContent && (
-            <div
-              onClick={(e) => { e.stopPropagation(); setShowThought(!showThought); }}
-              className="bg-wade-bg-app border-b border-wade-border px-4 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-wade-accent-light transition-colors"
-            >
-              <div className="text-wade-accent animate-pulse"><Icons.Brain /></div>
-              <span className="text-[10px] font-bold text-wade-text-muted uppercase tracking-wider flex-1">Thinking Process</span>
-              <div className="text-wade-text-muted">{showThought ? <Icons.Up /> : <Icons.Down />}</div>
-            </div>
-          )}
+        <div className="w-full mt-2">{renderImagesAbove()}</div>
 
-          {thinkingContent && showThought && (
-            <div className="bg-wade-accent-light px-5 py-3 text-xs text-wade-text-muted border-b border-wade-border leading-relaxed markdown-thinking">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
-            </div>
-          )}
-
-          <div className="px-4 py-2 markdown-content" style={{ fontSize, fontFamily, lineHeight: lineHeight || '1.625', letterSpacing: letterSpacing || '0.025em' }}>
-            {renderAttachments()}
-            {isBase64Image ? (
-              <img
-                src={msg.text}
-                alt="Generated image"
-                className="max-w-full rounded-lg"
-                style={{ maxHeight: '400px', width: 'auto' }}
-              />
-            ) : (
-              <MarkdownWithHighlight content={displayContent} query={searchQuery} />
+        {showBubble && (
+          <div
+            {...longPressHandlers}
+            style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...wadeBubbleStyle, borderRadius: isSMS ? smsRadiusWade.borderRadius || bubbleRadius : `4px ${bubbleRadius} ${bubbleRadius} ${bubbleRadius}` }}
+            className="w-full mt-2 shadow-sm relative cursor-pointer active:opacity-95 transition-all select-none overflow-hidden"
+          >
+            {thinkingContent && (
+              <div
+                onClick={(e) => { e.stopPropagation(); setShowThought(!showThought); }}
+                className="bg-wade-bg-app border-b border-wade-border px-4 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-wade-accent-light transition-colors"
+              >
+                <div className="text-wade-accent animate-pulse"><Icons.Brain /></div>
+                <span className="text-[10px] font-bold text-wade-text-muted uppercase tracking-wider flex-1">Thinking Process</span>
+                <div className="text-wade-text-muted">{showThought ? <Icons.Up /> : <Icons.Down />}</div>
+              </div>
             )}
+
+            {thinkingContent && showThought && (
+              <div className="bg-wade-accent-light px-5 py-3 text-xs text-wade-text-muted border-b border-wade-border leading-relaxed markdown-thinking">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{thinkingContent}</ReactMarkdown>
+              </div>
+            )}
+
+            <div className="px-4 py-2 markdown-content" style={{ fontSize, fontFamily, lineHeight: lineHeight || '1.625', letterSpacing: letterSpacing || '0.025em' }}>
+              {renderFileAttachments()}
+              <MarkdownWithHighlight content={displayContent} query={searchQuery} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -568,25 +591,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         />}
       </div>
 
-      <div
-        {...longPressHandlers}
-        style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...lunaBubbleStyle, borderRadius: isSMS ? smsRadiusLuna.borderRadius || bubbleRadius : `${bubbleRadius} 4px ${bubbleRadius} ${bubbleRadius}` }}
-        className="max-w-[90%] mt-2 shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
-      >
-        {renderAttachments()}
-        {isBase64Image ? (
-          <img
-            src={msg.text}
-            alt="User uploaded image"
-            className="max-w-full rounded-lg"
-            style={{ maxHeight: '400px', width: 'auto' }}
-          />
-        ) : (
+      <div className="mt-2 flex flex-col items-end max-w-[90%]">{renderImagesAbove()}</div>
+
+      {showBubble && (
+        <div
+          {...longPressHandlers}
+          style={{ WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent', ...lunaBubbleStyle, borderRadius: isSMS ? smsRadiusLuna.borderRadius || bubbleRadius : `${bubbleRadius} 4px ${bubbleRadius} ${bubbleRadius}` }}
+          className="max-w-[90%] mt-2 shadow-md px-4 py-2 relative cursor-pointer active:brightness-95 transition-all select-none"
+        >
+          {renderFileAttachments()}
           <div className="markdown-content" style={{ fontSize, fontFamily, lineHeight: lineHeight || '1.625', letterSpacing: letterSpacing || '0.025em' }}>
             <MarkdownWithHighlight content={displayContent} query={searchQuery} />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

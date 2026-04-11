@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { Button } from '../ui/Button';
 import { Icons } from '../ui/Icons';
-import { generateTextResponse, generateTTS, generateChatTitle, generateFromCard } from '../../services/aiService';
+import { generateTextResponse, generateTTS, generateChatTitle, generateFromCard, generateImageDescription } from '../../services/aiService';
+import { uploadBase64ToImgBB } from '../../services/imgbb';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
 import { ChatThemePanel } from './chat/ChatThemePanel';
@@ -28,7 +29,7 @@ import { XRayModal } from './chat/XRayModal';
 
 export const ChatInterface: React.FC = () => {
   const {
-    messages, addMessage, updateMessage, updateMessageAudioCache, deleteMessage, settings, updateSettings, activeMode, setMode, toggleFavorite, setNavHidden,
+    messages, addMessage, updateMessage, updateMessageAudioCache, updateMessageAttachments, deleteMessage, settings, updateSettings, activeMode, setMode, toggleFavorite, setNavHidden,
     sessions, createSession, updateSession, updateSessionTitle, deleteSession, toggleSessionPin, activeSessionId, setActiveSessionId,
     addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
     coreMemories, toggleCoreMemoryEnabled, llmPresets, addLlmPreset, ttsPresets,
@@ -472,16 +473,76 @@ export const ChatInterface: React.FC = () => {
       if (regenMsgId) { const targetIdx = freshMessages.findIndex(m => m.id === regenMsgId); if (targetIdx !== -1) historyMsgs = freshMessages.slice(0, targetIdx); }
       else if (activeMode !== 'sms') { const lastMsg = historyMsgs[historyMsgs.length - 1]; if (lastMsg && lastMsg.role === 'Luna' && lastMsg.text === inputText) historyMsgs = historyMsgs.slice(0, -1); }
 
-      const history = historyMsgs.map(m => {
+      // Find the most recent message that carries at least one image attachment.
+      // That message keeps its real image in the prompt so Wade can answer
+      // immediate follow-ups ("what color is her shirt?") with full fidelity.
+      // Every OLDER image-bearing message gets its image replaced by the
+      // describer's text caption (if one exists) to save tokens and let
+      // non-vision models still "read" the picture. If no description has
+      // been generated yet (upload still in flight), we keep the base64.
+      let latestImageMsgIdx = -1;
+      for (let i = historyMsgs.length - 1; i >= 0; i--) {
+        const m = historyMsgs[i];
+        if ((m.attachments && m.attachments.some(a => a.type === 'image')) || m.image) {
+          latestImageMsgIdx = i;
+          break;
+        }
+      }
+
+      const history = historyMsgs.map((m, msgIdx) => {
         let content = m.text;
         if (m.role === 'Wade') { const idx = m.selectedIndex || 0; const thought = m.variants?.[idx]?.thinking; if (thought) content = `<think>${thought}</think>\n${content}`; }
         const parts: any[] = [];
+        const isLatestImageMsg = msgIdx === latestImageMsgIdx;
+
+        // Collect any image→text substitutions we need to append to content.
+        const descriptionCaptions: string[] = [];
+
+        if (m.attachments && m.attachments.length > 0) {
+          m.attachments.forEach(att => {
+            if (att.type !== 'image') {
+              // Non-image (file) attachments: unchanged — still sent inline.
+              return;
+            }
+            if (!isLatestImageMsg && att.description) {
+              // Old image with a caption → swap to text.
+              descriptionCaptions.push(`[图片：${att.description}]`);
+            }
+            // else: keep the real image (added below in the parts loop)
+          });
+        }
+
+        if (descriptionCaptions.length > 0) {
+          content = [content, ...descriptionCaptions].filter(Boolean).join('\n\n');
+        }
+
         if (content) parts.push({ text: content });
-        if (m.attachments && m.attachments.length > 0) { m.attachments.forEach(att => { parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } }); }); }
-        else if (m.image) { parts.push({ inlineData: { mimeType: 'image/png', data: m.image } }); }
+
+        if (m.attachments && m.attachments.length > 0) {
+          m.attachments.forEach(att => {
+            if (att.type === 'file') {
+              // Files unchanged
+              parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
+              return;
+            }
+            // Image: only attach the real bytes when this IS the latest image message,
+            // OR when there's no description yet (fallback to keep vision working).
+            if (isLatestImageMsg || !att.description) {
+              parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
+            }
+          });
+        } else if (m.image) {
+          parts.push({ inlineData: { mimeType: 'image/png', data: m.image } });
+        }
+
         if (parts.length === 0) parts.push({ text: "(no text)" });
         return { role: m.role, parts: parts };
-      }).filter(h => h.parts.some(p => 'text' in p && p.text && p.text !== '(no text)')).slice(-(settings.contextLimit || 50));
+      }).filter(h =>
+        // Keep messages with real text OR any inlineData (image/file). The old
+        // filter dropped image-only messages, which meant Wade lost sight of
+        // photos Luna sent without captions.
+        h.parts.some(p => ('text' in p && p.text && p.text !== '(no text)') || 'inlineData' in p)
+      ).slice(-(settings.contextLimit || 50));
 
       const isRegeneration = !!regenMsgId;
       const currentSession = sessions.find(s => s.id === targetSessionId);
@@ -657,15 +718,59 @@ export const ChatInterface: React.FC = () => {
     if (!targetSessionId) { targetSessionId = await createSession(activeMode); setActiveSessionId(targetSessionId); }
     const currentInput = inputText;
     const isFirstMessage = messagesRef.current.filter(m => m.sessionId === targetSessionId).length === 0;
+    // Snapshot attachments for async side-effects below so clearing state doesn't race.
+    const sentAttachments = attachments.slice();
     const newMessage: Message = {
       id: Date.now().toString(), sessionId: targetSessionId, role: 'Luna', text: inputText, timestamp: Date.now(), mode: activeMode,
-      attachments: attachments.map(a => ({ type: a.type, content: a.content.split(',')[1], mimeType: a.mimeType, name: a.name })),
-      image: attachments.find(a => a.type === 'image')?.content.split(',')[1],
+      attachments: sentAttachments.map(a => ({ type: a.type, content: a.content.split(',')[1], mimeType: a.mimeType, name: a.name })),
+      image: sentAttachments.find(a => a.type === 'image')?.content.split(',')[1],
       ...(replyingToId ? { replyToId: replyingToId } : {}),
     };
     addMessage(newMessage); setLastSentMessageId(newMessage.id); setLastInputText(currentInput); setInputText(''); setAttachments([]); setReplyingToId(null);
     scrollToBottom();
     if (textareaRef.current) { textareaRef.current.style.height = '48px'; textareaRef.current.focus(); }
+
+    // === Fire-and-forget: upload image attachments to imgbb so they survive reloads ===
+    // Runs in parallel with triggerAIResponse — does not block Wade's reply.
+    // The first vision call still uses the base64 already attached to the message.
+    const messageIdForUpload = newMessage.id;
+    const imagePatches: Promise<void>[] = [];
+    sentAttachments.forEach((att, i) => {
+      if (att.type !== 'image') return;
+      const p = uploadBase64ToImgBB(att.content).then(url => {
+        if (!url) return;
+        // Write the URL back onto the message so future history assembly + multi-device
+        // sync can use the link instead of the (huge) base64 payload.
+        return updateMessageAttachments(messageIdForUpload, [{ index: i, patch: { url } }]);
+      }).catch(err => console.error('[handleSend] imgbb upload failed for attachment', i, err));
+      imagePatches.push(p as Promise<void>);
+    });
+
+    // === Fire-and-forget: describer LLM generates a text description of each image ===
+    // Runs after imgbb upload finishes so we can prefer the URL over base64 (smaller payload).
+    const describerLlmId = settings.descriptionLlmId;
+    const describerLlm = describerLlmId ? llmPresets.find(p => p.id === describerLlmId && p.isVision && p.apiKey) : null;
+    if (describerLlm) {
+      Promise.all(imagePatches).then(async () => {
+        // Read the (now url-patched) message back out of the freshest store state.
+        const latest = messagesRef.current.find(m => m.id === messageIdForUpload);
+        if (!latest?.attachments) return;
+        const patches: { index: number; patch: { description: string } }[] = [];
+        await Promise.all(latest.attachments.map(async (att, i) => {
+          if (att.type !== 'image' || att.description) return;
+          const desc = await generateImageDescription(
+            { url: att.url, base64: att.content, mimeType: att.mimeType },
+            describerLlm,
+            currentInput || undefined,
+          );
+          if (desc) patches.push({ index: i, patch: { description: desc } });
+        }));
+        if (patches.length > 0) {
+          await updateMessageAttachments(messageIdForUpload, patches);
+        }
+      }).catch(err => console.error('[handleSend] describer pipeline failed:', err));
+    }
+
     if (isFirstMessage) {
       // Use any available LLM for title generation (prefer Gemini for speed/cost)
       const titleLlm = llmPresets.find(p => p.provider === 'Gemini' && p.apiKey) || llmPresets.find(p => p.apiKey);

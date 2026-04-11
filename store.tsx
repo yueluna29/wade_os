@@ -276,7 +276,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         }
         
         const fetchMessages = async () => {
-          const msgColumns = 'id, session_id, role, content, model, created_at, variants, selected_index, variants_thinking, source, reply_to_id';
+          // Use '*' so attachment column is picked up when the migration has been applied,
+          // and so old installs that haven't applied it yet still load cleanly.
+          const msgColumns = '*';
           const [deepRes, smsRes, rpRes] = await Promise.all([
             supabase.from('messages_deep').select(msgColumns),
             supabase.from('messages_sms').select(msgColumns),
@@ -306,6 +308,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             const selectedIdx = row.selected_index || 0;
             const currentVariant = parsedVariants[selectedIdx] || parsedVariants[0] || {};
 
+            // Attachments: column is JSONB on the db side (once the migration is applied).
+            // May come back as an already-parsed array, or as a JSON string depending on the driver.
+            let parsedAttachments: Message['attachments'] = undefined;
+            if (row.attachments) {
+              if (Array.isArray(row.attachments)) parsedAttachments = row.attachments;
+              else if (typeof row.attachments === 'string') {
+                try { parsedAttachments = JSON.parse(row.attachments); } catch (e) {}
+              }
+            }
+
             return {
               id: row.id,
               sessionId: row.session_id,
@@ -314,12 +326,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               model: currentVariant.model || row.model,
               timestamp: new Date(row.created_at).getTime(),
               mode: mode,
-              isFavorite: false, 
+              isFavorite: false,
               variants: parsedVariants,
               selectedIndex: selectedIdx,
               thinking: currentVariant.thinking || undefined,
               source: row.source || 'chat',
               replyToId: row.reply_to_id || undefined,
+              attachments: parsedAttachments,
             };
           };
 
@@ -770,6 +783,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
          selected_index: 0,
          created_at: new Date(newMessage.timestamp).toISOString(),
          ...(newMessage.replyToId ? { reply_to_id: newMessage.replyToId } : {}),
+         ...(newMessage.attachments && newMessage.attachments.length > 0 ? { attachments: newMessage.attachments } : {}),
       });
       setSessions(prev => prev.map(s => s.id === newMessage.sessionId ? { ...s, updatedAt: Date.now() } : s));
       supabase.from('chat_sessions').update({ updated_at: new Date().toISOString() }).eq('id', newMessage.sessionId).then();
@@ -811,6 +825,37 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
     // Save to IndexedDB (local cache, not Supabase — keeps message rows lean)
     await ttsCache.set(id, base64Audio);
+  };
+
+  // Patches the attachments[] array on a message. Used to:
+  //   1) write back the imgbb url after async upload
+  //   2) write back the description after the describer model finishes
+  // Accepts a per-index partial patch so callers don't have to reconstruct the whole array.
+  // Uses functional setState so it's safe to call from async callbacks after other state has moved on.
+  const updateMessageAttachments = async (
+    id: string,
+    patches: { index: number; patch: Partial<NonNullable<Message['attachments']>[number]> }[]
+  ) => {
+    let updatedAttachments: Message['attachments'] | undefined;
+    let mode: ChatMode | undefined;
+    let sessionId: string | undefined;
+
+    setMessages(prev => prev.map(m => {
+      if (m.id !== id) return m;
+      if (!m.attachments) return m;
+      const newAttachments = m.attachments.map((att, i) => {
+        const hit = patches.find(p => p.index === i);
+        return hit ? { ...att, ...hit.patch } : att;
+      });
+      updatedAttachments = newAttachments;
+      mode = m.mode;
+      sessionId = m.sessionId;
+      return { ...m, attachments: newAttachments };
+    }));
+
+    if (updatedAttachments && sessionId && mode && mode !== 'archive') {
+      safeDbUpdate(getTableName(mode), id, { attachments: updatedAttachments });
+    }
   };
 
   const addVariantToMessage = (id: string, newText: string, thinking?: string, model?: string) => {
@@ -1263,7 +1308,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       ttsPresets, addTtsPreset, updateTtsPreset, deleteTtsPreset,
       sessions, createSession, updateSession, updateSessionTitle, deleteSession, toggleSessionPin, activeSessionId, setActiveSessionId,
       messages, addMessage, updateMessage, deleteMessage, toggleFavorite, updateMessageAudioCache,
-      addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession, 
+      updateMessageAttachments,
+      addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
       socialPosts, addPost, updatePost, deletePost, memos, addMemo,
       capsules, addCapsule, updateCapsule, deleteCapsule,
       recommendations, addRecommendation, updateRecommendation, deleteRecommendation,

@@ -738,6 +738,99 @@ export const generateChatTitle = async (firstMessage: string, apiKeyOrPreset?: s
   }
 };
 
+/**
+ * One-shot vision call: hands an image to a chosen "describer" model and gets
+ * back a detailed text description. The description is later substituted into
+ * chat history in place of the actual image — so old messages can travel as
+ * text, saving tokens and letting non-vision models still "see" the image.
+ *
+ * Accepts either a https URL (imgbb) or raw base64. Prefers URL when both are
+ * provided — it's cheaper for the describer call itself.
+ *
+ * The context hint is optional but helpful: feeding the describer the text
+ * Luna wrote alongside the image ("omg look at this outfit") helps it know
+ * which details actually matter.
+ *
+ * Mirrors generateChatTitle's Gemini vs OpenAI-compatible branching.
+ */
+export const generateImageDescription = async (
+  image: { url?: string; base64?: string; mimeType: string },
+  describerPreset: { provider: string; model: string; apiKey: string; baseUrl: string },
+  contextHint?: string
+): Promise<string | null> => {
+  const instruction = `You are an image captioner. Describe this image in DETAIL so that another AI reading only your description (without seeing the image) has a full mental picture. Cover: all people and their expressions/poses/clothing, any text visible in the image, the setting/background, colors and lighting, the emotional atmosphere. Be specific, not generic. Write 2-4 sentences, in the SAME language as the user's note below if provided, otherwise in English. Do not add commentary or interpretation — just describe what is visible.
+
+${contextHint ? `User's note when sending the image: "${contextHint}"` : ''}`.trim();
+
+  // Prefer URL (cheaper transport) if available; otherwise fall back to base64 data URL.
+  const dataUrl = image.url || (image.base64 ? `data:${image.mimeType};base64,${image.base64.includes(',') ? image.base64.split(',')[1] : image.base64}` : null);
+  if (!dataUrl) return null;
+
+  try {
+    const isGemini = !describerPreset.baseUrl || describerPreset.baseUrl.includes('google');
+
+    if (isGemini) {
+      // Gemini wants inlineData with raw base64 (it doesn't fetch URLs on our behalf).
+      // If we only have a URL, download it first and convert.
+      let b64: string;
+      let mime = image.mimeType;
+      if (image.base64) {
+        b64 = image.base64.includes(',') ? image.base64.split(',')[1] : image.base64;
+      } else {
+        const res = await fetch(image.url!);
+        const blob = await res.blob();
+        mime = blob.type || mime;
+        b64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1] || '');
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      const ai = getClient(describerPreset.apiKey);
+      const response = await ai.models.generateContent({
+        model: describerPreset.model || 'gemini-2.5-flash',
+        contents: [{
+          role: 'user',
+          parts: [
+            { text: instruction },
+            { inlineData: { mimeType: mime, data: b64 } },
+          ],
+        }],
+      });
+      return response.text?.trim() || null;
+    }
+
+    // OpenAI-compatible: supports both https URLs and data: URLs in image_url.
+    const res = await fetch(`${describerPreset.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${describerPreset.apiKey}` },
+      body: JSON.stringify({
+        model: describerPreset.model,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: instruction },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        }],
+        temperature: 0.3,
+        max_tokens: 400,
+      }),
+    });
+    const json = await res.json();
+    const text = json.choices?.[0]?.message?.content?.trim();
+    return text || null;
+  } catch (e) {
+    console.error('[generateImageDescription] failed:', e);
+    return null;
+  }
+};
+
 export const generateTTS = async (text: string, apiKey?: string): Promise<string> => {
   const ai = getClient(apiKey);
   const response = await ai.models.generateContent({
