@@ -44,6 +44,7 @@ export const ChatInterface: React.FC = () => {
   // Memory live indicator
   const [newMemories, setNewMemories] = useState<WadeMemory[]>([]);
   const [lastWadeMemoriesXml, setLastWadeMemoriesXml] = useState<string>('');
+  const [lastWadeTodosXml, setLastWadeTodosXml] = useState<string>('');
   const [memoryError, setMemoryError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -592,6 +593,7 @@ export const ChatInterface: React.FC = () => {
       try {
         const pending = await getPendingTodos(20);
         wadeTodosXml = formatTodosForChatPrompt(pending);
+        setLastWadeTodosXml(wadeTodosXml);
       } catch (e) { console.error('[WadeTodos] Fetch failed:', e); }
 
       // 🔥 用新的 generateFromCard 统一入口！
@@ -1157,7 +1159,7 @@ export const ChatInterface: React.FC = () => {
       <ConversationMapModal showMap={showMap} setShowMap={setShowMap} displayMessages={displayMessages} scrollToMessage={scrollToMessage} />
       <PromptEditorModal showPromptEditor={showPromptEditor} setShowPromptEditor={setShowPromptEditor} customPromptText={customPromptText} setCustomPromptText={setCustomPromptText} activeSessionId={activeSessionId} updateSession={updateSession as any} />
       <MemoryModal showMemorySelector={showMemorySelector} setShowMemorySelector={setShowMemorySelector} coreMemories={coreMemories} sessions={sessions} activeSessionId={activeSessionId} toggleCoreMemoryEnabled={toggleCoreMemoryEnabled} updateSession={updateSession as any} />
-      <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} personaCards={personaCards} functionBindings={functionBindings} getBinding={getBinding} getDefaultPersonaCard={getDefaultPersonaCard} lastWadeMemoriesXml={lastWadeMemoriesXml} />
+      <XRayModal showDebug={showDebug} setShowDebug={setShowDebug} settings={settings} messages={messages} sessions={sessions} activeSessionId={activeSessionId} activeMode={activeMode} coreMemories={coreMemories} llmPresets={llmPresets} sessionSummary={sessionSummary} personaCards={personaCards} functionBindings={functionBindings} getBinding={getBinding} getDefaultPersonaCard={getDefaultPersonaCard} lastWadeMemoriesXml={lastWadeMemoriesXml} lastWadeTodosXml={lastWadeTodosXml} />
 
       {/* Memory Live Indicator */}
       <MemoryLiveIndicator newMemories={newMemories} onDismiss={() => setNewMemories([])} />

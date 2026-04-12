@@ -14,20 +14,21 @@ interface XRayModalProps {
   coreMemories: any[];
   llmPresets: any[];
   sessionSummary: string;
-  // 新增：角色卡系统
+  // 角色卡系统
   personaCards?: any[];
   functionBindings?: any[];
   getBinding?: (key: string) => any;
-  getDefaultPersonaCard?: (character: 'Wade' | 'Luna') => any;
-  // Wade 智能记忆
+  getDefaultPersonaCard?: (character: 'Wade' | 'Luna' | 'System') => any;
+  // 上一轮 send 的快照（X-Ray 显示真实发送内容必须用这两个）
   lastWadeMemoriesXml?: string;
+  lastWadeTodosXml?: string;
 }
 
 export const XRayModal: React.FC<XRayModalProps> = ({
   showDebug, setShowDebug, settings, messages, sessions,
   activeSessionId, activeMode, coreMemories, llmPresets, sessionSummary,
   personaCards, functionBindings, getBinding, getDefaultPersonaCard,
-  lastWadeMemoriesXml
+  lastWadeMemoriesXml, lastWadeTodosXml
 }) => {
   const [expandedMemoryIds, setExpandedMemoryIds] = useState<string[]>([]);
   const [expandedHistoryIndices, setExpandedHistoryIndices] = useState<number[]>([]);
@@ -52,12 +53,25 @@ export const XRayModal: React.FC<XRayModalProps> = ({
   }));
 
   // === 角色卡数据（新系统）===
+  // Mirror the EXACT lookup ChatInterface does in its send handler:
+  //   wadeCard:   binding.personaCard.cardData → default Wade card
+  //   systemCard: bindings table system_card_id → matching persona_card → default System card
+  //   lunaCard:   default Luna card
+  // If any of these resolve differently here than in ChatInterface, X-Ray lies.
   const modeKey = activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep';
   const binding = getBinding?.(modeKey);
   const wadeCard = binding?.personaCard || getDefaultPersonaCard?.('Wade');
   const lunaCard = getDefaultPersonaCard?.('Luna');
   const wadeCardData = wadeCard?.cardData || {};
   const lunaCardData = lunaCard?.cardData || {};
+
+  // System card (separate from Wade card since 2026-04-11 architecture split)
+  const systemBindingCardId = (functionBindings || []).find((b: any) => b.functionKey === modeKey)?.systemCardId;
+  const boundSystemCard = systemBindingCardId
+    ? (personaCards || []).find((c: any) => c.id === systemBindingCardId)
+    : undefined;
+  const systemCardObj = boundSystemCard || getDefaultPersonaCard?.('System');
+  const systemCardData = systemCardObj?.cardData || {};
 
   // === LLM 信息 ===
   const effectiveLlmId = currentSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
@@ -67,7 +81,7 @@ export const XRayModal: React.FC<XRayModalProps> = ({
 
   // === 记忆 ===
   const safeMemories = Array.isArray(coreMemories) ? coreMemories : [];
-  const activeMemories = currentSession?.activeMemoryIds 
+  const activeMemories = currentSession?.activeMemoryIds
     ? safeMemories.filter(m => currentSession.activeMemoryIds!.includes(m.id))
     : safeMemories.filter(m => m.enabled);
 
@@ -76,34 +90,44 @@ export const XRayModal: React.FC<XRayModalProps> = ({
   const memEvalLlm = memEvalLlmId ? llmPresets.find((p: any) => p.id === memEvalLlmId) : null;
   const memorySystemActive = !!(memEvalLlm?.apiKey);
 
+  // === Special Sauce (session custom prompt) ===
+  const spiceContent = currentSession?.customPrompt || "";
+
   // === 构建真正的 System Prompt（和 generateFromCard 用同一个函数！）===
+  // Pass EVERY field generateFromCard passes — systemCard, customPrompt,
+  // wadeMemoriesXml, wadeTodosXml. Anything missed = X-Ray lies.
   const realSystemPrompt = buildSystemPromptFromCard({
     wadeCard: wadeCardData,
     lunaCard: lunaCardData,
+    systemCard: systemCardData,
     chatMode: activeMode as 'deep' | 'sms' | 'roleplay',
     coreMemories: activeMemories,
     sessionSummary: sessionSummary,
+    customPrompt: spiceContent,
     isRetry: false,
     wadeMemoriesXml: lastWadeMemoriesXml,
+    wadeTodosXml: lastWadeTodosXml,
   });
 
   // === Token 估算 ===
-  const spiceContent = currentSession?.customPrompt || "";
-  const totalChars = realSystemPrompt.length + JSON.stringify(historyPayload).length + spiceContent.length;
+  // Now uses the FULL prompt length (which already includes systemCard,
+  // memoriesXml, todosXml, customPrompt) so the estimate is honest.
+  const totalChars = realSystemPrompt.length + JSON.stringify(historyPayload).length;
   const estTokens = Math.round(totalChars / 4);
 
   // === 显示用的分段数据 ===
-  const globalDirectives = wadeCardData.global_directives || '(None)';
+  // Same priority as buildSystemPromptFromCard: systemCard wins, falls back to wadeCard.
+  const globalDirectives = (systemCardData.global_directives || wadeCardData.global_directives || '(None)').trim() || '(None)';
   const wadeIdentityXML = wadeCardData.core_identity ? cardDataToXML(wadeCardData, 'Wade') : '(No Wade card loaded)';
   const lunaIdentityXML = lunaCardData.core_identity ? cardDataToXML(lunaCardData, 'Luna') : '(No Luna card loaded)';
-  
+
   const examplePunchlines = wadeCardData.example_punchlines || '(None)';
-  const exampleDialogue = activeMode === 'sms' 
-    ? (wadeCardData.example_dialogue_sms || '(None — SMS)') 
+  const exampleDialogue = activeMode === 'sms'
+    ? (wadeCardData.example_dialogue_sms || '(None — SMS)')
     : (wadeCardData.example_dialogue_general || '(None — General)');
   const modeRules = activeMode === 'sms'
-    ? (wadeCardData.sms_mode_rules || '(None — SMS fallback)')
-    : (wadeCardData.rp_mode_rules || '(None — RP/Deep fallback)');
+    ? ((systemCardData.sms_mode_rules || wadeCardData.sms_mode_rules || '(None — SMS fallback)').trim() || '(None — SMS fallback)')
+    : ((systemCardData.rp_mode_rules || wadeCardData.rp_mode_rules || '(None — RP/Deep fallback)').trim() || '(None — RP/Deep fallback)');
 
   // === 统一样式 ===
   const textStyle = "text-[11px] leading-relaxed font-mono text-wade-text-main/80 whitespace-pre-wrap";
@@ -166,8 +190,9 @@ export const XRayModal: React.FC<XRayModalProps> = ({
               <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">Injected</div>
             </div>
             <div className="bg-wade-bg-card p-4 rounded-2xl border border-wade-border shadow-sm flex flex-col items-center justify-center text-center">
-              <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Persona Card</div>
-              <div className="text-lg font-black text-wade-text-main tracking-tight line-clamp-1 px-1">{wadeCard?.name || 'None'}</div>
+              <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Cards</div>
+              <div className="text-[10px] font-black text-wade-text-main tracking-tight line-clamp-1 px-1">W: {wadeCard?.name || 'default'}</div>
+              <div className="text-[10px] font-black text-wade-text-main tracking-tight line-clamp-1 px-1">S: {systemCardObj?.name || 'default'}</div>
               <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">{modeKey}</div>
             </div>
             <div className={`bg-wade-bg-card p-4 rounded-2xl border shadow-sm flex flex-col items-center justify-center text-center ${memorySystemActive ? 'border-wade-accent/30' : 'border-wade-border'}`}>
@@ -229,6 +254,19 @@ export const XRayModal: React.FC<XRayModalProps> = ({
                   {memorySystemActive
                     ? 'No memories retrieved for this turn yet. Send a message first.'
                     : 'Memory system is not active. Set a Memory Eval LLM in Settings to enable.'}
+                </p>
+              </div>
+            )}
+          </XRaySection>
+
+          {/* Wade's Notes-to-Self (todos injected at the very end of system prompt) */}
+          <XRaySection title="Wade's Notes-to-Self" subtitle="Pending todos · injected last (most volatile, lowest cache priority)">
+            {lastWadeTodosXml ? (
+              <CodeBlock content={lastWadeTodosXml} maxH="200px" />
+            ) : (
+              <div className="bg-wade-bg-card p-8 rounded-2xl border border-wade-border border-dashed text-center">
+                <p className="text-xs text-wade-text-muted italic">
+                  No notes snapshot yet. Send a message first — the most recent injected todos will appear here.
                 </p>
               </div>
             )}
