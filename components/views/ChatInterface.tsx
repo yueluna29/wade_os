@@ -689,9 +689,11 @@ export const ChatInterface: React.FC = () => {
       }
 
       // Auto-summary — runs for ALL modes (sms / deep / roleplay).
-      // Was previously inside the deep-only branch AND called via a window
-      // global that was never attached, so summary literally never ran.
-      // Now: actual import + shared block + Gemini key auto-discovery + throttle.
+      // The summarizer is now provider-agnostic and accepts any preset
+      // (Gemini / OpenAI-compatible). Preset priority:
+      //   1. settings.summaryLlmId  (explicit choice — not yet UI-exposed)
+      //   2. settings.memoryEvalLlmId  (already a cheap structured-task model)
+      //   3. settings.activeLlmId  (whatever Wade is talking to right now)
       if (!isRegeneration) {
         const currentMessages = messagesRef.current.filter(m => m.sessionId === targetSessionId);
         // Throttle: only fire when crossing a +10 message boundary past 40.
@@ -700,22 +702,22 @@ export const ChatInterface: React.FC = () => {
         const len = currentMessages.length;
         const shouldSummarize = len > 40 && (len === 41 || len % 10 === 1);
         if (shouldSummarize) {
-          // The summarizer hardcodes Google's API URL, so it needs a Gemini key.
-          // Look for any preset whose provider is Gemini OR whose baseUrl points
-          // at generativelanguage.googleapis.com. If none, skip silently.
-          const geminiPreset = llmPresets.find(p =>
-            p.provider === 'Gemini' ||
-            (p.baseUrl && p.baseUrl.includes('generativelanguage.googleapis.com'))
-          );
-          if (geminiPreset?.apiKey) {
+          const summaryLlmId = (settings as any).summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
+          const summaryPreset = summaryLlmId ? llmPresets.find(p => p.id === summaryLlmId) : null;
+          if (summaryPreset?.apiKey && summaryPreset.model) {
             // Summarize the messages that are AT RISK of falling out of the
             // rolling 50-message window. We grab the oldest 20 — those are
             // either already gone (if len > 70) or about to go.
             const messagesToSummarize = currentMessages.slice(0, 20);
-            console.log(`[Summary] Triggering at len=${len}, summarizing oldest 20 messages`);
-            summarizeConversation(messagesToSummarize, sessionSummary, geminiPreset.apiKey, 'gemini-flash-latest')
+            console.log(`[Summary] Triggering at len=${len} via ${summaryPreset.name} (${summaryPreset.provider})`);
+            summarizeConversation(messagesToSummarize, sessionSummary, {
+              provider: summaryPreset.provider,
+              baseUrl: summaryPreset.baseUrl,
+              apiKey: summaryPreset.apiKey,
+              model: summaryPreset.model,
+            })
               .then(async (newSummary: string) => {
-                if (newSummary) {
+                if (newSummary && newSummary !== sessionSummary) {
                   setSessionSummary(newSummary);
                   await supabase.from('session_summaries').upsert({ session_id: targetSessionId, summary: newSummary });
                   console.log('[Summary] Updated:', newSummary.slice(0, 120));
@@ -723,7 +725,7 @@ export const ChatInterface: React.FC = () => {
               })
               .catch(err => console.error('[Summary] Failed:', err));
           } else {
-            console.warn('[Summary] No Gemini preset found — auto-summary skipped. Add a Gemini-provider preset to enable.');
+            console.warn('[Summary] No usable preset found — auto-summary skipped.');
           }
         }
       }
