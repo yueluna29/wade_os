@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { Button } from '../ui/Button';
 import { Icons } from '../ui/Icons';
-import { generateTextResponse, generateTTS, generateChatTitle, generateFromCard, generateImageDescription } from '../../services/aiService';
+import { generateTextResponse, generateTTS, generateChatTitle, generateFromCard, generateImageDescription, summarizeConversation } from '../../services/aiService';
 import { uploadBase64ToImgBB } from '../../services/imgbb';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
@@ -685,19 +685,47 @@ export const ChatInterface: React.FC = () => {
       } else {
         const botMessage: Message = { id: (Date.now() + 1).toString(), sessionId: targetSessionId, role: 'Wade', text: responseText, model: currentModel, timestamp: Date.now(), mode: activeMode, variants: [{ text: responseText, thinking: thinking || null, model: currentModel }] };
         addMessage(botMessage);
-        // Auto-summary
+        setIsTyping(false); setWadeStatus('online'); setLastSentMessageId(null); setLastInputText('');
+      }
+
+      // Auto-summary — runs for ALL modes (sms / deep / roleplay).
+      // Was previously inside the deep-only branch AND called via a window
+      // global that was never attached, so summary literally never ran.
+      // Now: actual import + shared block + Gemini key auto-discovery + throttle.
+      if (!isRegeneration) {
         const currentMessages = messagesRef.current.filter(m => m.sessionId === targetSessionId);
-        if (currentMessages.length > 40 && !isRegeneration) {
-          const messagesToSummarize = currentMessages.slice(0, 20);
-          const activeApiKey = activeLlm?.apiKey;
-          if (activeApiKey) {
-            (window as any).summarizeConversation?.(messagesToSummarize, sessionSummary, activeApiKey, 'gemini-flash-lite-latest').then(async (newSummary: string) => {
-              setSessionSummary(newSummary);
-              await supabase.from('session_summaries').upsert({ session_id: targetSessionId, summary: newSummary });
-            });
+        // Throttle: only fire when crossing a +10 message boundary past 40.
+        // So summary runs at message counts 41, 51, 61, 71, ... — not on every
+        // send (which would waste tokens re-summarizing the same first 20).
+        const len = currentMessages.length;
+        const shouldSummarize = len > 40 && (len === 41 || len % 10 === 1);
+        if (shouldSummarize) {
+          // The summarizer hardcodes Google's API URL, so it needs a Gemini key.
+          // Look for any preset whose provider is Gemini OR whose baseUrl points
+          // at generativelanguage.googleapis.com. If none, skip silently.
+          const geminiPreset = llmPresets.find(p =>
+            p.provider === 'Gemini' ||
+            (p.baseUrl && p.baseUrl.includes('generativelanguage.googleapis.com'))
+          );
+          if (geminiPreset?.apiKey) {
+            // Summarize the messages that are AT RISK of falling out of the
+            // rolling 50-message window. We grab the oldest 20 — those are
+            // either already gone (if len > 70) or about to go.
+            const messagesToSummarize = currentMessages.slice(0, 20);
+            console.log(`[Summary] Triggering at len=${len}, summarizing oldest 20 messages`);
+            summarizeConversation(messagesToSummarize, sessionSummary, geminiPreset.apiKey, 'gemini-flash-latest')
+              .then(async (newSummary: string) => {
+                if (newSummary) {
+                  setSessionSummary(newSummary);
+                  await supabase.from('session_summaries').upsert({ session_id: targetSessionId, summary: newSummary });
+                  console.log('[Summary] Updated:', newSummary.slice(0, 120));
+                }
+              })
+              .catch(err => console.error('[Summary] Failed:', err));
+          } else {
+            console.warn('[Summary] No Gemini preset found — auto-summary skipped. Add a Gemini-provider preset to enable.');
           }
         }
-        setIsTyping(false); setWadeStatus('online'); setLastSentMessageId(null); setLastInputText('');
       }
     } catch (error: any) {
       if (error?.name === 'AbortError' || !abortControllerRef.current) return;
