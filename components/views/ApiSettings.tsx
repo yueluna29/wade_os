@@ -200,6 +200,8 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const activeMemEval = memEvalLlmId ? llmPresets.find(p => p.id === memEvalLlmId) : null;
   const embLlmId = settings.embeddingLlmId || memEvalLlmId;
   const activeEmb = embLlmId ? llmPresets.find(p => p.id === embLlmId) : null;
+  const summaryLlmId = settings.summaryLlmId || memEvalLlmId;
+  const activeSummary = summaryLlmId ? llmPresets.find(p => p.id === summaryLlmId) : null;
 
   // Keepalive LLM (stored in app_settings, not in store)
   const [keepaliveLlmId, setKeepaliveLlmId] = useState<string>('');
@@ -282,6 +284,19 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <div className="text-[10px] text-wade-text-muted truncate">Vector Embedding{!settings.embeddingLlmId && activeEmb ? ' (default)' : ''}</div>
               </div>
               {activeEmb?.apiKey
+                ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
+                : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
+            </div>
+            {/* Conversation Summary AI */}
+            <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
+              <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
+                {activeSummary ? <ProviderIcon provider={activeSummary.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Journal size={18} className="text-wade-text-muted" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-wade-text-main truncate">{activeSummary ? activeSummary.name : 'Not set'}</div>
+                <div className="text-[10px] text-wade-text-muted truncate">Conversation Summary{!settings.summaryLlmId && activeSummary ? ' (default)' : ''}</div>
+              </div>
+              {activeSummary?.apiKey
                 ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
                 : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
             </div>
