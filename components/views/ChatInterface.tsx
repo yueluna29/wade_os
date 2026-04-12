@@ -580,8 +580,15 @@ export const ChatInterface: React.FC = () => {
           : (savedPrompt || inputText || '');
         const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
         const memEvalLlm = memEvalLlmId ? llmPresets.find(p => p.id === memEvalLlmId) : undefined;
-        const embLlmId = settings.embeddingLlmId || memEvalLlmId;
-        const embLlm = embLlmId ? llmPresets.find(p => p.id === embLlmId) : undefined;
+        // wade_memories.embedding 是 vector(768)，只有 Gemini text-embedding-004
+        // 输出 768 维 — OpenAI/OpenRouter 会被数据库直接 reject。
+        // 所以 embedding preset 一定要选 Gemini，没有 Gemini 就跳过 embedding。
+        const explicitEmbId = settings.embeddingLlmId;
+        const explicitEmb = explicitEmbId ? llmPresets.find(p => p.id === explicitEmbId) : undefined;
+        const isGemini = (p?: typeof llmPresets[number]) => !!p && (p.provider === 'Gemini' || (p.baseUrl && p.baseUrl.includes('googleapis')));
+        const embLlm = isGemini(explicitEmb)
+          ? explicitEmb
+          : llmPresets.find(p => isGemini(p) && p.apiKey);
         const wadeMemories = await retrieveRelevantMemories(currentUserText, 10, memEvalLlm, embLlm);
         wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
         setLastWadeMemoriesXml(wadeMemoriesXml);
@@ -632,8 +639,13 @@ export const ChatInterface: React.FC = () => {
       // 智能记忆：异步评估这轮对话（不阻塞 UI）
       const memoryEvalLlmId2 = settings.memoryEvalLlmId || settings.activeLlmId;
       const memoryEvalLlm = memoryEvalLlmId2 ? llmPresets.find(p => p.id === memoryEvalLlmId2) : null;
-      const embLlmId2 = settings.embeddingLlmId || memoryEvalLlmId2;
-      const embLlm2 = embLlmId2 ? llmPresets.find(p => p.id === embLlmId2) : undefined;
+      // 同检索：embedding 必须用 Gemini，否则 vector(768) 会 400
+      const explicitEmbId2 = settings.embeddingLlmId;
+      const explicitEmb2 = explicitEmbId2 ? llmPresets.find(p => p.id === explicitEmbId2) : undefined;
+      const isGeminiPreset = (p?: typeof llmPresets[number]) => !!p && (p.provider === 'Gemini' || (p.baseUrl && p.baseUrl.includes('googleapis')));
+      const embLlm2 = isGeminiPreset(explicitEmb2)
+        ? explicitEmb2
+        : llmPresets.find(p => isGeminiPreset(p) && p.apiKey);
       if (memoryEvalLlm?.apiKey) {
         const userText = activeMode === 'sms'
           ? freshMessages.filter(m => m.role === 'Luna').slice(-3).map(m => m.text).join('\n')

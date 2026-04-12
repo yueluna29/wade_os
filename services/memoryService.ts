@@ -255,30 +255,12 @@ async function generateEmbedding(
   evalPreset: LlmPreset
 ): Promise<number[] | null> {
   try {
-    // 需要一个 Gemini API key 来调 embedding 模型
-    // 优先用 evalPreset 的 key（如果是 Gemini），否则跳过
+    // wade_memories.embedding 是 vector(768)，只有 Gemini 的 text-embedding-004
+    // 输出 768 维。OpenAI / OpenRouter 的 text-embedding-3-small 是 1536 维，
+    // 塞进去 PostgREST 直接 400（"expected 768 dimensions, not 1536"）。
+    // 所以非 Gemini 的 preset 一律跳过 embedding，让上游 fallback 到关键词检索。
     const isGemini = !evalPreset.baseUrl || evalPreset.baseUrl.includes('google');
-    if (!isGemini) {
-      // 非 Gemini 的 preset，尝试用 OpenAI 兼容的 embedding
-      try {
-        const response = await fetch(`${evalPreset.baseUrl}/embeddings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${evalPreset.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'text-embedding-3-small',
-            input: text.slice(0, 8000),
-          }),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          return data.data?.[0]?.embedding || null;
-        }
-      } catch { /* fall through */ }
-      return null;
-    }
+    if (!isGemini) return null;
 
     const ai = new GoogleGenAI({ apiKey: evalPreset.apiKey });
     const result = await ai.models.embedContent({
@@ -418,12 +400,16 @@ export async function evaluateAndStoreMemory(
 
       if (duplicateId) {
         // 更新已有记忆：标记旧的为 inactive，插入新版本
-        const { data: newData } = await supabase
+        const { data: newData, error: insErr } = await supabase
           .from('wade_memories')
           .insert(insertRow)
           .select()
           .single();
 
+        if (insErr) {
+          // 不再静默吞掉，throw 出去让 ChatInterface 的 .catch 显示 toast
+          throw new Error(`Memory insert failed: ${insErr.message} (${insErr.code})`);
+        }
         if (newData) {
           void supabase
             .from('wade_memories')
@@ -435,12 +421,15 @@ export async function evaluateAndStoreMemory(
         }
       } else {
         // 全新记忆，直接插入
-        const { data: newData } = await supabase
+        const { data: newData, error: insErr } = await supabase
           .from('wade_memories')
           .insert(insertRow)
           .select()
           .single();
 
+        if (insErr) {
+          throw new Error(`Memory insert failed: ${insErr.message} (${insErr.code})`);
+        }
         if (newData) {
           console.log(`[WadeMemory] Stored new memory`);
           storedMemories.push(newData as WadeMemory);
@@ -451,7 +440,8 @@ export async function evaluateAndStoreMemory(
     return storedMemories;
   } catch (err) {
     console.error('[WadeMemory] Evaluation failed:', err);
-    return [];
+    // 把错误抛出去，让上游 .catch 触发 memory error toast
+    throw err;
   }
 }
 
