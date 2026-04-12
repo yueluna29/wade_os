@@ -648,8 +648,17 @@ export const ChatInterface: React.FC = () => {
       }
 
       if (activeMode === 'sms') {
-        let parts = responseText.split('|||').map((s: string) => s.trim()).filter((s: string) => s);
-        if (parts.length === 1 && responseText.includes('\n')) { const lines = responseText.split('\n').map((s: string) => s.trim()).filter((s: string) => s); if (lines.length > 1) parts = lines; }
+        // Auto-fix: Opus (and other verbose models) often forget to put ||| before [VOICE].
+        // Without the separator, the voice marker fuses into the preceding text bubble and
+        // Luna can't hear it. Insert ||| immediately before any [VOICE] that has content
+        // before it on the same line and isn't already preceded by ||| .
+        const repairedText = responseText.replace(
+          /([^\s|])(\s*)(\[VOICE\])/gi,
+          (_match: string, before: string, _gap: string, voice: string) => `${before} ||| ${voice}`
+        );
+
+        let parts = repairedText.split('|||').map((s: string) => s.trim()).filter((s: string) => s);
+        if (parts.length === 1 && repairedText.includes('\n')) { const lines = repairedText.split('\n').map((s: string) => s.trim()).filter((s: string) => s); if (lines.length > 1) parts = lines; }
         if (parts.length === 0) parts = ["..."];
         // Kill ghost bubbles: strip parts that are nothing but <status> tags
         parts = parts.filter(p => p.replace(/<status>[\s\S]*?<\/status>/gi, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().length > 0);

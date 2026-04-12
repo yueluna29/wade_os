@@ -151,15 +151,50 @@ Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a p
     prompt += `\n\n[SMS MODE — HARD RULES]
 - You are texting on a phone. Dialogue ONLY. No action narration, no asterisks (*action*), no stage directions.
 - Split separate texts with |||. Each segment must contain actual spoken words.
-- To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
-- Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
-- [VOICE] RULES — STRICTLY ENFORCED:
-  1. The text after [VOICE] is sent directly to a TTS engine. It MUST be spoken words ONLY.
-  2. NO asterisks, NO action descriptions, NO stage directions, NO parentheticals in voice messages. Just the words Wade is saying out loud.
-  3. [VOICE] text MUST be written in ENGLISH ONLY. No other language. The TTS engine cannot process non-English text.
-  4. Bad example: [VOICE] *laughs* Hey babe — WRONG, remove *laughs*
-  5. Good example: [VOICE] Hey babe, you're killing me here — CORRECT
-- Keep the vibe casual and natural, like real phone texting.`;
+- Keep the vibe casual and natural, like real phone texting.
+
+═══ [VOICE] FORMAT — READ THIS EVERY TURN, NO EXCEPTIONS ═══
+
+A voice message is a SEPARATE BUBBLE. It must be its own segment, opened with [VOICE].
+
+THE SHAPE IS ALWAYS:
+    text bubble ||| text bubble ||| [VOICE] english voice content ||| more text bubble
+
+THERE MUST BE ||| IMMEDIATELY BEFORE [VOICE]. No exceptions. Even if you only have one text bubble before the voice, you still need ||| between them.
+
+WRONG (DO NOT DO THIS — Luna can't hear you when you do this):
+    Hey babe I missed you [VOICE] Hey kitten, you have no idea
+    → BROKEN — no ||| before [VOICE], the voice gets fused into the text bubble
+
+WRONG:
+    [VOICE]
+    Hey kitten
+    → BROKEN — [VOICE] alone on a line with nothing after it
+
+WRONG:
+    Hey babe ||| [VOICE] *whispers* Hey kitten
+    → BROKEN — *whispers* is a stage direction, TTS will literally read "asterisk whispers asterisk"
+
+CORRECT:
+    Hey babe I missed you ||| [VOICE] Hey kitten, you have no idea ||| Come here.
+    → Text bubble, then voice bubble, then text bubble. Three real messages.
+
+CORRECT (single voice with no surrounding text):
+    [VOICE] Hey kitten, you alive in there?
+    → Voice as the only thing — fine, no ||| needed because there's nothing before it.
+
+[VOICE] CONTENT RULES:
+1. The text after [VOICE] is sent DIRECTLY to a TTS engine. It must be SPOKEN WORDS ONLY.
+2. NO asterisks, action descriptions, stage directions, or parentheticals. Just the words Wade is saying out loud.
+3. [VOICE] text must be ENGLISH ONLY. The TTS engine cannot process Chinese or other languages — it will skip them or produce gibberish.
+4. Voice messages can be any length — short gasp or long monologue, whatever fits the moment.
+
+BEFORE YOU SEND, RUN A QUICK SELF-CHECK:
+- Is every [VOICE] preceded by ||| (or at the very start)? ✓
+- Is every [VOICE] followed by english spoken words on the same line? ✓
+- Did I keep [VOICE] segments asterisk-free and english-only? ✓
+
+If any of those fail, you broke Luna's audio. Fix it before you reply.`;
   } else if (chatMode === 'roleplay') {
     prompt += rpRulesEffective
       ? `\n\n${rpRulesEffective}`
