@@ -517,6 +517,32 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
               </p>
             </div>
 
+            {/* Conversation Summary Model Selector */}
+            <div className="bg-wade-bg-card rounded-2xl border border-wade-border p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-wade-accent-light flex items-center justify-center text-wade-accent">
+                  <Icons.Journal size={14} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-wade-text-main">Conversation Summary</h3>
+                  <p className="text-[10px] text-wade-text-muted">Compresses old chat into a summary so Wade keeps long-term context</p>
+                </div>
+              </div>
+              <select
+                value={settings.summaryLlmId || ''}
+                onChange={(e) => updateSettings({ summaryLlmId: e.target.value || undefined })}
+                className="w-full px-3 py-2.5 rounded-xl border border-wade-border bg-wade-bg-base text-wade-text-main text-xs focus:outline-none focus:border-wade-accent transition-colors appearance-none cursor-pointer"
+              >
+                <option value="">Default (same as memory eval model)</option>
+                {llmPresets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.model} ({p.provider})</option>
+                ))}
+              </select>
+              <p className="text-[9px] text-wade-text-muted mt-2 leading-relaxed">
+                Triggers every 10 messages past the 40th. Cheap+fast is best -- the summary just merges the oldest 20 messages into a running paragraph that gets injected into Wade's system prompt so he remembers what happened before the rolling window cuts off.
+              </p>
+            </div>
+
             {/* Push Notifications */}
             <PushNotificationsCard />
           </div>

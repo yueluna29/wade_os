@@ -702,7 +702,7 @@ export const ChatInterface: React.FC = () => {
         const len = currentMessages.length;
         const shouldSummarize = len > 40 && (len === 41 || len % 10 === 1);
         if (shouldSummarize) {
-          const summaryLlmId = (settings as any).summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
+          const summaryLlmId = settings.summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
           const summaryPreset = summaryLlmId ? llmPresets.find(p => p.id === summaryLlmId) : null;
           if (summaryPreset?.apiKey && summaryPreset.model) {
             // Summarize the messages that are AT RISK of falling out of the

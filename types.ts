@@ -270,6 +270,7 @@ export interface AppSettings {
   memoryEvalLlmId?: string; // Model for Wade's memory evaluation (smart, understands emotions)
   embeddingLlmId?: string; // Model for vector embedding (cheap, just converts text to numbers)
   descriptionLlmId?: string; // Vision model that describes uploaded images so old chat history can travel as text
+  summaryLlmId?: string; // Model for conversation summary (cheap+fast, runs every 10 messages past 40)
 
   themeColor: string;
   fontSize: 'small' | 'medium' | 'large';
