@@ -108,10 +108,10 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
           return (
             <div key={card.id} className="min-w-full snap-center px-1 group perspective-1000">
               <div
-                className={`relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:-translate-y-1 h-full bg-wade-bg-card ${
+                className={`relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:shadow-lg h-full bg-wade-bg-card ${
                   isActive
-                    ? 'shadow-[0_10px_40px_-10px_rgba(213,143,153,0.3)] border border-wade-accent'
-                    : 'shadow-[0_10px_40px_-10px_rgba(213,143,153,0.15)] border border-wade-accent-light'
+                    ? 'shadow-[0_10px_40px_-10px_rgba(213,143,153,0.2)] border border-wade-accent/30'
+                    : 'shadow-[0_10px_40px_-10px_rgba(213,143,153,0.1)] border border-wade-border'
                 }`}
               >
                 {/* Envelope decorative corners */}
@@ -250,7 +250,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
         <div className="min-w-full snap-center px-1 group perspective-1000">
           <button
             onClick={onCreateNew}
-            className="relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:-translate-y-1 h-full w-full bg-wade-bg-card/40 border-2 border-dashed border-wade-border hover:border-wade-accent hover:bg-wade-accent-light/30 flex flex-col items-center justify-center py-14 gap-2 text-wade-text-muted hover:text-wade-accent"
+            className="relative overflow-hidden rounded-[24px] transition-all duration-300 group-hover:shadow-lg h-full w-full bg-wade-bg-card/40 border-2 border-dashed border-wade-border hover:border-wade-accent hover:bg-wade-accent-light/30 flex flex-col items-center justify-center py-14 gap-2 text-wade-text-muted hover:text-wade-accent"
           >
             {/* Matching envelope corners (lighter) */}
             <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-wade-accent-light via-wade-accent-light to-transparent rounded-bl-[80px] -mr-6 -mt-6 opacity-30 pointer-events-none" />
