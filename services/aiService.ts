@@ -300,7 +300,7 @@ export const generateFromCard = async (config: {
   } else {
     // === OpenAI 兼容路径 (OpenRouter, DeepSeek, Claude 等) ===
     const messages: any[] = [
-      { role: 'system', content: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }] },
+      { role: 'system', content: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral', ttl: '1h' } }] },
       ...history.map(h => {
         const rawParts = h.parts || [];
         const content = rawParts.map(p => {
@@ -310,13 +310,13 @@ export const generateFromCard = async (config: {
           if ('inlineData' in p) return { type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } };
           return null;
         }).filter(Boolean);
- 
+
         if (content.length === 0) return { role: h.role === 'Luna' ? 'user' : 'assistant', content: "..." };
         if (content.length === 1 && content[0]?.type === 'text') return { role: h.role === 'Luna' ? 'user' : 'assistant', content: content[0].text };
         return { role: h.role === 'Luna' ? 'user' : 'assistant', content };
       })
     ];
- 
+
     if (customPrompt?.trim()) {
       messages.push({ role: 'system', content: [{ type: 'text', text: `[SPECIAL INSTRUCTIONS]\n${customPrompt}`, cache_control: { type: 'ephemeral' } }] });
     }
@@ -496,7 +496,7 @@ NOT every reply needs voice. NOT every reply needs multiple texts. Match the ene
 
   // Transform history
   const messages: any[] = [
-    { role: 'system', content: [{ type: 'text', text: fullSystemPrompt, cache_control: { type: 'ephemeral' } }] },
+    { role: 'system', content: [{ type: 'text', text: fullSystemPrompt, cache_control: { type: 'ephemeral', ttl: '1h' } }] },
     ...history.map(h => {
       const rawParts = h.parts || []; 
       const content = rawParts.map(p => {
