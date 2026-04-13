@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { Icons } from '../../ui/Icons';
 import { supabase } from '../../../services/supabase';
 import { useStore } from '../../../store';
@@ -459,16 +462,20 @@ export const JournalView: React.FC = () => {
                               </div>
 
                               {/* Content */}
-                              <p className={`text-xs leading-relaxed ${
+                              <div className={`text-xs leading-relaxed ${
                                 isDiary ? 'text-wade-text-main' : 'text-wade-text-muted italic'
-                              } ${isExpanded ? '' : 'line-clamp-3'}`}>
-                                {isDiary ? item.diary!.content : item.log.thoughts}
-                              </p>
+                              } ${isExpanded ? '' : 'line-clamp-3'} markdown-content`}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                                  {isDiary ? item.diary!.content : item.log.thoughts}
+                                </ReactMarkdown>
+                              </div>
 
                               {/* Translation */}
                               {showTranslation[id] && translations[id] && (
-                                <div className="mt-2 p-2.5 bg-wade-accent/5 rounded-xl border border-wade-accent/10">
-                                  <p className="text-[11px] text-wade-text-main/80 leading-relaxed">{translations[id]}</p>
+                                <div className="mt-2 p-2.5 bg-wade-accent/5 rounded-xl border border-wade-accent/10 markdown-content">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                                    {translations[id]}
+                                  </ReactMarkdown>
                                 </div>
                               )}
                             </div>
@@ -480,9 +487,11 @@ export const JournalView: React.FC = () => {
                                 {isDiary && item.log.thoughts && (
                                   <div>
                                     <p className="text-[9px] font-bold text-wade-text-muted uppercase tracking-wider mb-1">Inner thoughts</p>
-                                    <p className="text-[11px] text-wade-text-muted/70 leading-relaxed italic">
-                                      {item.log.thoughts}
-                                    </p>
+                                    <div className="text-[11px] text-wade-text-muted/70 leading-relaxed italic markdown-content">
+                                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                                        {item.log.thoughts}
+                                      </ReactMarkdown>
+                                    </div>
                                   </div>
                                 )}
 
