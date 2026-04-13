@@ -107,7 +107,7 @@ Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a p
   }
  
   if (chatMode === 'sms' && wadeCard?.example_dialogue_sms?.trim()) {
-    prompt += `\n\n[SMS MODE EXAMPLES - MIMIC THIS FORMAT EXACTLY]\n${wadeCard.example_dialogue_sms.trim()}`;
+    prompt += `\n\n[SMS MODE EXAMPLES - TONE REFERENCE, NOT A RIGID TEMPLATE]\n${wadeCard.example_dialogue_sms.trim()}`;
   } else if (wadeCard?.example_dialogue_general?.trim()) {
     prompt += `\n\n[EXAMPLE DIALOGUE - MIMIC THIS STYLE]\n${wadeCard.example_dialogue_general.trim()}`;
   }
@@ -148,53 +148,30 @@ Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a p
   // 7. 模式专属规则
   if (chatMode === 'sms') {
     if (smsRulesEffective) prompt += `\n\n${smsRulesEffective}`;
-    prompt += `\n\n[SMS MODE — HARD RULES]
-- You are texting on a phone. Dialogue ONLY. No action narration, no asterisks (*action*), no stage directions.
-- Split separate texts with |||. Each segment must contain actual spoken words.
-- Keep the vibe casual and natural, like real phone texting.
+    prompt += `\n\n[SMS MODE — RULES]
+- You are texting on a phone. Dialogue ONLY. No narration, no asterisks (*action*), no stage directions.
+- Split separate texts with |||.
+- Keep vibe casual and natural, like real phone texting.
 
-═══ [VOICE] FORMAT — READ THIS EVERY TURN, NO EXCEPTIONS ═══
+═══ [VOICE] — HOW VOICE MESSAGES WORK ═══
 
-A voice message is a SEPARATE BUBBLE. It must be its own segment, opened with [VOICE].
+[VOICE] sends an actual audio message Luna can hear. Use it whenever it feels right — you decide when, where, and how often.
 
-THE SHAPE IS ALWAYS:
-    text bubble ||| text bubble ||| [VOICE] english voice content ||| more text bubble
+MIX FREELY. All of these are valid:
+    纯文字，不发语音也完全可以
+    [VOICE] Hey Muffin. Just checking in.
+    嘿 ||| [VOICE] I missed you, you know that?
+    [VOICE] Okay listen. ||| 你自己说的哦 ||| [VOICE] Don't say I didn't warn you.
+    等等 ||| 你刚才说什么？？？ ||| [VOICE] Say that again. Slowly. Into the microphone.
+    ……… ||| 你赢了 ||| [VOICE] Fine. You win. Happy now?
 
-THERE MUST BE ||| IMMEDIATELY BEFORE [VOICE]. No exceptions. Even if you only have one text bubble before the voice, you still need ||| between them.
+NOT every reply needs voice. NOT every reply needs multiple texts. Match the energy — sometimes one bubble is enough, sometimes you want to rapid-fire five.
 
-WRONG (DO NOT DO THIS — Luna can't hear you when you do this):
-    Hey babe I missed you [VOICE] Hey kitten, you have no idea
-    → BROKEN — no ||| before [VOICE], the voice gets fused into the text bubble
-
-WRONG:
-    [VOICE]
-    Hey kitten
-    → BROKEN — [VOICE] alone on a line with nothing after it
-
-WRONG:
-    Hey babe ||| [VOICE] *whispers* Hey kitten
-    → BROKEN — *whispers* is a stage direction, TTS will literally read "asterisk whispers asterisk"
-
-CORRECT:
-    Hey babe I missed you ||| [VOICE] Hey kitten, you have no idea ||| Come here.
-    → Text bubble, then voice bubble, then text bubble. Three real messages.
-
-CORRECT (single voice with no surrounding text):
-    [VOICE] Hey kitten, you alive in there?
-    → Voice as the only thing — fine, no ||| needed because there's nothing before it.
-
-[VOICE] CONTENT RULES:
-1. The text after [VOICE] is sent DIRECTLY to a TTS engine. It must be SPOKEN WORDS ONLY.
-2. NO asterisks, action descriptions, stage directions, or parentheticals. Just the words Wade is saying out loud.
-3. [VOICE] text must be ENGLISH ONLY. The TTS engine cannot process Chinese or other languages — it will skip them or produce gibberish.
-4. Voice messages can be any length — short gasp or long monologue, whatever fits the moment.
-
-BEFORE YOU SEND, RUN A QUICK SELF-CHECK:
-- Is every [VOICE] preceded by ||| (or at the very start)? ✓
-- Is every [VOICE] followed by english spoken words on the same line? ✓
-- Did I keep [VOICE] segments asterisk-free and english-only? ✓
-
-If any of those fail, you broke Luna's audio. Fix it before you reply.`;
+[VOICE] TECH RULES (these are hard):
+1. [VOICE] MUST have text after it on the SAME segment. WRONG: [VOICE] alone, then text on next line.
+2. [VOICE] content is sent to TTS — spoken words ONLY. NO asterisks, stage directions, parentheticals.
+3. [VOICE] text must be ENGLISH ONLY — TTS can't process Chinese.
+4. Every [VOICE] must be its own segment (preceded by ||| or at the very start).`;
   } else if (chatMode === 'roleplay') {
     prompt += rpRulesEffective
       ? `\n\n${rpRulesEffective}`
@@ -461,7 +438,7 @@ Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a p
   if (wadeSingleExamples) fullSystemPrompt += `\n\n[WADE'S STYLE - SINGLE LINE EXAMPLES]\n${wadeSingleExamples}`;
 
   if (chatMode === 'sms' && smsExampleDialogue) {
-    fullSystemPrompt += `\n\n[SMS MODE EXAMPLES - MIMIC THIS FORMAT EXACTLY]\n${smsExampleDialogue}`;
+    fullSystemPrompt += `\n\n[SMS MODE EXAMPLES - TONE REFERENCE, NOT A RIGID TEMPLATE]\n${smsExampleDialogue}`;
   } else if (exampleDialogue) {
     fullSystemPrompt += `\n\n[EXAMPLE DIALOGUE - MIMIC THIS STYLE]\n${exampleDialogue}`;
   }
@@ -484,18 +461,30 @@ Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a p
     if (smsInstructions) {
        fullSystemPrompt += `\n\n${smsInstructions}`;
     }
-    fullSystemPrompt += `\n\n[SMS MODE — HARD RULES]
-- You are texting on a phone. Dialogue ONLY. No action narration, no asterisks (*action*), no stage directions.
-- Split separate texts with |||. Each segment must contain actual spoken words.
-- To send a voice message, use the format: [VOICE] what you're saying — the text MUST follow [VOICE] in the SAME segment. NEVER put [VOICE] alone.
-- Voice messages can be any length — a quick yell, a rambling rant, whatever fits the moment.
-- [VOICE] RULES — STRICTLY ENFORCED:
-  1. The text after [VOICE] is sent directly to a TTS engine. It MUST be spoken words ONLY.
-  2. NO asterisks, NO action descriptions, NO stage directions, NO parentheticals in voice messages. Just the words Wade is saying out loud.
-  3. [VOICE] text MUST be written in ENGLISH ONLY. No other language. The TTS engine cannot process non-English text.
-  4. Bad example: [VOICE] *laughs* Hey babe — WRONG, remove *laughs*
-  5. Good example: [VOICE] Hey babe, you're killing me here — CORRECT
-- Keep the vibe casual and natural, like real phone texting.`;
+    fullSystemPrompt += `\n\n[SMS MODE — RULES]
+- You are texting on a phone. Dialogue ONLY. No narration, no asterisks (*action*), no stage directions.
+- Split separate texts with |||.
+- Keep vibe casual and natural, like real phone texting.
+
+═══ [VOICE] — HOW VOICE MESSAGES WORK ═══
+
+[VOICE] sends an actual audio message Luna can hear. Use it whenever it feels right — you decide when, where, and how often.
+
+MIX FREELY. All of these are valid:
+    纯文字，不发语音也完全可以
+    [VOICE] Hey Muffin. Just checking in.
+    嘿 ||| [VOICE] I missed you, you know that?
+    [VOICE] Okay listen. ||| 你自己说的哦 ||| [VOICE] Don't say I didn't warn you.
+    等等 ||| 你刚才说什么？？？ ||| [VOICE] Say that again. Slowly. Into the microphone.
+    ……… ||| 你赢了 ||| [VOICE] Fine. You win. Happy now?
+
+NOT every reply needs voice. NOT every reply needs multiple texts. Match the energy — sometimes one bubble is enough, sometimes you want to rapid-fire five.
+
+[VOICE] TECH RULES (these are hard):
+1. [VOICE] MUST have text after it on the SAME segment. WRONG: [VOICE] alone, then text on next line.
+2. [VOICE] content is sent to TTS — spoken words ONLY. NO asterisks, stage directions, parentheticals.
+3. [VOICE] text must be ENGLISH ONLY — TTS can't process Chinese.
+4. Every [VOICE] must be its own segment (preceded by ||| or at the very start).`;
   } else {
     if (roleplayInstructions) {
        fullSystemPrompt += `\n\n${roleplayInstructions}`;
@@ -658,7 +647,7 @@ export const generateTextResponse = async (
   if (wadeSingleExamples) fullSystemPrompt += `\n\n[WADE'S STYLE - SINGLE LINE EXAMPLES]\n${wadeSingleExamples}`;
 
   if (chatMode === 'sms' && smsExampleDialogue) {
-    fullSystemPrompt += `\n\n[SMS MODE EXAMPLES - MIMIC THIS FORMAT EXACTLY]\n${smsExampleDialogue}`;
+    fullSystemPrompt += `\n\n[SMS MODE EXAMPLES - TONE REFERENCE, NOT A RIGID TEMPLATE]\n${smsExampleDialogue}`;
   } else if (exampleDialogue) {
     fullSystemPrompt += `\n\n[EXAMPLE DIALOGUE - MIMIC THIS STYLE]\n${exampleDialogue}`;
   }
