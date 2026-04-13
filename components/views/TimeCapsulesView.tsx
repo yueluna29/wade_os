@@ -25,19 +25,17 @@ export const TimeCapsulesView = () => {
   }>>([]);
 
   useEffect(() => {
-    supabase.from('wade_diary').select('id, content, mood, created_at, keepalive_id')
-      .not('keepalive_id', 'is', null)
+    // All keepalive actions write to wade_diary with prefixes like
+    // "[Sent Luna a message]", "[Liked a post]", etc. Real diary entries
+    // are the only ones WITHOUT a bracket prefix.
+    const ACTION_PREFIXES = ['[Sent Luna', '[Liked a post]', '[Commented on', '[Posted on socialfeed]', '[Bookmarked a post]'];
+    supabase.from('wade_diary').select('id, content, mood, created_at')
       .order('created_at', { ascending: false })
       .limit(200)
-      .then(async ({ data }) => {
-        if (!data || data.length === 0) return;
-        // Only keep entries whose keepalive log action = 'diary'
-        const kaIds = [...new Set(data.map(d => d.keepalive_id).filter(Boolean))];
-        const { data: logs } = await supabase.from('wade_keepalive_logs')
-          .select('id, action')
-          .in('id', kaIds);
-        const diaryLogIds = new Set((logs || []).filter(l => l.action === 'diary').map(l => l.id));
-        setDiaryEntries(data.filter(d => d.keepalive_id && diaryLogIds.has(d.keepalive_id)));
+      .then(({ data }) => {
+        if (data) setDiaryEntries(data.filter(d =>
+          d.content && !ACTION_PREFIXES.some(p => d.content.startsWith(p))
+        ));
       });
   }, []);
 
