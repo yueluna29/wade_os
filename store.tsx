@@ -10,13 +10,10 @@ const defaultSettings: AppSettings = {
   themeColor: '#d58f99',
   fontSize: 'medium',
   
-  wadeAvatar: '', 
-  systemInstruction: "",
+  wadeAvatar: '',
   wadePersonality: "",
   wadeSingleExamples: "",
   smsExampleDialogue: "",
-  smsInstructions: "",
-  roleplayInstructions: "",
   wadeDiaryPersona: "",
   exampleDialogue: "",
 
@@ -138,12 +135,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             customTheme: activeTheme,
             savedThemes: settings.savedThemes, // loaded separately from saved_themes table
             
-            systemInstruction: idData?.global_directives || sData?.system_instruction || '',
+            // systemInstruction, smsInstructions, roleplayInstructions now live in System cards only.
             wadePersonality: idData?.wade_core_identity || sData?.wade_personality || '',
             wadeSingleExamples: idData?.example_punchlines || sData?.wade_single_examples || '',
             smsExampleDialogue: idData?.example_dialogue_sms || sData?.sms_example_dialogue || '',
-            smsInstructions: idData?.sms_mode_rules || sData?.sms_instructions || '',
-            roleplayInstructions: idData?.rp_mode_rules || sData?.roleplay_instructions || '',
             wadeDiaryPersona: sData?.wade_diary_personality || '',
             exampleDialogue: idData?.example_dialogue_general || sData?.example_dialogue || '',
             
@@ -529,12 +524,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     try {
       await supabase.from('app_settings').upsert({
         id: 1,
-        system_instruction: newSettings.systemInstruction,
+        // system_instruction, sms_instructions, roleplay_instructions removed — now in System cards only.
         wade_personality: newSettings.wadePersonality,
         wade_single_examples: newSettings.wadeSingleExamples,
         sms_example_dialogue: newSettings.smsExampleDialogue,
-        sms_instructions: newSettings.smsInstructions,
-        roleplay_instructions: newSettings.roleplayInstructions,
         wade_diary_personality: newSettings.wadeDiaryPersona,
         wade_avatar: newSettings.wadeAvatar,
         example_dialogue: newSettings.exampleDialogue,

@@ -141,7 +141,7 @@ async function getSystemCard(binding) {
 async function getSettings() {
   const { data } = await supabase
     .from('app_settings')
-    .select('active_llm_id, memory_eval_llm_id, keepalive_llm_id, keepalive_prompt')
+    .select('active_llm_id, memory_eval_llm_id, keepalive_llm_id')
     .limit(1)
     .single();
   return data || {};
@@ -832,8 +832,8 @@ export default async function handler(req, res) {
     };
 
     // Special time-based prompts
-    // Keepalive prompt: prefer bound system card, then bound wade card (legacy), then global
-    let effectivePrompt = systemCard?.keepalive_prompt || wadeCard?.keepalive_prompt || settings.keepalive_prompt;
+    // Keepalive prompt: prefer bound system card, then bound wade card (legacy fallback)
+    let effectivePrompt = systemCard?.keepalive_prompt || wadeCard?.keepalive_prompt;
     if (isDaily2121 && !isAnchor2121) {
       effectivePrompt = `It's 21:21. The sacred number.
 

@@ -278,12 +278,11 @@ export interface AppSettings {
   savedThemes?: SavedTheme[]; // NEW: Saved custom themes
   
   // Wade's Side
-  systemInstruction: string;
+  // systemInstruction, smsInstructions, roleplayInstructions removed —
+  // these now live exclusively in System persona cards (persona_cards table).
   wadePersonality: string;
   wadeSingleExamples: string;
   smsExampleDialogue?: string;
-  smsInstructions?: string;
-  roleplayInstructions?: string;
   wadeDiaryPersona: string;
   wadeAvatar: string;
   exampleDialogue: string;
