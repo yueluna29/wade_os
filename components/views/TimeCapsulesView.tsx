@@ -203,6 +203,11 @@ export const TimeCapsulesView = () => {
         capsule={selectedCapsuleData}
         onBack={() => setViewingCapsule(null)}
         onEdit={viewingCapsule?.startsWith('diary-') ? undefined : handleEditFromReader}
+        onSaveContent={viewingCapsule?.startsWith('diary-') ? async (id, content) => {
+          const realId = id.replace('diary-', '');
+          await supabase.from('wade_diary').update({ content }).eq('id', realId);
+          setDiaryEntries(prev => prev.map(d => d.id === realId ? { ...d, content } : d));
+        } : undefined}
         onUpdateAudioCache={(capsuleId, audio) => updateCapsule(capsuleId, { audioCache: audio })}
       />
     );
