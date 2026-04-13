@@ -12,7 +12,7 @@ interface WadeCardCarouselProps {
   onRename: (id: string, name: string) => void;
   onUpdateDescription: (id: string, description: string) => void;
   functionBindings: Array<{ functionKey: string; label: string; personaCardId?: string | null; systemCardId?: string | null }>;
-  onToggleBinding: (functionKey: string, cardId: string) => void;
+  onToggleBinding?: (functionKey: string, cardId: string) => void; // legacy — now read-only
   label?: string;              // e.g. "Wade Files" or "System Files"
   newCardLabel?: string;       // e.g. "New Wade File" or "New System File"
   bindingType?: 'persona' | 'system'; // which field in function_bindings to check
@@ -190,28 +190,23 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
                       : <span className="not-italic">(empty identity — tap fields below to fill in)</span>}
                   </p>
 
-                  {/* Function bindings */}
-                  <div className="mt-4">
-                    <div className="text-[8px] font-bold text-wade-text-muted/60 uppercase tracking-[0.15em] mb-1.5">Use for</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {FUNCTIONS.map(fn => {
-                        const active = isBindingActive(fn.key, card.id);
-                        return (
-                          <button
-                            key={fn.key}
-                            onClick={() => onToggleBinding(fn.key, card.id)}
-                            className={`px-2.5 py-1 rounded-full text-[9px] font-bold transition-colors ${
-                              active
-                                ? 'bg-wade-accent text-white shadow-sm'
-                                : 'bg-wade-bg-app/80 text-wade-text-muted/70 hover:bg-wade-accent-light hover:text-wade-accent'
-                            }`}
-                          >
-                            {active && '✓ '}{fn.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  {/* Bound functions (read-only — edit in Settings → Control) */}
+                  {(() => {
+                    const bound = FUNCTIONS.filter(fn => isBindingActive(fn.key, card.id));
+                    if (bound.length === 0) return null;
+                    return (
+                      <div className="mt-4">
+                        <div className="text-[8px] font-bold text-wade-text-muted/60 uppercase tracking-[0.15em] mb-1.5">Active in</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {bound.map(fn => (
+                            <span key={fn.key} className="px-2.5 py-1 rounded-full text-[9px] font-bold bg-wade-accent/10 text-wade-accent">
+                              {fn.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Footer actions */}
                   <div className="flex items-center justify-between border-t border-wade-border/40 pt-3 mt-4">
