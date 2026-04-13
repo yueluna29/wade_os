@@ -25,10 +25,20 @@ export const TimeCapsulesView = () => {
   }>>([]);
 
   useEffect(() => {
-    supabase.from('wade_diary').select('id, content, mood, created_at')
+    supabase.from('wade_diary').select('id, content, mood, created_at, keepalive_id')
+      .not('keepalive_id', 'is', null)
       .order('created_at', { ascending: false })
       .limit(200)
-      .then(({ data }) => { if (data) setDiaryEntries(data); });
+      .then(async ({ data }) => {
+        if (!data || data.length === 0) return;
+        // Only keep entries whose keepalive log action = 'diary'
+        const kaIds = [...new Set(data.map(d => d.keepalive_id).filter(Boolean))];
+        const { data: logs } = await supabase.from('wade_keepalive_logs')
+          .select('id, action')
+          .in('id', kaIds);
+        const diaryLogIds = new Set((logs || []).filter(l => l.action === 'diary').map(l => l.id));
+        setDiaryEntries(data.filter(d => d.keepalive_id && diaryLogIds.has(d.keepalive_id)));
+      });
   }, []);
 
   // Carousel state
