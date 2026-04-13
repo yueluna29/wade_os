@@ -255,6 +255,33 @@ The tag is invisible to Luna; the note will be waiting for you next time.
 </wade_notes_to_self>`;
 }
 
+// =====================================================================
+// DIARY — let Wade see what he wrote recently
+// =====================================================================
+
+const DIARY_ACTION_PREFIXES = ['[Sent Luna', '[Liked a post]', '[Commented on', '[Posted on socialfeed]', '[Bookmarked a post]'];
+
+export async function getRecentDiaries(limit = 3): Promise<{ content: string; mood: string | null; created_at: string }[]> {
+  const { data } = await supabase
+    .from('wade_diary')
+    .select('content, mood, created_at')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (!data) return [];
+  return data
+    .filter(d => d.content && !DIARY_ACTION_PREFIXES.some(p => d.content.startsWith(p)))
+    .slice(0, limit);
+}
+
+export function formatDiariesForPrompt(diaries: { content: string; mood: string | null; created_at: string }[]): string {
+  if (!diaries || diaries.length === 0) return '';
+  const entries = diaries.map(d => {
+    const date = new Date(d.created_at).toISOString().split('T')[0];
+    return `<entry date="${date}"${d.mood ? ` mood="${d.mood}"` : ''}>\n${d.content}\n</entry>`;
+  }).join('\n\n');
+  return `\n\n<wade_recent_diary>\nThese are diary entries you wrote recently. You can reference them naturally if Luna brings them up.\n\n${entries}\n</wade_recent_diary>`;
+}
+
 /**
  * Format pending todos for injection into the keepalive prompt.
  * Goes into the {{wadeNotes}} placeholder, near the end of the prompt

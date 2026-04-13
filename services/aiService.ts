@@ -63,6 +63,7 @@ export const buildSystemPromptFromCard = (options: {
   customPrompt?: string;
   formattedHistory?: any[];
   wadeMemoriesXml?: string;
+  wadeDiaryXml?: string; // recent diary entries so Wade knows what he wrote
   wadeTodosXml?: string; // pending notes injected at the very end (most volatile)
 }): string => {
   const { wadeCard, lunaCard, systemCard, chatMode, coreMemories, isRetry, formattedHistory } = options;
@@ -188,9 +189,12 @@ NOT every reply needs voice. NOT every reply needs multiple texts. Match the ene
     prompt += options.wadeMemoriesXml;
   }
 
-  // Wade 的 todo notes — 比 memories 更动态（每次聊天都可能 +1），所以放在 memories 之后
-  // 紧贴 user message 之前。这样 cache prefix = identity + rules + memories 都能命中，
-  // 只有 todos 的最后一小段需要重算。
+  // Wade 的近期日记 — 让他知道自己写过什么，Luna 提起时能自然接上
+  if (options.wadeDiaryXml) {
+    prompt += options.wadeDiaryXml;
+  }
+
+  // Wade 的 todo notes — 最动态（每次聊天都可能 +1），所以放最后
   if (options.wadeTodosXml) {
     prompt += options.wadeTodosXml;
   }
@@ -227,6 +231,7 @@ export const generateFromCard = async (config: {
   sessionSummary?: string;
   customPrompt?: string;
   wadeMemoriesXml?: string;
+  wadeDiaryXml?: string;
   wadeTodosXml?: string;
   llmPreset?: {
     provider: string;
@@ -243,7 +248,7 @@ export const generateFromCard = async (config: {
   };
 }): Promise<GeminiResponse> => {
  
-  const { wadeCard, lunaCard, systemCard, chatMode, prompt, history, coreMemories, isRetry, sessionSummary, customPrompt, wadeMemoriesXml, wadeTodosXml, llmPreset } = config;
+  const { wadeCard, lunaCard, systemCard, chatMode, prompt, history, coreMemories, isRetry, sessionSummary, customPrompt, wadeMemoriesXml, wadeDiaryXml, wadeTodosXml, llmPreset } = config;
 
   if (!llmPreset) {
     throw new Error("No LLM preset provided. Configure a brain in Mission Control!");
@@ -260,6 +265,7 @@ export const generateFromCard = async (config: {
     sessionSummary,
     customPrompt,
     wadeMemoriesXml,
+    wadeDiaryXml,
     wadeTodosXml,
   });
  

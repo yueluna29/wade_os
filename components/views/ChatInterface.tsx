@@ -9,7 +9,7 @@ import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
 import { ChatThemePanel } from './chat/ChatThemePanel';
 import { supabase } from '../../services/supabase';
 import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, WadeMemory } from '../../services/memoryService';
-import { getPendingTodos, formatTodosForChatPrompt, extractTodoTags, writeExtractedFromChat } from '../../services/todoService';
+import { getPendingTodos, formatTodosForChatPrompt, extractTodoTags, writeExtractedFromChat, getRecentDiaries, formatDiariesForPrompt } from '../../services/todoService';
 import { MemoryLiveIndicator } from './memory/MemoryLiveIndicator';
 
 // Chat subcomponents
@@ -595,8 +595,14 @@ export const ChatInterface: React.FC = () => {
         setLastWadeMemoriesXml(wadeMemoriesXml);
       } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
 
+      // Recent diary entries — so Wade knows what he wrote
+      let wadeDiaryXml = '';
+      try {
+        const recentDiaries = await getRecentDiaries(3);
+        wadeDiaryXml = formatDiariesForPrompt(recentDiaries);
+      } catch (e) { console.error('[WadeDiary] Fetch failed:', e); }
+
       // Pending todos — fetched fresh each turn so Wade always sees the latest.
-      // Injected at the very end of the system prompt (after memories) for cache.
       let wadeTodosXml = '';
       try {
         const pending = await getPendingTodos(20);
@@ -604,7 +610,6 @@ export const ChatInterface: React.FC = () => {
         setLastWadeTodosXml(wadeTodosXml);
       } catch (e) { console.error('[WadeTodos] Fetch failed:', e); }
 
-      // 🔥 用新的 generateFromCard 统一入口！
       const response = await generateFromCard({
         wadeCard,
         lunaCard,
@@ -617,6 +622,7 @@ export const ChatInterface: React.FC = () => {
         sessionSummary,
         customPrompt: currentSession?.customPrompt,
         wadeMemoriesXml,
+        wadeDiaryXml,
         wadeTodosXml,
         llmPreset: activeLlm,
       });
