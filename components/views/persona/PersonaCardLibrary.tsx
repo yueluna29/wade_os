@@ -10,7 +10,14 @@ interface PersonaCardLibraryProps {
 }
 
 export const PersonaCardLibrary: React.FC<PersonaCardLibraryProps> = ({ setFocusModal, handleAvatarUpload }) => {
-  const { personaCards, addPersonaCard, updatePersonaCard, deletePersonaCard, duplicatePersonaCard, setDefaultPersonaCard } = useStore();
+  const { personaCards, addPersonaCard, updatePersonaCard, deletePersonaCard, duplicatePersonaCard, setDefaultPersonaCard, functionBindings } = useStore();
+
+  // Which functions is this card actively bound to?
+  const getBoundFunctions = (cardId: string): string[] => {
+    return functionBindings
+      .filter(fb => fb.personaCardId === cardId)
+      .map(fb => fb.label || fb.functionKey);
+  };
   
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [editingCard, setEditingCard] = useState<PersonaCard | null>(null);
@@ -165,7 +172,20 @@ export const PersonaCardLibrary: React.FC<PersonaCardLibraryProps> = ({ setFocus
           </div>
         </div>
         
-        <p className="text-xs text-wade-text-muted mb-5 line-clamp-2 h-8">{card.description}</p>
+        <p className="text-xs text-wade-text-muted mb-2 line-clamp-2 h-8">{card.description}</p>
+
+        {/* Bound functions badges */}
+        {(() => {
+          const bound = getBoundFunctions(card.id);
+          if (bound.length === 0) return null;
+          return (
+            <div className="flex flex-wrap gap-1 mb-3">
+              {bound.map(fn => (
+                <span key={fn} className="text-[8px] bg-wade-accent/10 text-wade-accent px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{fn}</span>
+              ))}
+            </div>
+          );
+        })()}
         
         <div className="flex gap-2 justify-between border-t border-wade-border pt-3">
           <div className="flex gap-1">
