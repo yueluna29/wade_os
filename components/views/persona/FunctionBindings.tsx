@@ -69,8 +69,9 @@ export const FunctionBindings: React.FC = () => {
           const isSystem = SYSTEM_KEYS.has(func.key);
           const isExpanded = expandedKey === func.key;
           const boundCard = binding?.personaCardId ? personaCards.find(c => c.id === binding.personaCardId) : null;
+          const boundSystem = binding?.systemCardId ? personaCards.find(c => c.id === binding.systemCardId) : null;
           const boundLlm = binding?.llmPresetId ? llmPresets.find(p => p.id === binding.llmPresetId) : null;
-          const hasBound = !!(boundCard || boundLlm);
+          const hasBound = !!(boundCard || boundSystem || boundLlm);
           const IconComp = func.icon;
 
           return (
@@ -98,7 +99,7 @@ export const FunctionBindings: React.FC = () => {
                     )}
                   </div>
                   <div className="text-[10px] text-wade-text-muted truncate">
-                    {boundCard ? boundCard.name : 'Default'} {boundLlm ? `/ ${boundLlm.name}` : ''}
+                    {boundCard ? boundCard.name : 'Default'}{boundSystem ? ` + ${boundSystem.name}` : ''}{boundLlm ? ` / ${boundLlm.name}` : ''}
                   </div>
                 </div>
                 <Icons.ChevronDown size={12} className={`text-wade-text-muted transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -113,28 +114,26 @@ export const FunctionBindings: React.FC = () => {
                       value={binding?.personaCardId || ''}
                       onChange={e => updateFunctionBinding(func.key, { personaCardId: e.target.value || undefined })}
                     >
-                      <option value="">Default (Fallback)</option>
-                      {personaCards.filter(c => c.character === 'Wade').length > 0 && (
-                        <optgroup label="Wade">
-                          {personaCards.filter(c => c.character === 'Wade').map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {personaCards.filter(c => c.character === 'Luna').length > 0 && (
-                        <optgroup label="Luna">
-                          {personaCards.filter(c => c.character === 'Luna').map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {personaCards.filter(c => c.character === 'System').length > 0 && (
-                        <optgroup label="System">
-                          {personaCards.filter(c => c.character === 'System').map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </optgroup>
-                      )}
+                      <option value="">Default</option>
+                      {personaCards.filter(c => c.character === 'Wade').map(c => (
+                        <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (default)' : ''}</option>
+                      ))}
+                      {personaCards.filter(c => c.character === 'Luna').map(c => (
+                        <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (default)' : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold text-wade-text-muted uppercase tracking-wider mb-1 block">System Card</label>
+                    <select
+                      className="w-full bg-wade-bg-app border border-wade-border rounded-xl px-3 py-2 text-[11px] text-wade-text-main outline-none focus:border-wade-accent appearance-none cursor-pointer"
+                      value={binding?.systemCardId || ''}
+                      onChange={e => updateFunctionBinding(func.key, { systemCardId: e.target.value || undefined })}
+                    >
+                      <option value="">Default</option>
+                      {personaCards.filter(c => c.character === 'System').map(c => (
+                        <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (default)' : ''}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
