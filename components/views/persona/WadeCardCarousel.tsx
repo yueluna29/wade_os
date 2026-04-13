@@ -100,7 +100,7 @@ export const WadeCardCarousel: React.FC<WadeCardCarouselProps> = ({
       >
         {cards.map(card => {
           const isActive = card.id === currentCardId;
-          const identity = (card.cardData?.core_identity || '').slice(0, 80);
+          const identity = (card.cardData?.core_identity || card.cardData?.global_directives || '').slice(0, 80);
           const avatarUrl = card.cardData?.avatar_url;
           const isRenaming = renamingId === card.id;
           const isEditingDesc = descEditingId === card.id;
