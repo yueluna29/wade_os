@@ -122,7 +122,7 @@ export const TodosView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             </button>
           )}
           <div>
-            <h1 className="font-hand text-2xl text-wade-text-main leading-none">Wade's Notes</h1>
+            <h1 className="font-hand text-2xl text-wade-accent leading-none">Wade's Notes</h1>
             <p className="text-[10px] text-wade-text-muted mt-1">things he wanted to do · things he meant to say</p>
           </div>
         </div>
@@ -240,6 +240,11 @@ export const TodosView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
               </div>
             </div>
 
+            {todo.context?.done_when && tab === 'todo' && (
+              <div className="mt-2 px-3 py-1.5 rounded-lg bg-wade-accent/5 text-[10px] text-wade-accent font-medium border-l-2 border-wade-accent/40">
+                Done when: {todo.context.done_when}
+              </div>
+            )}
             {todo.done_note && tab === 'done' && (
               <div className="mt-3 px-3 py-2 rounded-lg bg-wade-bg-app text-[11px] text-wade-text-muted italic border-l-2 border-wade-accent">
                 "{todo.done_note}"

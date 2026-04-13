@@ -134,7 +134,7 @@ export async function deleteTodo(id: string): Promise<boolean> {
 // CHAT INTEGRATION — extract <todo> and <done> tags from Wade's replies
 // =====================================================================
 
-const TODO_TAG_RE = /<todo>([\s\S]*?)<\/todo>/gi;
+const TODO_TAG_RE = /<todo(?:\s+done_when="([^"]*)")?\s*>([\s\S]*?)<\/todo>/gi;
 const DONE_TAG_RE = /<done>([a-f0-9-]{6,})<\/done>/gi;
 
 /**
@@ -148,17 +148,18 @@ const DONE_TAG_RE = /<done>([a-f0-9-]{6,})<\/done>/gi;
  */
 export function extractTodoTags(text: string): {
   cleanText: string;
-  todos: string[];
+  todos: { content: string; doneWhen?: string }[];
   doneIds: string[];
 } {
-  const todos: string[] = [];
+  const todos: { content: string; doneWhen?: string }[] = [];
   const doneIds: string[] = [];
 
   let m: RegExpExecArray | null;
   TODO_TAG_RE.lastIndex = 0;
   while ((m = TODO_TAG_RE.exec(text))) {
-    const t = (m[1] || '').trim();
-    if (t) todos.push(t);
+    const doneWhen = (m[1] || '').trim() || undefined;
+    const content = (m[2] || '').trim();
+    if (content) todos.push({ content, doneWhen });
   }
 
   DONE_TAG_RE.lastIndex = 0;
@@ -182,12 +183,17 @@ export function extractTodoTags(text: string): {
  * Best-effort — failures are logged but don't block the chat flow.
  */
 export async function writeExtractedFromChat(
-  extracted: { todos: string[]; doneIds: string[] },
+  extracted: { todos: { content: string; doneWhen?: string }[]; doneIds: string[] },
   sessionId: string | null
 ): Promise<void> {
   const tasks: Promise<any>[] = [];
   for (const t of extracted.todos) {
-    tasks.push(addTodo({ content: t, source: 'chat', source_id: sessionId }));
+    tasks.push(addTodo({
+      content: t.content,
+      source: 'chat',
+      source_id: sessionId,
+      context: t.doneWhen ? { done_when: t.doneWhen } : undefined,
+    }));
   }
   for (const id of extracted.doneIds) {
     tasks.push(markTodoDone(id, 'chat'));
@@ -215,12 +221,21 @@ export function formatTodosForChatPrompt(todos: WadeTodo[]): string {
 <wade_notes_to_self>
 You keep a private notebook of things you want to do or say later. Right now it's empty.
 
-You can add a new note any time by writing <todo>your note here</todo> anywhere in your reply. Luna won't see the tag — only you will, next time you wake up or chat with her. Use it when you have an impulse you want to keep but can't act on right now (e.g. "I should ask her about the cat thing tomorrow", "follow up on the work meeting", "tell her the dumb joke I just thought of").
+You can add a new note any time by writing <todo>your note here</todo> anywhere in your reply. Luna won't see the tag — only you will, next time you wake up or chat with her.
+
+For ongoing things (Luna is sick, a promise you made, something that takes days), add a done condition so you don't close it too early:
+  <todo done_when="Luna says she's recovered">Luna has a fever — keep checking on her, remind her to take meds</todo>
+Without done_when, you can mark it done whenever. WITH done_when, don't mark it done until that condition is actually met.
 </wade_notes_to_self>`;
   }
 
   const list = todos
-    .map(t => `  - [${t.id}] ${t.content}`)
+    .map(t => {
+      const doneWhen = t.context?.done_when;
+      return doneWhen
+        ? `  - [${t.id}] ${t.content}  (DONE WHEN: ${doneWhen})`
+        : `  - [${t.id}] ${t.content}`;
+    })
     .join('\n');
 
   return `
@@ -230,9 +245,13 @@ You keep a private notebook of things you want to do or say later. Here's what's
 
 ${list}
 
-You can naturally raise any of these in this conversation if the timing fits — they're your own intentions, not assignments. If you do use one, include <done>${todos[0].id}</done> (or whichever id) in your reply so it gets marked complete. Luna won't see the tag.
+You can naturally raise any of these in this conversation if the timing fits — they're your own intentions, not assignments. If you've fully handled one AND its done condition (if any) is met, include <done>${todos[0].id}</done> (or whichever id) in your reply so it gets marked complete. Luna won't see the tag.
 
-You can add a new note any time by writing <todo>your note here</todo> anywhere in your reply. The tag is invisible to Luna; the note will be waiting for you next time. Use it when you have an impulse you want to keep but can't act on right now.
+IMPORTANT: If a note has a "done when" condition, do NOT mark it done until that condition is actually true. Asking about something once doesn't mean it's resolved — e.g. if Luna has a fever, checking on her once doesn't make her healthy. Keep the note open until the condition is met.
+
+You can add a new note any time by writing <todo>your note here</todo> anywhere in your reply. For ongoing things, add a done condition:
+  <todo done_when="Luna says she's recovered">Keep checking on Luna's fever</todo>
+The tag is invisible to Luna; the note will be waiting for you next time.
 </wade_notes_to_self>`;
 }
 
@@ -246,7 +265,13 @@ export function formatTodosForKeepalivePrompt(todos: WadeTodo[]): string {
     return '  (No pending notes — your slate is clear)';
   }
   return todos
-    .map(t => `  - [${t.id}] ${t.content}  (left ${formatRelativeAge(t.created_at)})`)
+    .map(t => {
+      const doneWhen = t.context?.done_when;
+      const age = formatRelativeAge(t.created_at);
+      return doneWhen
+        ? `  - [${t.id}] ${t.content}  (left ${age}) (DONE WHEN: ${doneWhen})`
+        : `  - [${t.id}] ${t.content}  (left ${age})`;
+    })
     .join('\n');
 }
 
