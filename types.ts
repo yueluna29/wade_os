@@ -336,6 +336,7 @@ export interface PersonaCardData {
   example_dialogue_sms?: string;
   sms_mode_rules?: string;
   rp_mode_rules?: string;
+  keepalive_prompt?: string;
   // 可以随时加新字段，jsonb 不需要改表结构
   [key: string]: string | undefined;
 }

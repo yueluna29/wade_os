@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore } from '../../store';
 import { Button } from '../ui/Button';
 import { Icons } from '../ui/Icons';
-import { generateTextResponse, generateTTS, generateChatTitle, generateFromCard, generateImageDescription, summarizeConversation } from '../../services/aiService';
+import { generateTTS, generateChatTitle, generateFromCard, generateImageDescription, summarizeConversation } from '../../services/aiService';
 import { uploadBase64ToImgBB } from '../../services/imgbb';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
