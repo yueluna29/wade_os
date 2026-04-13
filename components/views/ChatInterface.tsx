@@ -41,6 +41,7 @@ export const ChatInterface: React.FC = () => {
 
   // Session Summary
   const [sessionSummary, setSessionSummary] = useState<string>("");
+  const lastSummaryCountRef = useRef(0);
   // Memory live indicator
   const [newMemories, setNewMemories] = useState<WadeMemory[]>([]);
   const [lastWadeMemoriesXml, setLastWadeMemoriesXml] = useState<string>('');
@@ -708,20 +709,29 @@ export const ChatInterface: React.FC = () => {
       //   3. settings.activeLlmId  (whatever Wade is talking to right now)
       if (!isRegeneration) {
         const currentMessages = messagesRef.current.filter(m => m.sessionId === targetSessionId);
-        // Throttle: only fire when crossing a +10 message boundary past 40.
-        // So summary runs at message counts 41, 51, 61, 71, ... — not on every
-        // send (which would waste tokens re-summarizing the same first 20).
+        // Throttle: trigger summary every ~10 messages past 40.
+        // Old approach used `len % 10 === 1` which silently broke in SMS mode —
+        // Wade sends 3-6 bubbles per reply (each a separate message), so len
+        // jumps unpredictably and almost never lands on an exact X1 boundary.
+        // New approach: track the len at which we last summarized and re-trigger
+        // once we've gained 10+ messages since then.
         const len = currentMessages.length;
-        const shouldSummarize = len > 40 && (len === 41 || len % 10 === 1);
+        if (lastSummaryCountRef.current === 0 && len > 40) lastSummaryCountRef.current = len - 10; // bootstrap on first check
+        const shouldSummarize = len > 40 && len >= lastSummaryCountRef.current + 10;
         if (shouldSummarize) {
           const summaryLlmId = settings.summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
           const summaryPreset = summaryLlmId ? llmPresets.find(p => p.id === summaryLlmId) : null;
           if (summaryPreset?.apiKey && summaryPreset.model) {
-            // Summarize the messages that are AT RISK of falling out of the
-            // rolling 50-message window. We grab the oldest 20 — those are
-            // either already gone (if len > 70) or about to go.
-            const messagesToSummarize = currentMessages.slice(0, 20);
-            console.log(`[Summary] Triggering at len=${len} via ${summaryPreset.name} (${summaryPreset.provider})`);
+            // Summarize messages that just fell out of the context window.
+            // The LLM only sees the latest `contextLimit` messages, so everything
+            // before that is "forgotten" — we capture the 20 messages right
+            // before the window edge and merge them into the existing summary.
+            const contextLimit = settings.contextLimit || 50;
+            const windowStart = Math.max(0, len - contextLimit);
+            const chunkStart = Math.max(0, windowStart - 20);
+            const messagesToSummarize = currentMessages.slice(chunkStart, Math.max(windowStart, chunkStart + 1));
+            console.log(`[Summary] Triggering at len=${len} (last=${lastSummaryCountRef.current}) via ${summaryPreset.name} (${summaryPreset.provider})`);
+            lastSummaryCountRef.current = len; // mark immediately so we don't double-fire
             summarizeConversation(messagesToSummarize, sessionSummary, {
               provider: summaryPreset.provider,
               baseUrl: summaryPreset.baseUrl,
