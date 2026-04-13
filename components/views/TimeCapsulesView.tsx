@@ -1,6 +1,7 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../../store';
+import { supabase } from '../../services/supabase';
 import { CapsuleReader } from './CapsuleReader';
 import { CapsuleModal } from './CapsuleModal';
 
@@ -18,6 +19,18 @@ export const TimeCapsulesView = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCapsule, setEditingCapsule] = useState<string | null>(null);
   
+  // Wade's diary entries (fetched from wade_diary)
+  const [diaryEntries, setDiaryEntries] = useState<Array<{
+    id: string; content: string; mood: string | null; created_at: string;
+  }>>([]);
+
+  useEffect(() => {
+    supabase.from('wade_diary').select('id, content, mood, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200)
+      .then(({ data }) => { if (data) setDiaryEntries(data); });
+  }, []);
+
   // Carousel state
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -62,34 +75,57 @@ export const TimeCapsulesView = () => {
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const dayNames = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-  // Filter capsules for the selected month
-  const capsulesInMonth = useMemo(() => {
-    return capsules.filter(cap => {
-      const d = new Date(cap.unlockDate);
+  // Convert diary entries to capsule-like items for unified rendering
+  const diaryAsCapsules = useMemo(() => {
+    return diaryEntries.map(d => ({
+      id: `diary-${d.id}`,
+      title: d.mood ? `Wade's Diary — ${d.mood}` : "Wade's Diary",
+      content: d.content,
+      createdAt: new Date(d.created_at).getTime(),
+      unlockDate: new Date(d.created_at).getTime(),
+      isLocked: false,
+      isDiary: true,
+    }));
+  }, [diaryEntries]);
+
+  const allItems = useMemo(() => {
+    const real = capsules.map(c => ({ ...c, isDiary: false }));
+    return [...real, ...diaryAsCapsules].sort((a, b) => a.unlockDate - b.unlockDate);
+  }, [capsules, diaryAsCapsules]);
+
+  // Filter for the selected month
+  const itemsInMonth = useMemo(() => {
+    return allItems.filter(item => {
+      const d = new Date(item.unlockDate);
       return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
     });
-  }, [capsules, currentDate]);
+  }, [allItems, currentDate]);
 
-  // Get capsules for the selected day
-  const selectedDayCapsules = useMemo(() => {
+  // Get items for the selected day
+  const selectedDayItems = useMemo(() => {
     if (!selectedDate) return [];
-    return capsules.filter(cap => {
-      const d = new Date(cap.unlockDate);
-      return d.getDate() === selectedDate.getDate() && 
-             d.getMonth() === selectedDate.getMonth() && 
+    return allItems.filter(item => {
+      const d = new Date(item.unlockDate);
+      return d.getDate() === selectedDate.getDate() &&
+             d.getMonth() === selectedDate.getMonth() &&
              d.getFullYear() === selectedDate.getFullYear();
     });
-  }, [capsules, selectedDate]);
+  }, [allItems, selectedDate]);
 
-  const hasCapsuleOnDay = (day: number) => {
-    return capsulesInMonth.some(cap => new Date(cap.unlockDate).getDate() === day);
+  // Keep old name for backward compat in the carousel count
+  const selectedDayCapsules = selectedDayItems;
+
+  const hasItemOnDay = (day: number) => {
+    return itemsInMonth.some(item => new Date(item.unlockDate).getDate() === day);
   };
 
   const handleDayClick = (day: number) => {
     setSelectedDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
   };
 
-  const selectedCapsuleData = viewingCapsule ? capsules.find(c => c.id === viewingCapsule) : null;
+  const selectedCapsuleData = viewingCapsule
+    ? (capsules.find(c => c.id === viewingCapsule) || diaryAsCapsules.find(c => c.id === viewingCapsule))
+    : null;
 
   const handleEditFromReader = () => {
     if (!selectedCapsuleData) return;
@@ -156,7 +192,7 @@ export const TimeCapsulesView = () => {
       <CapsuleReader
         capsule={selectedCapsuleData}
         onBack={() => setViewingCapsule(null)}
-        onEdit={handleEditFromReader}
+        onEdit={viewingCapsule?.startsWith('diary-') ? undefined : handleEditFromReader}
         onUpdateAudioCache={(capsuleId, audio) => updateCapsule(capsuleId, { audioCache: audio })}
       />
     );
@@ -175,7 +211,7 @@ export const TimeCapsulesView = () => {
             <div>
               <h1 className="font-hand text-3xl text-wade-accent tracking-tight">Time Capsules</h1>
               <p className="text-xs text-wade-text-muted font-medium tracking-wide uppercase opacity-80">
-                {capsules.length} Memories Sealed
+                {capsules.length} Capsules + {diaryEntries.length} Diaries
               </p>
             </div>
           </div>
@@ -227,7 +263,7 @@ export const TimeCapsulesView = () => {
 
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day = i + 1;
-                const hasCapsule = hasCapsuleOnDay(day);
+                const hasCapsule = hasItemOnDay(day);
                 const isSelected = selectedDate?.getDate() === day && selectedDate?.getMonth() === currentDate.getMonth() && selectedDate?.getFullYear() === currentDate.getFullYear();
                 const isToday = new Date().getDate() === day && new Date().getMonth() === currentDate.getMonth() && new Date().getFullYear() === currentDate.getFullYear();
                 
@@ -271,7 +307,7 @@ export const TimeCapsulesView = () => {
               <div className="bg-wade-bg-card px-3 py-1.5 rounded-xl shadow-sm border border-wade-border flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-wade-accent"></span>
                 <span className="text-xs font-bold text-wade-text-muted">
-                  {selectedDayCapsules.length} Letters
+                  {selectedDayCapsules.length} {selectedDayCapsules.length === 1 ? 'Entry' : 'Entries'}
                 </span>
               </div>
             </div>
@@ -310,7 +346,8 @@ export const TimeCapsulesView = () => {
                   >
                     {selectedDayCapsules.map(cap => {
                       const unlockDate = new Date(cap.unlockDate);
-                      const isAvailable = unlockDate <= new Date();
+                      const isAvailable = (cap as any).isDiary || unlockDate <= new Date();
+                      const isDiary = !!(cap as any).isDiary;
                       const timeStr = unlockDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
                       
                       return (
@@ -342,7 +379,7 @@ export const TimeCapsulesView = () => {
                                     : 'bg-wade-bg-card text-wade-text-muted border border-wade-border'
                                   }
                                 `}>
-                                  {isAvailable ? '💌' : '🔒'}
+                                  {isDiary ? '📖' : isAvailable ? '💌' : '🔒'}
                                 </div>
 
                                 {/* Header Content */}
