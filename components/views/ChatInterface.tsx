@@ -675,6 +675,23 @@ export const ChatInterface: React.FC = () => {
         let parts = repairedText.split('|||').map((s: string) => s.trim()).filter((s: string) => s);
         if (parts.length === 1 && repairedText.includes('\n')) { const lines = repairedText.split('\n').map((s: string) => s.trim()).filter((s: string) => s); if (lines.length > 1) parts = lines; }
         if (parts.length === 0) parts = ["..."];
+        // Auto-split: 模型掉格式时，长气泡自动在句子边界切开，不依赖 |||
+        const MAX_BUBBLE = 120;
+        const splitLongBubble = (text: string): string[] => {
+          if (text.length <= MAX_BUBBLE) return [text];
+          // 先试按句号/问号/感叹号拆
+          const sentences = text.split(/(?<=[。！？!?\n])\s*/);
+          if (sentences.length <= 1) return [text]; // 真的一句到底就不拆了
+          const result: string[] = [];
+          let buf = '';
+          for (const s of sentences) {
+            if (buf && (buf + s).length > MAX_BUBBLE) { result.push(buf.trim()); buf = s; }
+            else { buf += (buf ? ' ' : '') + s; }
+          }
+          if (buf.trim()) result.push(buf.trim());
+          return result.filter(Boolean);
+        };
+        parts = parts.flatMap(p => splitLongBubble(p));
         // Kill ghost bubbles: strip parts that are nothing but <status> tags
         parts = parts.filter(p => p.replace(/<status>[\s\S]*?<\/status>/gi, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim().length > 0);
         if (parts.length === 0) parts = ["..."];
