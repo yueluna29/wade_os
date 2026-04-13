@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
+// remark-breaks not used here — diary is long-form text, not chat bubbles
 import { Icons } from '../../ui/Icons';
 import { supabase } from '../../../services/supabase';
 import { useStore } from '../../../store';
@@ -465,7 +465,7 @@ export const JournalView: React.FC = () => {
                               <div className={`text-xs leading-relaxed ${
                                 isDiary ? 'text-wade-text-main' : 'text-wade-text-muted italic'
                               } ${isExpanded ? '' : 'line-clamp-3'} markdown-content`}>
-                                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                   {isDiary ? item.diary!.content : item.log.thoughts}
                                 </ReactMarkdown>
                               </div>
@@ -473,7 +473,7 @@ export const JournalView: React.FC = () => {
                               {/* Translation */}
                               {showTranslation[id] && translations[id] && (
                                 <div className="mt-2 p-2.5 bg-wade-accent/5 rounded-xl border border-wade-accent/10 markdown-content">
-                                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                     {translations[id]}
                                   </ReactMarkdown>
                                 </div>
@@ -488,7 +488,7 @@ export const JournalView: React.FC = () => {
                                   <div>
                                     <p className="text-[9px] font-bold text-wade-text-muted uppercase tracking-wider mb-1">Inner thoughts</p>
                                     <div className="text-[11px] text-wade-text-muted/70 leading-relaxed italic markdown-content">
-                                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                         {item.log.thoughts}
                                       </ReactMarkdown>
                                     </div>

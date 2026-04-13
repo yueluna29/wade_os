@@ -338,7 +338,7 @@ body {
 .markdown-content hr {
   border: none !important;
   border-top: 1px solid var(--wade-border) !important;
-  margin: 0.5rem 0 !important;
+  margin: 0.3rem 0 !important;
 }
 
 /* 引用块 */
