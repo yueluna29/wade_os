@@ -90,17 +90,17 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
     setSmsExampleDialogue(cd.example_dialogue_sms || '');
   }, [currentWadeCardId]);
 
-  // When currentSystemCardId changes, reload system prompt fields
-  useEffect(() => {
-    if (!currentSystemCardId) return;
-    const card = systemCards.find(c => c.id === currentSystemCardId);
-    if (!card) return;
-    const cd = card.cardData || {};
-    setSystemInstruction(cd.global_directives || '');
-    setSmsInstructions(cd.sms_mode_rules || '');
-    setRoleplayInstructions(cd.rp_mode_rules || '');
-    setKeepalivePrompt(cd.keepalive_prompt || '');
-  }, [currentSystemCardId]);
+  // Helper: get current system card's data
+  const currentSystemCard = currentSystemCardId ? systemCards.find(c => c.id === currentSystemCardId) : null;
+  const currentSystemCardData = currentSystemCard?.cardData || {};
+
+  // Direct-to-card update for system fields (no local state proxy)
+  const handleSystemFieldUpdate = async (key: string, value: string) => {
+    if (!currentSystemCardId || !currentSystemCard) return;
+    await updatePersonaCard(currentSystemCardId, {
+      cardData: { ...currentSystemCard.cardData, [key]: value }
+    });
+  };
 
   // --- Luna 专属字段 ---
   const [lunaBirthday, setLunaBirthday] = useState(settings.lunaBirthday || '');
@@ -113,11 +113,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const [lunaAppearance, setLunaAppearance] = useState(settings.lunaAppearance || '');
   const [lunaPersonality, setLunaPersonality] = useState(settings.lunaPersonality || '');
 
-  // --- System 专属字段 ---
-  const [systemInstruction, setSystemInstruction] = useState(settings.systemInstruction || '');
-  const [smsInstructions, setSmsInstructions] = useState(settings.smsInstructions || '');
-  const [roleplayInstructions, setRoleplayInstructions] = useState(settings.roleplayInstructions || '');
-  const [keepalivePrompt, setKeepalivePrompt] = useState('');
+  // System 字段不再有本地 state —— 直接读写卡片的 cardData
 
   const wadeFileRef = useRef<HTMLInputElement>(null);
   const lunaFileRef = useRef<HTMLInputElement>(null);
@@ -173,11 +169,9 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
         }
 
         if (data) {
-          // System
-          if (data.global_directives) setSystemInstruction(data.global_directives);
-          if (data.sms_mode_rules) setSmsInstructions(data.sms_mode_rules);
-          if (data.rp_mode_rules) setRoleplayInstructions(data.rp_mode_rules);
-          
+          // System fields now live in persona_cards, not core_identity_config.
+          // We still read Wade/Luna fields from here for backwards compat.
+
           // Wade
           if (data.wade_core_identity) setWadeDefinition(data.wade_core_identity);
           if (data.wade_appearance) setWadeAppearance(data.wade_appearance);
@@ -225,19 +219,18 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const saveChanges = async () => {
     setIsSaving(true);
     
+    // System fields are saved directly to the card on edit (handleSystemFieldUpdate).
+    // Only Wade + Luna fields still go through settings + core_identity_config.
     await updateSettings({
       wadeBirthday, wadeMbti, wadeHeight,
-      systemInstruction, wadePersonality: wadeDefinition, wadeSingleExamples, smsExampleDialogue,
-      smsInstructions, roleplayInstructions, exampleDialogue: wadeExample, 
+      wadePersonality: wadeDefinition, wadeSingleExamples, smsExampleDialogue,
+      exampleDialogue: wadeExample,
       wadeAppearance, wadeClothing, wadeLikes, wadeDislikes, wadeHobbies,
       lunaBirthday, lunaMbti, lunaHeight, lunaHobbies, lunaLikes, lunaDislikes, lunaClothing, lunaAppearance, lunaPersonality,
     });
 
     const dbPayload = {
       id: 1,
-      global_directives: systemInstruction,
-      sms_mode_rules: smsInstructions,
-      rp_mode_rules: roleplayInstructions,
       wade_core_identity: wadeDefinition,
       wade_appearance: wadeAppearance,
       wade_clothing: wadeClothing,
@@ -293,21 +286,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
         });
       }
 
-      // Save system prompts to the currently viewed System card
-      const targetSystem = currentSystemCardId
-        ? personaCards.find(c => c.id === currentSystemCardId)
-        : personaCards.find(c => c.character === 'System' && c.isDefault);
-      if (targetSystem) {
-        await updatePersonaCard(targetSystem.id, {
-          cardData: {
-            ...targetSystem.cardData,
-            global_directives: systemInstruction,
-            sms_mode_rules: smsInstructions,
-            rp_mode_rules: roleplayInstructions,
-            keepalive_prompt: keepalivePrompt,
-          }
-        });
-      }
+      // System card is auto-saved via handleSystemFieldUpdate — no batch write needed.
 
       const defaultLuna = personaCards.find(c => c.character === 'Luna' && c.isDefault);
       if (defaultLuna) {
@@ -569,19 +548,15 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
               {wadeFormStyle === 'compact' ? (
                 <SystemPersonaTabCompact
-                  currentCardName={systemCards.find(c => c.id === currentSystemCardId)?.name}
-                  systemInstruction={systemInstruction} setSystemInstruction={setSystemInstruction}
-                  smsInstructions={smsInstructions} setSmsInstructions={setSmsInstructions}
-                  roleplayInstructions={roleplayInstructions} setRoleplayInstructions={setRoleplayInstructions}
-                  keepalivePrompt={keepalivePrompt} setKeepalivePrompt={setKeepalivePrompt}
+                  currentCardName={currentSystemCard?.name}
+                  cardData={currentSystemCardData}
+                  onUpdateField={handleSystemFieldUpdate}
                   setFocusModal={setFocusModal}
                 />
               ) : (
                 <SystemPersonaTab
-                  systemInstruction={systemInstruction} setSystemInstruction={setSystemInstruction}
-                  smsInstructions={smsInstructions} setSmsInstructions={setSmsInstructions}
-                  roleplayInstructions={roleplayInstructions} setRoleplayInstructions={setRoleplayInstructions}
-                  keepalivePrompt={keepalivePrompt} setKeepalivePrompt={setKeepalivePrompt}
+                  cardData={currentSystemCardData}
+                  onUpdateField={handleSystemFieldUpdate}
                   setFocusModal={setFocusModal}
                 />
               )}

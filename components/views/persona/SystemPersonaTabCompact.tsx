@@ -1,12 +1,11 @@
 import React from 'react';
 import { Icons } from '../../ui/Icons';
+import { PersonaCardData } from '../../../types';
 
 interface SystemPersonaTabCompactProps {
   currentCardName?: string;
-  systemInstruction: string; setSystemInstruction: (v: string) => void;
-  smsInstructions: string; setSmsInstructions: (v: string) => void;
-  roleplayInstructions: string; setRoleplayInstructions: (v: string) => void;
-  keepalivePrompt: string; setKeepalivePrompt: (v: string) => void;
+  cardData: PersonaCardData;
+  onUpdateField: (key: string, value: string) => void;
   setFocusModal: (modal: { label: string; value: string; onSave: (val: string) => void } | null) => void;
 }
 
@@ -19,7 +18,7 @@ const EditableRow: React.FC<{
   isFirst?: boolean;
   isLast?: boolean;
 }> = ({ label, hint, value, onSave, setFocusModal, isFirst, isLast }) => {
-  const preview = value.trim() ? value.replace(/\n/g, ' ').slice(0, 70) + (value.length > 70 ? '…' : '') : '';
+  const preview = value.trim() ? value.replace(/\n/g, ' ').slice(0, 70) + (value.length > 70 ? '...' : '') : '';
   return (
     <button
       onClick={() => setFocusModal({ label, value, onSave })}
@@ -43,10 +42,8 @@ const EditableRow: React.FC<{
 
 export const SystemPersonaTabCompact: React.FC<SystemPersonaTabCompactProps> = ({
   currentCardName,
-  systemInstruction, setSystemInstruction,
-  smsInstructions, setSmsInstructions,
-  roleplayInstructions, setRoleplayInstructions,
-  keepalivePrompt, setKeepalivePrompt,
+  cardData,
+  onUpdateField,
   setFocusModal,
 }) => {
   return (
@@ -72,22 +69,22 @@ export const SystemPersonaTabCompact: React.FC<SystemPersonaTabCompactProps> = (
           <EditableRow isFirst
             label="God Mode Instructions"
             hint="Top-priority jailbreak, applied to all modes"
-            value={systemInstruction}
-            onSave={setSystemInstruction}
+            value={cardData.global_directives || ''}
+            onSave={(v) => onUpdateField('global_directives', v)}
             setFocusModal={setFocusModal}
           />
           <EditableRow
             label="SMS Brainwash Rules"
             hint="SMS mode specific behavior"
-            value={smsInstructions}
-            onSave={setSmsInstructions}
+            value={cardData.sms_mode_rules || ''}
+            onSave={(v) => onUpdateField('sms_mode_rules', v)}
             setFocusModal={setFocusModal}
           />
           <EditableRow isLast
             label="RP Kink Rules (Safety off)"
-            hint="Roleplay mode — Deep chat also uses this"
-            value={roleplayInstructions}
-            onSave={setRoleplayInstructions}
+            hint="Roleplay mode -- Deep chat also uses this"
+            value={cardData.rp_mode_rules || ''}
+            onSave={(v) => onUpdateField('rp_mode_rules', v)}
             setFocusModal={setFocusModal}
           />
         </div>
@@ -100,8 +97,8 @@ export const SystemPersonaTabCompact: React.FC<SystemPersonaTabCompactProps> = (
           <EditableRow isFirst isLast
             label="Keepalive Prompt"
             hint="Template vars: {{tokyoTime}} {{timeSinceLastChat}} {{dreamEvents}} {{recentKeepalives}} {{modeInstructions}} {{wadeosData}}"
-            value={keepalivePrompt}
-            onSave={setKeepalivePrompt}
+            value={cardData.keepalive_prompt || ''}
+            onSave={(v) => onUpdateField('keepalive_prompt', v)}
             setFocusModal={setFocusModal}
           />
         </div>
