@@ -1,2 +1,5 @@
 node_modules
 .vercel
+dist
+.claude
+.DS_Store
