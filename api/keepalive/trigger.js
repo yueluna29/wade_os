@@ -441,7 +441,19 @@ async function executeMessage(content, keepaliveId, model) {
   if (!sessionId) return;
 
   // Split by ||| — each segment becomes its own message (text bomb mode)
-  const segments = content.split('|||').map(s => s.trim()).filter(Boolean);
+  // Ghost-bubble filter: drop segments that are nothing but <status>/<think> tags.
+  // Mirrors ChatInterface line ~702. Without this, MessageBubble's display-side
+  // strip turns these into empty bubbles and silently `return null`s them — DB
+  // keeps the row, UI swallows the message.
+  const segments = content
+    .split('|||')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .filter(s => s
+      .replace(/<status>[\s\S]*?<\/status>/gi, '')
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      .trim().length > 0
+    );
 
   for (let i = 0; i < segments.length; i++) {
     await supabase.from('messages_sms').insert({
