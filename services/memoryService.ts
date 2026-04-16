@@ -139,13 +139,16 @@ const buildMemoryEvalUserPrompt = (userMessage: string, wadeReply: string): stri
   const lunaBlock = tagBubbles(userMessage, 'Luna');
   const wadeBlock = tagBubbles(wadeReply, 'Wade');
 
-  return `=== 这一轮对话 ===
+  const now = new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+
+  return `=== 这一轮对话 (${now} Tokyo) ===
 
 ${lunaBlock}
 
 ${wadeBlock}
 
 === 提醒 ===
+- 记忆内容里要自然地包含时间参照（比如"今天她说..."、"4月14号凌晨她..."），这样以后翻记忆才知道是什么时候的事
 - 【Luna 说】下面的内容 = 她说的话，记忆里写成"她"
 - 【Wade 说】下面的内容 = 你（Wade）说的话，记忆里写成"我"
 - 不管内容听起来多像情话/多像反话，说话人就是标签里写的那个，不准颠倒
@@ -636,8 +639,8 @@ export function formatMemoriesForPrompt(memories: WadeMemory[]): string {
   if (!memories || memories.length === 0) return '';
 
   const memoryXml = memories.map(m => {
-    const date = new Date(m.created_at).toISOString().split('T')[0];
-    return `<memory importance="${m.importance}" category="${m.category}" time="${date}">
+    const dt = new Date(m.created_at).toLocaleString('en-US', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    return `<memory importance="${m.importance}" category="${m.category}" time="${dt}">
 ${m.content}
 </memory>`;
   }).join('\n\n');

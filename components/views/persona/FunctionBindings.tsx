@@ -7,6 +7,7 @@ const SYSTEM_FUNCTIONS = [
   { key: 'chat_deep', label: 'Deep Chat', icon: Icons.Brain },
   { key: 'chat_roleplay', label: 'Roleplay', icon: Icons.Fire },
   { key: 'diary', label: 'Diary', icon: Icons.Journal },
+  { key: 'keepalive', label: 'Keepalive', icon: Icons.Clock },
   { key: 'social_comment', label: 'Social Comments', icon: Icons.Social },
   { key: 'home_greeting', label: 'Home Greeting', icon: Icons.Home },
   { key: 'divination', label: 'Tarot Reading', icon: Icons.Fate },
@@ -99,7 +100,7 @@ export const FunctionBindings: React.FC = () => {
                     )}
                   </div>
                   <div className="text-[10px] text-wade-text-muted truncate">
-                    {boundCard ? boundCard.name : 'Default'}{boundSystem ? ` + ${boundSystem.name}` : ''}{boundLlm ? ` / ${boundLlm.name}` : ''}
+                    {boundCard ? boundCard.name : '未设置'}{boundSystem ? ` + ${boundSystem.name}` : ''}{boundLlm ? ` / ${boundLlm.name}` : ''}
                   </div>
                 </div>
                 <Icons.ChevronDown size={12} className={`text-wade-text-muted transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -114,11 +115,8 @@ export const FunctionBindings: React.FC = () => {
                       value={binding?.personaCardId || ''}
                       onChange={e => updateFunctionBinding(func.key, { personaCardId: e.target.value || undefined })}
                     >
-                      <option value="">Default</option>
+                      <option value="">未设置</option>
                       {personaCards.filter(c => c.character === 'Wade').map(c => (
-                        <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (default)' : ''}</option>
-                      ))}
-                      {personaCards.filter(c => c.character === 'Luna').map(c => (
                         <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (default)' : ''}</option>
                       ))}
                     </select>

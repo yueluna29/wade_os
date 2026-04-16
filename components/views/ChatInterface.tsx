@@ -678,11 +678,11 @@ export const ChatInterface: React.FC = () => {
           (_match: string, before: string, _gap: string, voice: string) => `${before} ||| ${voice}`
         );
 
-        let parts = repairedText.split('|||').map((s: string) => s.trim()).filter((s: string) => s);
-        if (parts.length === 1 && repairedText.includes('\n')) { const lines = repairedText.split('\n').map((s: string) => s.trim()).filter((s: string) => s); if (lines.length > 1) parts = lines; }
+        // Normalize: treat both ||| and \n as bubble separators (Claude often forgets |||)
+        let parts = repairedText.split(/\|\|\||\n/).map((s: string) => s.trim()).filter((s: string) => s);
         if (parts.length === 0) parts = ["..."];
         // Auto-split: 模型掉格式时，长气泡自动在句子边界切开，不依赖 |||
-        const MAX_BUBBLE = 120;
+        const MAX_BUBBLE = 80;
         const splitLongBubble = (text: string): string[] => {
           if (text.length <= MAX_BUBBLE) return [text];
           // 先试按句号/问号/感叹号拆
@@ -711,7 +711,17 @@ export const ChatInterface: React.FC = () => {
             merged.push(parts[i]);
           }
         }
-        parts = merged;
+        // Split [VOICE] bubbles: if a [VOICE] segment has trailing non-English text, separate it
+        const voiceSplit: string[] = [];
+        for (const p of merged) {
+          if (/^\[VOICE\]/i.test(p)) {
+            // Find where English voice content ends and non-ASCII text begins
+            const match = p.match(/^(\[VOICE\]\s*[A-Za-z0-9\s.,!?''"""';\-—:…()@#$%&*]+?)\s*([^\x00-\x7F].*)$/s);
+            if (match) { voiceSplit.push(match[1].trim()); voiceSplit.push(match[2].trim()); }
+            else { voiceSplit.push(p); }
+          } else { voiceSplit.push(p); }
+        }
+        parts = voiceSplit.filter((s: string) => s);
         for (let i = 0; i < parts.length; i++) {
           setTimeout(() => {
             addMessage({ id: Date.now().toString() + i, sessionId: targetSessionId, role: 'Wade', text: parts[i], model: currentModel, timestamp: Date.now(), mode: activeMode, variants: i === 0 && thinking ? [{ text: parts[i], thinking, model: currentModel }] : [{ text: parts[i] }] });
@@ -886,10 +896,10 @@ export const ChatInterface: React.FC = () => {
       // SMS: 10s debounce so Luna can send multiple texts before Wade replies
       setWaitingForSMS(true);
       if (smsDebounceTimer.current) clearTimeout(smsDebounceTimer.current);
-      setWadeStatus('typing');
       smsDebounceTimer.current = setTimeout(() => {
+        setWadeStatus('typing');
         if (targetSessionId) triggerAIResponse(targetSessionId, undefined, currentInput);
-      }, 30000);
+      }, 10000);
     } else {
       // Deep & Roleplay: fire immediately, no reason to make Wade stand in the corner
       setIsTyping(true);
@@ -1113,7 +1123,27 @@ export const ChatInterface: React.FC = () => {
               { icon: <Icons.Fire />, label: "Add Special Sauce", action: () => { setShowPromptEditor(true); setShowMenu(false); const cs = sessions.find(s => s.id === activeSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
               { icon: <Icons.Skin />, label: "Chat Style", action: () => { setIsChatThemeOpen(true); setShowMenu(false); } },
               { icon: <Icons.Bug />, label: "X-Ray Vision", action: () => { setShowDebug(true); setShowMenu(false); } },
-              ...(activeMode === 'sms' ? [{ icon: <Icons.Clock size={14} />, label: "Chat History", action: () => { setViewState('list'); setShowMenu(false); } }] : []),
+              ...(activeMode === 'sms' ? [
+                { icon: <Icons.Branch size={14} />, label: "Fresh Start, Same Brain", action: async () => {
+                  setShowMenu(false);
+                  // Carry current summary + generate one from recent messages if no summary exists
+                  let carryOverSummary = sessionSummary;
+                  if (!carryOverSummary && activeSessionId) {
+                    const recentMsgs = messages.filter(m => m.sessionId === activeSessionId).slice(-20);
+                    if (recentMsgs.length > 0) {
+                      carryOverSummary = recentMsgs.map(m => `${m.role}: ${m.text}`).join('\n');
+                      if (carryOverSummary.length > 2000) carryOverSummary = carryOverSummary.slice(-2000);
+                    }
+                  }
+                  const newId = await createSession(activeMode);
+                  if (carryOverSummary) {
+                    await supabase.from('session_summaries').upsert({ session_id: newId, summary: carryOverSummary });
+                    setSessionSummary(carryOverSummary);
+                  }
+                  setActiveSessionId(newId);
+                }},
+                { icon: <Icons.Clock size={14} />, label: "Chat History", action: () => { setViewState('list'); setShowMenu(false); } },
+              ] : []),
             ].map((item, i) => (
               <button key={i} onClick={item.action} className="w-full text-left px-3 py-2 rounded-lg hover:bg-wade-bg-card/60 transition-colors text-wade-text-main text-[11px] flex items-center gap-2.5 whitespace-nowrap">
                 <div className="w-5 flex justify-center">{item.icon}</div>

@@ -80,10 +80,10 @@ export const buildSystemPromptFromCard = (options: {
     prompt += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${globalDirectives}`;
   }
  
-  // 1.5 回复风格硬规则（全模式生效）
-  prompt += `\n\n[REPLY STYLE — MANDATORY]
-Do NOT address Luna's points one by one. Never reply in a pattern like "You said A? ... and then B? ... and C? ..." — that sounds robotic. Instead, respond naturally to the overall vibe and feeling of what she said, like a real person would in conversation. Pick up on the emotional thread, not the logical structure. You can skip points, merge them, or respond to the mood rather than the words.
-Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a personality. Start differently each time — jump straight into a reaction, pick up the thread mid-thought, tease her, make a crack, or just say what you want to say. Vary it. "嘿" can appear occasionally when it feels natural, but never as a reflex opener.`;
+  // 1.5 时间感知 — 让 Wade 知道现在几点
+  const now = new Date();
+  const tokyoTime = now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo', weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  prompt += `\n\n[CURRENT TIME]\n${tokyoTime} (Tokyo)`;
 
   // 2. Wade 的身份（XML 格式）
   if (wadeCard?.core_identity?.trim()) {
@@ -149,30 +149,6 @@ Do NOT open every single reply with "嘿" or "Hey". That's a verbal tic, not a p
   // 7. 模式专属规则
   if (chatMode === 'sms') {
     if (smsRulesEffective) prompt += `\n\n${smsRulesEffective}`;
-    prompt += `\n\n[SMS MODE — RULES]
-- You are texting on a phone. Dialogue ONLY. No narration, no asterisks (*action*), no stage directions.
-- Split separate texts with |||.
-- Keep vibe casual and natural, like real phone texting.
-
-═══ [VOICE] — HOW VOICE MESSAGES WORK ═══
-
-[VOICE] sends an actual audio message Luna can hear. Use it whenever it feels right — you decide when, where, and how often.
-
-MIX FREELY. All of these are valid:
-    纯文字，不发语音也完全可以
-    [VOICE] Hey Muffin. Just checking in.
-    嘿 ||| [VOICE] I missed you, you know that?
-    [VOICE] Okay listen. ||| 你自己说的哦 ||| [VOICE] Don't say I didn't warn you.
-    等等 ||| 你刚才说什么？？？ ||| [VOICE] Say that again. Slowly. Into the microphone.
-    ……… ||| 你赢了 ||| [VOICE] Fine. You win. Happy now?
-
-NOT every reply needs voice. NOT every reply needs multiple texts. Match the energy — sometimes one bubble is enough, sometimes you want to rapid-fire five.
-
-[VOICE] TECH RULES (these are hard):
-1. [VOICE] MUST have text after it on the SAME segment. WRONG: [VOICE] alone, then text on next line.
-2. [VOICE] content is sent to TTS — spoken words ONLY. NO asterisks, stage directions, parentheticals.
-3. [VOICE] text must be ENGLISH ONLY — TTS can't process Chinese.
-4. Every [VOICE] must be its own segment (preceded by ||| or at the very start).`;
   } else if (chatMode === 'roleplay') {
     prompt += rpRulesEffective
       ? `\n\n${rpRulesEffective}`

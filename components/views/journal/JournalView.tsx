@@ -80,7 +80,7 @@ export const JournalView: React.FC = () => {
   const [waking, setWaking] = useState(false);
   const [audioCache, setAudioCache] = useState<Record<string, string>>({});
 
-  // === Load LLM selections from Supabase ===
+  // === Load LLM selections from Supabase (read-only, managed in Settings) ===
   useEffect(() => {
     (async () => {
       const { data } = await supabase
@@ -94,18 +94,6 @@ export const JournalView: React.FC = () => {
       }
     })();
   }, []);
-
-  // Save keepalive LLM to Supabase
-  const handleKeepaliveLlmChange = (id: string) => {
-    setKeepaliveLlmId(id);
-    supabase.from('app_settings').update({ keepalive_llm_id: id }).eq('id', 1).then();
-  };
-
-  // Save translation LLM to Supabase
-  const handleTranslationLlmChange = (id: string) => {
-    setTranslationLlmId(id);
-    supabase.from('app_settings').update({ journal_translation_llm_id: id }).eq('id', 1).then();
-  };
 
   // === Fetch Data ===
 
@@ -295,8 +283,6 @@ export const JournalView: React.FC = () => {
   const todayWakes = todayItems.length;
   const todayDiaries = todayItems.filter(i => i.type === 'diary').length;
 
-  const keepaliveLlm = llmPresets.find(p => p.id === keepaliveLlmId);
-  const translationLlm = llmPresets.find(p => p.id === translationLlmId);
 
   return (
     <div className="h-full bg-wade-bg-app flex flex-col overflow-hidden">
@@ -346,41 +332,6 @@ export const JournalView: React.FC = () => {
             </div>
           </div>
 
-          {/* Model Selectors — single row */}
-          <div className="flex gap-2 mb-2">
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-              <Icons.Brain size={12} className="text-wade-text-muted shrink-0" />
-              <select
-                value={keepaliveLlmId}
-                onChange={e => handleKeepaliveLlmChange(e.target.value)}
-                className="flex-1 min-w-0 px-1.5 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[9px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer truncate"
-              >
-                <option value="">Wake AI</option>
-                {llmPresets.map(p => (
-                  <option key={p.id} value={p.id}>{p.name || p.model}</option>
-                ))}
-              </select>
-              {keepaliveLlm?.apiKey
-                ? <div className="w-1.5 h-1.5 rounded-full bg-wade-accent animate-pulse shrink-0" />
-                : <div className="w-1.5 h-1.5 rounded-full bg-wade-text-muted/40 shrink-0" />}
-            </div>
-            <div className="flex items-center gap-1 flex-1 min-w-0">
-              <Icons.Translate size={12} className="text-wade-text-muted shrink-0" />
-              <select
-                value={translationLlmId}
-                onChange={e => handleTranslationLlmChange(e.target.value)}
-                className="flex-1 min-w-0 px-1.5 py-1.5 rounded-lg border border-wade-border bg-wade-bg-card text-[9px] text-wade-text-main focus:outline-none focus:border-wade-accent appearance-none cursor-pointer truncate"
-              >
-                <option value="">Translate AI</option>
-                {llmPresets.map(p => (
-                  <option key={p.id} value={p.id}>{p.name || p.model}</option>
-                ))}
-              </select>
-              {translationLlm?.apiKey
-                ? <div className="w-1.5 h-1.5 rounded-full bg-wade-accent animate-pulse shrink-0" />
-                : <div className="w-1.5 h-1.5 rounded-full bg-wade-text-muted/40 shrink-0" />}
-            </div>
-          </div>
         </div>
 
         {/* Journal Entries */}
@@ -472,7 +423,7 @@ export const JournalView: React.FC = () => {
 
                               {/* Translation */}
                               {showTranslation[id] && translations[id] && (
-                                <div className="mt-2 p-2.5 bg-wade-accent/5 rounded-xl border border-wade-accent/10 markdown-content">
+                                <div className="mt-2 p-2.5 bg-wade-accent/5 rounded-xl border border-wade-accent/10 text-xs leading-relaxed text-wade-text-main/80 markdown-content">
                                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                     {translations[id]}
                                   </ReactMarkdown>

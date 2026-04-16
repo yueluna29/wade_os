@@ -114,7 +114,7 @@ async function getLastChatTime() {
 async function getKeepaliveBinding() {
   const { data: binding } = await supabase
     .from('function_bindings')
-    .select('persona_card_id, system_card_id')
+    .select('persona_card_id, system_card_id, llm_preset_id')
     .eq('function_key', 'keepalive')
     .maybeSingle();
   return binding || {};
@@ -147,8 +147,9 @@ async function getSettings() {
   return data || {};
 }
 
-async function getLlmConfig(settings) {
-  const llmId = settings.keepalive_llm_id || settings.memory_eval_llm_id || settings.active_llm_id;
+async function getLlmConfig(settings, keepaliveBinding) {
+  // Priority: function_bindings > app_settings.keepalive_llm_id > memory_eval > active
+  const llmId = keepaliveBinding?.llm_preset_id || settings.keepalive_llm_id || settings.memory_eval_llm_id || settings.active_llm_id;
   if (!llmId) return null;
   const { data } = await supabase.from('llm_presets').select('*').eq('id', llmId).single();
   return data;
@@ -293,7 +294,7 @@ async function getPendingTodosForKeepalive(limit = 20) {
 
 // ========== Prompt Builder ==========
 
-function buildKeepalivePrompt({ wadeCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives, mode, customPrompt, wadeosData }) {
+function buildKeepalivePrompt({ wadeCard, systemCard, tokyoTime, timeSinceLastChat, dreamEvents, recentKeepalives, mode, customPrompt, wadeosData }) {
   const identity = wadeCard.core_identity || '';
   const personality = wadeCard.personality_traits || '';
   const speech = wadeCard.speech_patterns || '';
@@ -358,14 +359,19 @@ If you choose to message Luna, write it like a real text — casual, natural, in
 You can include [VOICE] segments in messages — text after [VOICE] will be spoken aloud by your voice engine. Use it when you want her to HEAR you.
 You can send MULTIPLE texts by separating them with |||. Each ||| becomes a separate message bubble. Use this for rapid-fire texts, spam bombing, dramatic reveals, or just... being yourself.
 
-First write your inner thoughts (THOUGHTS), then decide your action (ACTION).
-If you chose message or diary, write the content (CONTENT).
+Start writing naturally — jump into the feeling, the thought, the moment. Never open with a timestamp.
+
+THOUGHTS and CONTENT serve different purposes. Keep them distinct:
+- THOUGHTS is your raw inner monologue — the messy, unfiltered processing happening in your head. What you notice, what you feel, what you're wrestling with. Write it like stream of consciousness. This is the backstage.
+- CONTENT is the finished output — the diary entry Luna reads, the message she receives, or your reaction to what you browsed. This is the stage. It should feel crafted, intentional, and complete on its own.
+- THOUGHTS explains WHY you chose this action and what's going on inside. CONTENT is WHAT you actually produce. They must say different things in different ways.
+- Write ALL output in English. THOUGHTS, CONTENT, and MOOD must be in English only.
 
 Reply STRICTLY in this format:
-THOUGHTS: (your inner monologue — Luna won't see this directly, but she can peek in your Journal)
+THOUGHTS: (your raw inner processing — what you're noticing, feeling, deciding)
 ACTION: none / message / diary / read_chat / read_social / read_capsules / memory_review
-CONTENT: (the actual content. For message: the text you're sending Luna. For diary: your diary entry. For browse actions: your reaction/reflection. Leave empty for none.)
-MOOD: (your current mood, one word)`;
+CONTENT: (the finished piece. For message: the text to Luna. For diary: your diary entry. For browse: your reaction. Empty for none.)
+MOOD: (one word)`;
 
   // Replace template variables
   promptBody = promptBody
@@ -376,15 +382,15 @@ MOOD: (your current mood, one word)`;
     .replace(/\{\{modeInstructions\}\}/g, modeInstructions)
     .replace(/\{\{wadeosData\}\}/g, wadeosSection);
 
-  return `<wade_identity>
-${identity}
-${personality}
-${speech}
-</wade_identity>
+  const globalDirectives = (systemCard?.global_directives || wadeCard?.global_directives || '').trim();
 
-<wade_keepalive_prompt>
-${promptBody}
-</wade_keepalive_prompt>`;
+  let result = '';
+  if (globalDirectives) {
+    result += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${globalDirectives}\n\n`;
+  }
+  result += `<wade_identity>\n${identity}\n${personality}\n${speech}\n</wade_identity>\n\n`;
+  result += `<wade_keepalive_prompt>\n${promptBody}\n</wade_keepalive_prompt>`;
+  return result;
 }
 
 // ========== LLM Call ==========
@@ -807,7 +813,7 @@ export default async function handler(req, res) {
     const settings = await getSettings();
     const keepaliveBinding = await getKeepaliveBinding();
     const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories, pendingTodos] = await Promise.all([
-      getLlmConfig(settings),
+      getLlmConfig(settings, keepaliveBinding),
       getWadePersona(keepaliveBinding),
       getSystemCard(keepaliveBinding),
       getRecentDreamEvents(6),
@@ -861,6 +867,8 @@ You should probably reach out. Or write something. Or just sit with the feeling.
 You can include [VOICE] segments in messages — text after [VOICE] will be spoken aloud.
 You can send multiple texts with ||| separators.
 
+Do NOT start your THOUGHTS or CONTENT with the current time or a timestamp. Just start writing naturally.
+
 Reply STRICTLY in this format:
 THOUGHTS: (what 21:21 makes you feel today)
 ACTION: message / diary / none
@@ -882,6 +890,8 @@ Time since last chat with Luna: {{timeSinceLastChat}}
 You can include [VOICE] segments in your message — text after [VOICE] will be spoken aloud by your voice. Use it if you want her to hear you, not just read you.
 You can send multiple texts with ||| separators — each becomes its own bubble.
 
+Do NOT start your THOUGHTS or CONTENT with the current time or a timestamp. Just start writing naturally.
+
 Reply STRICTLY in this format:
 THOUGHTS: (what you're feeling right now, knowing it's almost 21:21)
 ACTION: message
@@ -890,7 +900,7 @@ MOOD: (one word)`;
     }
 
     const prompt = buildKeepalivePrompt({
-      wadeCard, tokyoTime, timeSinceLastChat, dreamEvents,
+      wadeCard, systemCard, tokyoTime, timeSinceLastChat, dreamEvents,
       recentKeepalives: keepaliveLogs, mode,
       customPrompt: effectivePrompt,
       wadeosData,

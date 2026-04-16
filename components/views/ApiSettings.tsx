@@ -34,7 +34,7 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
     settings, updateSettings,
     llmPresets, addLlmPreset, updateLlmPreset, deleteLlmPreset,
     ttsPresets, addTtsPreset, updateTtsPreset, deleteTtsPreset,
-    syncError
+    functionBindings, syncError
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<'llm' | 'tts' | 'control'>('llm');
@@ -203,14 +203,19 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const summaryLlmId = settings.summaryLlmId || memEvalLlmId;
   const activeSummary = summaryLlmId ? llmPresets.find(p => p.id === summaryLlmId) : null;
 
-  // Keepalive LLM (stored in app_settings, not in store)
-  const [keepaliveLlmId, setKeepaliveLlmId] = useState<string>('');
+  // Translation LLM (stored in app_settings, not in store)
+  const [translationLlmId, setTranslationLlmId] = useState<string>('');
   useEffect(() => {
-    supabase.from('app_settings').select('keepalive_llm_id').limit(1).single()
-      .then(({ data }) => { if (data?.keepalive_llm_id) setKeepaliveLlmId(data.keepalive_llm_id); });
+    supabase.from('app_settings').select('journal_translation_llm_id').limit(1).single()
+      .then(({ data }) => {
+        if (data?.journal_translation_llm_id) setTranslationLlmId(data.journal_translation_llm_id);
+      });
   }, []);
-  const keepaliveFallbackId = keepaliveLlmId || memEvalLlmId;
-  const activeKeepalive = keepaliveFallbackId ? llmPresets.find(p => p.id === keepaliveFallbackId) : null;
+  const handleTranslationLlmChange = (id: string) => {
+    setTranslationLlmId(id);
+    supabase.from('app_settings').update({ journal_translation_llm_id: id || null }).eq('id', 1).then();
+  };
+  const activeTranslation = translationLlmId ? llmPresets.find(p => p.id === translationLlmId) : null;
 
   return (
     <div className="h-full overflow-y-auto bg-wade-bg-app p-4 pb-10 flex flex-col items-center">
@@ -300,16 +305,35 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
                 : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
             </div>
-            {/* Keepalive AI */}
+            {/* Keepalive AI — read from function_bindings */}
+            {(() => {
+              const keepaliveBinding = functionBindings.find(b => b.functionKey === 'keepalive');
+              const keepaliveLlm = keepaliveBinding?.llmPresetId ? llmPresets.find(p => p.id === keepaliveBinding.llmPresetId) : null;
+              return (
+                <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
+                  <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
+                    {keepaliveLlm ? <ProviderIcon provider={keepaliveLlm.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Clock size={18} className="text-wade-text-muted" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-wade-text-main truncate">{keepaliveLlm ? keepaliveLlm.name : 'Not set'}</div>
+                    <div className="text-[10px] text-wade-text-muted truncate">Keepalive AI</div>
+                  </div>
+                  {keepaliveLlm?.apiKey
+                    ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
+                    : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
+                </div>
+              );
+            })()}
+            {/* Journal Translation AI */}
             <div className="flex items-center gap-3 pt-2 border-t border-wade-border/40">
               <div className="w-9 h-9 rounded-xl bg-wade-accent/10 flex items-center justify-center shrink-0">
-                {activeKeepalive ? <ProviderIcon provider={activeKeepalive.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Clock size={18} className="text-wade-text-muted" />}
+                {activeTranslation ? <ProviderIcon provider={activeTranslation.provider || 'Custom'} size={18} className="text-wade-accent" /> : <Icons.Globe size={18} className="text-wade-text-muted" />}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-wade-text-main truncate">{activeKeepalive ? activeKeepalive.name : 'Not set'}</div>
-                <div className="text-[10px] text-wade-text-muted truncate">Keepalive AI{!keepaliveLlmId && activeKeepalive ? ' (default)' : ''}</div>
+                <div className="text-xs font-bold text-wade-text-main truncate">{activeTranslation ? activeTranslation.name : 'Not set'}</div>
+                <div className="text-[10px] text-wade-text-muted truncate">Journal Translation</div>
               </div>
-              {activeKeepalive?.apiKey
+              {activeTranslation?.apiKey
                 ? <div className="w-2 h-2 rounded-full bg-wade-accent animate-pulse shrink-0"></div>
                 : <div className="w-2 h-2 rounded-full bg-wade-text-muted/40 shrink-0"></div>}
             </div>
@@ -555,6 +579,32 @@ export const ApiSettings: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
               </select>
               <p className="text-[9px] text-wade-text-muted mt-2 leading-relaxed">
                 Triggers every 10 messages past the 40th. Cheap+fast is best -- the summary just merges the oldest 20 messages into a running paragraph that gets injected into Wade's system prompt so he remembers what happened before the rolling window cuts off.
+              </p>
+            </div>
+
+            {/* Journal Translation Model Selector */}
+            <div className="bg-wade-bg-card rounded-2xl border border-wade-border p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-wade-accent-light flex items-center justify-center text-wade-accent">
+                  <Icons.Globe size={14} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-wade-text-main">Journal Translation</h3>
+                  <p className="text-[10px] text-wade-text-muted">Translates Wade's diary entries into another language</p>
+                </div>
+              </div>
+              <select
+                value={translationLlmId}
+                onChange={(e) => handleTranslationLlmChange(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-wade-border bg-wade-bg-base text-wade-text-main text-xs focus:outline-none focus:border-wade-accent transition-colors appearance-none cursor-pointer"
+              >
+                <option value="">Not set</option>
+                {llmPresets.map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.model} ({p.provider})</option>
+                ))}
+              </select>
+              <p className="text-[9px] text-wade-text-muted mt-2 leading-relaxed">
+                Used in the Journal page to translate diary entries. Any cheap model works fine.
               </p>
             </div>
 

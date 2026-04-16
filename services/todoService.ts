@@ -232,9 +232,10 @@ Without done_when, you can mark it done whenever. WITH done_when, don't mark it 
   const list = todos
     .map(t => {
       const doneWhen = t.context?.done_when;
+      const created = new Date(t.created_at).toLocaleString('en-US', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
       return doneWhen
-        ? `  - [${t.id}] ${t.content}  (DONE WHEN: ${doneWhen})`
-        : `  - [${t.id}] ${t.content}`;
+        ? `  - [${t.id}] (${created}) ${t.content}  (DONE WHEN: ${doneWhen})`
+        : `  - [${t.id}] (${created}) ${t.content}`;
     })
     .join('\n');
 
@@ -276,8 +277,8 @@ export async function getRecentDiaries(limit = 3): Promise<{ content: string; mo
 export function formatDiariesForPrompt(diaries: { content: string; mood: string | null; created_at: string }[]): string {
   if (!diaries || diaries.length === 0) return '';
   const entries = diaries.map(d => {
-    const date = new Date(d.created_at).toISOString().split('T')[0];
-    return `<entry date="${date}"${d.mood ? ` mood="${d.mood}"` : ''}>\n${d.content}\n</entry>`;
+    const dt = new Date(d.created_at).toLocaleString('en-US', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    return `<entry time="${dt}"${d.mood ? ` mood="${d.mood}"` : ''}>\n${d.content}\n</entry>`;
   }).join('\n\n');
   return `\n\n<wade_recent_diary>\nThese are diary entries you wrote recently. You can reference them naturally if Luna brings them up.\n\n${entries}\n</wade_recent_diary>`;
 }

@@ -95,10 +95,19 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
   const currentSystemCardData = currentSystemCard?.cardData || {};
 
   // Direct-to-card update for system fields (no local state proxy)
+  // Ref-based save to avoid stale closures when FocusModalEditor captures onSave
+  const personaCardsRef = useRef(personaCards);
+  personaCardsRef.current = personaCards;
+  const currentSystemCardIdRef = useRef(currentSystemCardId);
+  currentSystemCardIdRef.current = currentSystemCardId;
+
   const handleSystemFieldUpdate = async (key: string, value: string) => {
-    if (!currentSystemCardId || !currentSystemCard) return;
-    await updatePersonaCard(currentSystemCardId, {
-      cardData: { ...currentSystemCard.cardData, [key]: value }
+    const cardId = currentSystemCardIdRef.current;
+    if (!cardId) return;
+    const freshCard = personaCardsRef.current.find(c => c.id === cardId);
+    if (!freshCard) return;
+    await updatePersonaCard(cardId, {
+      cardData: { ...freshCard.cardData, [key]: value }
     });
   };
 

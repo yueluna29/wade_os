@@ -1210,7 +1210,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       if (updates.cardData !== undefined) dbUpdates.card_data = updates.cardData;
       if (updates.isDefault !== undefined) dbUpdates.is_default = updates.isDefault;
    
-      await supabase.from('persona_cards').update(dbUpdates).eq('id', id);
+      const { error } = await supabase.from('persona_cards').update(dbUpdates).eq('id', id);
+      if (error) { console.error('Persona card update failed:', error); alert(`Save failed: ${error.message}`); return; }
       setPersonaCards(prev => prev.map(c => c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c));
     };
    
