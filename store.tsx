@@ -275,10 +275,33 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           // Use '*' so attachment column is picked up when the migration has been applied,
           // and so old installs that haven't applied it yet still load cleanly.
           const msgColumns = '*';
-          const [deepRes, smsRes, rpRes] = await Promise.all([
-            supabase.from('messages_deep').select(msgColumns),
-            supabase.from('messages_sms').select(msgColumns),
-            supabase.from('messages_roleplay').select(msgColumns)
+
+          // Supabase caps responses at 1000 rows by default (PGRST_MAX_ROWS).
+          // With 1900+ SMS messages this silently truncated the newest ones,
+          // making the current session appear empty after a page reload.
+          // Paginate to fetch ALL rows regardless of server limit.
+          const fetchAll = async (table: string) => {
+            const PAGE = 1000;
+            let all: any[] = [];
+            let offset = 0;
+            while (true) {
+              const { data } = await supabase
+                .from(table)
+                .select(msgColumns)
+                .order('created_at', { ascending: true })
+                .range(offset, offset + PAGE - 1);
+              if (!data || data.length === 0) break;
+              all = all.concat(data);
+              if (data.length < PAGE) break;
+              offset += PAGE;
+            }
+            return all;
+          };
+
+          const [deepRows, smsRows, rpRows] = await Promise.all([
+            fetchAll('messages_deep'),
+            fetchAll('messages_sms'),
+            fetchAll('messages_roleplay')
           ]);
 
           let allMessages: Message[] = [];
@@ -332,9 +355,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             };
           };
 
-          if (deepRes.data) allMessages = [...allMessages, ...deepRes.data.map(r => mapRow(r, 'deep'))];
-          if (smsRes.data) allMessages = [...allMessages, ...smsRes.data.map(r => mapRow(r, 'sms'))];
-          if (rpRes.data) allMessages = [...allMessages, ...rpRes.data.map(r => mapRow(r, 'roleplay'))];
+          if (deepRows.length > 0) allMessages = [...allMessages, ...deepRows.map(r => mapRow(r, 'deep'))];
+          if (smsRows.length > 0) allMessages = [...allMessages, ...smsRows.map(r => mapRow(r, 'sms'))];
+          if (rpRows.length > 0) allMessages = [...allMessages, ...rpRows.map(r => mapRow(r, 'roleplay'))];
 
           allMessages.sort((a, b) => a.timestamp - b.timestamp);
           
