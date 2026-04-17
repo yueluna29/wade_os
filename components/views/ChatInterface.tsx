@@ -786,8 +786,34 @@ export const ChatInterface: React.FC = () => {
       }
     } catch (error: any) {
       if (error?.name === 'AbortError' || !abortControllerRef.current) return;
-      console.error("Chat Error", error);
       const errorMsg = error?.message || "Failed to generate response.";
+      const isNetworkError = /load failed|failed to fetch|networkerror|network request failed|fetch failed/i.test(errorMsg);
+      if (isNetworkError && !regenMsgId) {
+        // Safari kills fetch on lock-screen. Auto-retry once when page
+        // becomes visible again so Wade doesn't appear permanently broken.
+        console.warn('[Chat] Network error, will retry on visibility change:', errorMsg);
+        const retryOnce = () => {
+          document.removeEventListener('visibilitychange', retryOnce);
+          if (document.visibilityState === 'visible') {
+            console.log('[Chat] Page visible — retrying AI call');
+            triggerAIResponse(targetSessionId, undefined, savedPrompt);
+          }
+        };
+        document.addEventListener('visibilitychange', retryOnce);
+        // Also retry immediately if already visible (e.g. flaky network, no lock)
+        setTimeout(() => {
+          document.removeEventListener('visibilitychange', retryOnce);
+          if (document.visibilityState === 'visible') {
+            console.log('[Chat] Immediate retry after network error');
+            triggerAIResponse(targetSessionId, undefined, savedPrompt);
+          } else {
+            // Still hidden — wait for visibility
+            document.addEventListener('visibilitychange', retryOnce);
+          }
+        }, 3000);
+        return;
+      }
+      console.error("Chat Error", error);
       if (regenMsgId) { alert(`Regeneration Failed: ${errorMsg}`); setRegenerating(regenMsgId, false); setWadeStatus('online'); }
       else {
         addMessage({ id: Date.now().toString(), sessionId: targetSessionId, role: 'Wade', text: errorMsg.includes("API Key") ? "Oops! I need you to configure my API in Settings first." : `I'm having trouble responding: ${errorMsg}`, timestamp: Date.now(), mode: activeMode });
