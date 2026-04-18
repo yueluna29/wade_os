@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Reply, Copy, Volume2, Pause, Star, Trash2, RefreshCw, Check, AudioLines } from 'lucide-react';
+import { Reply, Copy, Volume2, Pause, Star, Trash2, RefreshCw, Check, AudioLines, Pencil } from 'lucide-react';
 
 interface MessageActionPillProps {
   isSelf: boolean;
@@ -14,6 +14,7 @@ interface MessageActionPillProps {
   onRegenerate?: () => void;
   /** Force re-generate the TTS audio (throw away the cache). Wade-side only. */
   onRespeak?: () => void;
+  onEdit?: () => void;
 }
 
 /**
@@ -32,6 +33,7 @@ export const MessageActionPill: React.FC<MessageActionPillProps> = ({
   onDelete,
   onRegenerate,
   onRespeak,
+  onEdit,
 }) => {
   const showFull = mode === 'full';
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -78,6 +80,12 @@ export const MessageActionPill: React.FC<MessageActionPillProps> = ({
       <ActionBtn label="Regenerate" onClick={onRegenerate}>
         <RefreshCw size={14} strokeWidth={2} />
       </ActionBtn>
+
+      {onEdit && (
+        <ActionBtn label="Edit" onClick={onEdit}>
+          <Pencil size={14} strokeWidth={2} />
+        </ActionBtn>
+      )}
 
       {showFull && (
         <ActionBtn label="Star" onClick={onStar}>

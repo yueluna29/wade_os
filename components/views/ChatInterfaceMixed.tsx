@@ -552,7 +552,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     messages: storeMessages, settings, llmPresets, sessions, activeSessionId, updateSession,
     getBinding, coreMemories, toggleCoreMemoryEnabled, profiles, profilesLoaded, messagesLoaded,
     createSession, updateSessionTitle, toggleSessionPin, deleteSession,
-    ttsPresets, updateMessageAudioCache, deleteMessage, toggleFavorite,
+    ttsPresets, updateMessageAudioCache, updateMessage, deleteMessage, toggleFavorite,
     addMessage, personaCards, functionBindings, getDefaultPersonaCard, setTab,
   } = useStore();
 
@@ -796,6 +796,8 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const [showContactCard, setShowContactCard] = useState(false);
   const [showEditContact, setShowEditContact] = useState(false);
   const [showMePanel, setShowMePanel] = useState<'luna' | 'wade' | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   const [showDebug, setShowDebug] = useState(false);
   // Multi-select mode for batch-deleting messages. Entered via the menu;
   // exited via Cancel or after a successful delete. While true, tapping a
@@ -1843,6 +1845,15 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       setSelectedMsgId(null);
                     }}
                     onRegenerate={() => { regenerateLastReply(); setSelectedMsgId(null); }}
+                    onEdit={() => {
+                      // Open modal with the current raw bubble text. For
+                      // bubbles backed by a single DB row with variants we
+                      // edit the DB row's `text` field directly (which is the
+                      // variant currently displayed after the store resolves).
+                      setEditDraft(msg.text || '');
+                      setEditingMessageId(String(msg.id));
+                      setSelectedMsgId(null);
+                    }}
                   />
                 )}
 
@@ -2202,6 +2213,64 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
             setShowEditContact(false);
           }}
         />
+      )}
+
+      {/* Edit Message modal — matches the legacy ChatInterface ActionSheet
+          edit dialog 1:1 (header with Edit icon + subtitle, textarea body,
+          Cancel + Save footer). */}
+      {editingMessageId && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-wade-text-main/20 backdrop-blur-sm animate-fade-in"
+          onClick={() => setEditingMessageId(null)}
+        >
+          <div
+            className="bg-wade-bg-base w-[90%] max-w-lg h-[50vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col border border-wade-accent-light ring-1 ring-wade-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-wade-border flex justify-between items-center bg-wade-bg-card/50 backdrop-blur-md sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-wade-accent-light flex items-center justify-center text-wade-accent">
+                  <Icons.Edit size={14} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-wade-text-main text-sm tracking-tight">Edit Message</h3>
+                  <p className="text-[10px] text-wade-text-muted uppercase tracking-wider font-medium">Rewriting history, are we?</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingMessageId(null)}
+                className="w-8 h-8 rounded-full hover:bg-wade-border flex items-center justify-center text-wade-text-muted transition-colors"
+              >
+                <Icons.Close size={16} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto custom-scrollbar bg-wade-bg-base flex-1">
+              <textarea
+                value={editDraft}
+                onChange={(e) => setEditDraft(e.target.value)}
+                className="w-full h-full bg-wade-bg-card rounded-2xl p-4 border border-wade-border focus:border-wade-accent outline-none text-wade-text-main text-xs resize-none shadow-sm font-mono leading-relaxed"
+                placeholder="Type your new reality here..."
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-wade-border bg-wade-bg-app flex justify-center gap-4">
+              <button
+                onClick={() => setEditingMessageId(null)}
+                className="w-32 py-2.5 rounded-xl text-xs font-bold text-wade-text-muted hover:text-wade-text-main hover:bg-wade-bg-card border border-transparent hover:border-wade-border transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (editingMessageId) updateMessage(editingMessageId, editDraft);
+                  setEditingMessageId(null);
+                }}
+                className="w-32 py-2.5 rounded-xl bg-wade-accent text-white text-xs font-bold hover:bg-wade-accent-hover shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Me panel — opened from the ContactCard persona button for Wade/Luna
