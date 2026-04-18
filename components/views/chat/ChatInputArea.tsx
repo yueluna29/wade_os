@@ -1,5 +1,6 @@
 import React from 'react';
 import { Icons } from '../../ui/Icons';
+import { Drama } from 'lucide-react';
 
 interface ReplyPreview {
   id: string;
@@ -28,6 +29,9 @@ interface ChatInputAreaProps {
   handleKeyDown: (e: React.KeyboardEvent) => void;
   replyingTo?: ReplyPreview | null;
   onCancelReply?: () => void;
+  /** Optional POV toggle: wraps next send in *narration* for Mixed. */
+  povMode?: boolean;
+  onTogglePov?: () => void;
 }
 
 export const ChatInputArea: React.FC<ChatInputAreaProps> = ({

@@ -7,6 +7,7 @@ import { useStore } from '../../store';
 import { supabase } from '../../services/supabase';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { generateFromCard, generateChatTitle, summarizeConversation } from '../../services/aiService';
+import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory } from '../../services/memoryService';
 import type { Message as StoreMessage, ChatSession } from '../../types';
 import {
   CheckCheck, Check, HeartPulse,
@@ -794,6 +795,45 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showContactCard, setShowContactCard] = useState(false);
+  const [attachments, setAttachments] = useState<{ type: 'image' | 'file'; content: string; mimeType: string; name: string }[]>([]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const effectiveLlmId = sessions.find((s) => s.id === resolvedSessionId)?.customLlmId || settings.activeLlmId;
+    const activeLlm = effectiveLlmId ? llmPresets.find((p) => p.id === effectiveLlmId) : null;
+    const isVision = activeLlm ? activeLlm.isVision : true;
+    if (!isVision) { alert(`The current model (${activeLlm?.name || 'Unknown'}) does not support images.`); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      setAttachments((prev) => [...prev, { type: 'image', content, mimeType: file.type, name: file.name }]);
+      setShowUploadMenu(false);
+    };
+    reader.readAsDataURL(file);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const effectiveLlmId = sessions.find((s) => s.id === resolvedSessionId)?.customLlmId || settings.activeLlmId;
+    const activeLlm = effectiveLlmId ? llmPresets.find((p) => p.id === effectiveLlmId) : null;
+    if (file.type === 'application/pdf' && !(activeLlm ? activeLlm.isVision : true)) {
+      alert(`The current model might not support PDF files.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      setAttachments((prev) => [...prev, { type: 'file', content, mimeType: file.type, name: file.name }]);
+      setShowUploadMenu(false);
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
   const [showEditContact, setShowEditContact] = useState(false);
   const [showMePanel, setShowMePanel] = useState<'luna' | 'wade' | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -1215,6 +1255,34 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         }
       } catch { /* no row — fine */ }
 
+      // Long-term memory retrieval. Only active for the Luna↔Wade main
+      // conversation (Luna's phone, Wade contact) — other NPCs don't share
+      // this memory bank. wade_memories.embedding is vector(768) so the
+      // embedding preset must be Gemini (text-embedding-004); anything else
+      // would silently 400. If no Gemini preset exists we simply skip.
+      const isLunaWadeChat = phoneOwner === 'luna' && contact.id === 'wade';
+      let wadeMemoriesXml = '';
+      const recentLunaTexts = allSessionMsgs
+        .filter((m) => m.role === senderRole)
+        .slice(-3)
+        .map((m) => m.text)
+        .join('\n');
+      if (isLunaWadeChat) {
+        try {
+          const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
+          const memEvalLlm = memEvalLlmId ? llmPresets.find((p) => p.id === memEvalLlmId) : undefined;
+          const explicitEmbId = settings.embeddingLlmId;
+          const explicitEmb = explicitEmbId ? llmPresets.find((p) => p.id === explicitEmbId) : undefined;
+          const isGemini = (p?: typeof llmPresets[number]) =>
+            !!p && (p.provider === 'Gemini' || (!!p.baseUrl && p.baseUrl.includes('googleapis')));
+          const embLlm = isGemini(explicitEmb)
+            ? explicitEmb
+            : llmPresets.find((p) => isGemini(p) && p.apiKey);
+          const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 10, memEvalLlm, embLlm);
+          wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
+        } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
+      }
+
       const response = await generateFromCard({
         wadeCard,
         lunaCard,
@@ -1227,6 +1295,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         customPrompt: currentSession?.customPrompt,
         isRetry: !!opts.isRegen,
         llmPreset: activeLlm,
+        wadeMemoriesXml,
       });
       // Luna hit stop while the network call was in flight — drop the reply.
       if (ctrl.aborted) return;
@@ -1235,6 +1304,26 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       const thinking = response.thinking;
       const currentModel = activeLlm.model || 'unknown';
       const parts = splitSmsBubbles(responseText);
+
+      // Background memory eval — fire-and-forget, doesn't block render. Same
+      // gate as retrieval (Luna's Wade chat only) so we don't pollute the
+      // memory bank with NPC chatter. Skipped on regen because we already
+      // evaluated when the original batch went out.
+      if (isLunaWadeChat && !opts.isRegen && recentLunaTexts.trim()) {
+        const memoryEvalLlmId2 = settings.memoryEvalLlmId || settings.activeLlmId;
+        const memoryEvalLlm = memoryEvalLlmId2 ? llmPresets.find((p) => p.id === memoryEvalLlmId2) : null;
+        const explicitEmbId2 = settings.embeddingLlmId;
+        const explicitEmb2 = explicitEmbId2 ? llmPresets.find((p) => p.id === explicitEmbId2) : undefined;
+        const isGeminiPreset = (p?: typeof llmPresets[number]) =>
+          !!p && (p.provider === 'Gemini' || (!!p.baseUrl && p.baseUrl.includes('googleapis')));
+        const embLlm2 = isGeminiPreset(explicitEmb2)
+          ? explicitEmb2
+          : llmPresets.find((p) => isGeminiPreset(p) && p.apiKey);
+        if (memoryEvalLlm?.apiKey) {
+          evaluateAndStoreMemory(recentLunaTexts, responseText, targetSessionId, memoryEvalLlm, embLlm2)
+            .catch((err) => console.error('[WadeMemory] Eval failed:', err));
+        }
+      }
 
       // Make the new group the active one for this anchor so it shows
       // immediately. Any prior group under the same anchor stays in DB and
@@ -1329,7 +1418,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text && attachments.length === 0) return;
     // Showcase contacts render MOCK_MESSAGES — sending would spawn an empty
     // real session under them, which the UI has no way to surface. Block it.
     if (isShowcase) return;
@@ -1354,6 +1443,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     const outgoingText = povMode && !alreadyWrapped ? `*${text}*` : text;
     if (povMode) setPovMode(false);
 
+    const sentAttachments = attachments.slice();
     addMessage({
       id: Date.now().toString(),
       sessionId: targetSessionId,
@@ -1361,8 +1451,22 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       text: outgoingText,
       timestamp: Date.now(),
       mode: 'sms',
-    });
+      attachments: sentAttachments.map((a) => ({
+        type: a.type,
+        content: a.content.split(',')[1],
+        mimeType: a.mimeType,
+        name: a.name,
+      })),
+      image: sentAttachments.find((a) => a.type === 'image')?.content.split(',')[1],
+    } as any);
     setInputText('');
+    setAttachments([]);
+    // Keep the textarea focused so the mobile keyboard doesn't collapse
+    // between sends — matches the legacy ChatInterface behavior.
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.focus();
+    }
 
     if (isFirstMessage) {
       const titleLlm =
@@ -1992,6 +2096,30 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 : 'border-wade-border focus-within:border-wade-accent'
             }`}
           >
+            {/* Attachment preview — matches legacy ChatInputArea */}
+            {attachments.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 px-1">
+                {attachments.map((att, index) => (
+                  <div key={index} className="relative group flex-shrink-0">
+                    {att.type === 'image' ? (
+                      <img src={att.content} alt="preview" className="h-16 w-16 object-cover rounded-lg border border-wade-border" />
+                    ) : (
+                      <div className="h-16 w-16 bg-wade-bg-card rounded-lg border border-wade-border flex flex-col items-center justify-center p-1">
+                        <Icons.File />
+                        <span className="text-[8px] truncate w-full text-center mt-1 text-wade-text-main">{att.name}</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => removeAttachment(index)}
+                      className="absolute top-1 right-1 bg-wade-accent text-white rounded-full p-0.5 shadow-md hover:bg-wade-accent-hover transition-colors w-4 h-4 flex items-center justify-center"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-end gap-2">
               {/* Upload Button */}
               <div className="relative shrink-0">
@@ -2001,8 +2129,8 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 >
                   <Icons.PlusThin size={16} />
                 </button>
-                <input type="file" ref={imageInputRef} className="hidden" accept="image/*" />
-                <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.txt,.md,.json" />
+                <input type="file" ref={imageInputRef} className="hidden" accept="image/*" onChange={handleImageSelect} />
+                <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.txt,.md,.json" onChange={handleFileSelect} />
                 {showUploadMenu && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowUploadMenu(false)} />
@@ -2046,7 +2174,14 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               <textarea
                 ref={textareaRef}
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={(e) => {
+                  setInputText(e.target.value);
+                  // Auto-grow: match the legacy ChatInterface so pressing Enter
+                  // on mobile (which inserts a newline) visibly expands the
+                  // box instead of scrolling the content.
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
+                }}
                 onFocus={() => {
                   setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
                 }}
@@ -2079,8 +2214,15 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 </button>
               ) : (
                 <button
+                  onTouchEnd={(e) => {
+                    // preventDefault blocks the touch from moving focus to the
+                    // button, which would blur the textarea and collapse the
+                    // mobile keyboard. Matches the legacy ChatInputArea.
+                    e.preventDefault();
+                    if ((inputText.trim() || attachments.length > 0) && !isShowcase) handleSend();
+                  }}
                   onClick={handleSend}
-                  disabled={!inputText.trim() || isShowcase}
+                  disabled={(!inputText.trim() && attachments.length === 0) || isShowcase}
                   className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-all border shrink-0 bg-wade-accent text-white border-wade-accent hover:bg-wade-accent-hover disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Icons.ArrowUpThin size={16} />
