@@ -16,6 +16,9 @@ import { WadesPicksView } from './components/views/WadesPicksView';
 import { ThemeLab } from './components/views/ThemeLab';
 import { JournalView } from './components/views/journal/JournalView';
 import { TodosView } from './components/views/TodosView';
+import { LunaPhoneView } from './components/views/LunaPhoneView';
+import { WadePhoneView } from './components/views/WadePhoneView';
+import { ChatAppShell } from './components/views/chatapp/ChatAppShell';
 
 const AppContent = () => {
   const { currentTab, settings, sessions, activeSessionId } = useStore();
@@ -138,6 +141,12 @@ const AppContent = () => {
       case 'theme-lab': return <ThemeLab />;
       case 'journal': return <JournalView />;
       case 'wade-todos': return <TodosView />;
+      case 'chat-list': return <ChatAppShell phoneOwner="luna" />;
+      case 'wade-chat-list': return <ChatAppShell phoneOwner="wade" />;
+      case 'luna-persona': return <ChatAppShell phoneOwner="luna" initialTab="me" />;
+      case 'wade-persona': return <ChatAppShell phoneOwner="wade" initialTab="me" />;
+      case 'luna-phone': return <LunaPhoneView />;
+      case 'wade-phone': return <WadePhoneView />;
       default: return <Home />;
     }
   };

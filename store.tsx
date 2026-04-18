@@ -43,13 +43,85 @@ const defaultSettings: AppSettings = {
   contextLimit: 50,
 };
 
+// Shared row→Message mapper used by both the initial boot fetch and the
+// realtime subscription handler. Kept at module scope so realtime callbacks
+// don't need to close over component state.
+function mapMessageRow(row: any, mode: ChatMode): Message {
+  let parsedVariants: any[] = [];
+  if (Array.isArray(row.variants)) parsedVariants = row.variants;
+  else if (typeof row.variants === 'string') {
+    try { parsedVariants = JSON.parse(row.variants); } catch {}
+  }
+  if (parsedVariants.length > 0 && typeof parsedVariants[0] === 'string') {
+    parsedVariants = parsedVariants.map((text: string) => ({ text, model: row.model }));
+  } else if (parsedVariants.length === 0) {
+    parsedVariants = [{ text: row.content, model: row.model }];
+  }
+  const selectedIdx = row.selected_index || 0;
+  const currentVariant = parsedVariants[selectedIdx] || parsedVariants[0] || {};
+
+  let parsedAttachments: Message['attachments'] = undefined;
+  if (row.attachments) {
+    if (Array.isArray(row.attachments)) parsedAttachments = row.attachments;
+    else if (typeof row.attachments === 'string') {
+      try { parsedAttachments = JSON.parse(row.attachments); } catch {}
+    }
+  }
+
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    role: row.role,
+    text: currentVariant.text || row.content,
+    model: currentVariant.model || row.model,
+    timestamp: new Date(row.created_at).getTime(),
+    mode,
+    isFavorite: false,
+    variants: parsedVariants,
+    selectedIndex: selectedIdx,
+    thinking: currentVariant.thinking || undefined,
+    source: row.source || 'chat',
+    keepaliveId: row.keepalive_id || undefined,
+    replyToId: row.reply_to_id || undefined,
+    replyAnchorId: row.reply_anchor_id || undefined,
+    replyGroupId: row.reply_group_id || undefined,
+    attachments: parsedAttachments,
+  };
+}
+
 const StoreContext = createContext<GlobalState | undefined>(undefined);
 
 export const StoreProvider = ({ children }: { children: ReactNode }) => {
-  const [profiles, setProfiles] = useState<{ Wade: UserProfile, Luna: UserProfile }>({
-    Wade: { user_type: 'Wade', display_name: 'Wade Wilson', username: 'chimichangapapi', bio: '' },
-    Luna: { user_type: 'Luna', display_name: 'Luna', username: 'meowgicluna', bio: '' }
+  // Profiles hydrate from localStorage first so the chat list / chat header
+  // don't flash the hardcoded defaults ("Wade Wilson", "Luna") before the
+  // async Supabase fetch replaces them with the current Display Name.
+  // `profilesLoaded` tells consumers whether the data they see is the real
+  // thing (cache hit OR fetch done) vs the initial placeholder — so they can
+  // show a skeleton instead of a wrong name on a device that's never opened
+  // the app before.
+  const [profiles, setProfiles] = useState<{ Wade: UserProfile, Luna: UserProfile }>(() => {
+    const defaults = {
+      Wade: { user_type: 'Wade' as const, display_name: 'Wade Wilson', username: 'chimichangapapi', bio: '' },
+      Luna: { user_type: 'Luna' as const, display_name: 'Luna', username: 'meowgicluna', bio: '' },
+    };
+    try {
+      const cached = localStorage.getItem('wadeOS_profiles');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return { Wade: { ...defaults.Wade, ...parsed.Wade }, Luna: { ...defaults.Luna, ...parsed.Luna } };
+      }
+    } catch {}
+    return defaults;
   });
+  const [profilesLoaded, setProfilesLoaded] = useState<boolean>(() => {
+    try { return !!localStorage.getItem('wadeOS_profiles'); } catch { return false; }
+  });
+
+  // Any time profiles change (initial fetch, updateProfile edit), mirror into
+  // localStorage so the next boot starts with the fresh Display Name / avatar.
+  useEffect(() => {
+    try { localStorage.setItem('wadeOS_profiles', JSON.stringify(profiles)); } catch {}
+  }, [profiles]);
 
   const [personaCards, setPersonaCards] = useState<PersonaCard[]>([]);
   const [functionBindings, setFunctionBindings] = useState<FunctionBinding[]>([]);
@@ -81,6 +153,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const [messages, setMessages] = useState<Message[]>([]);
+  // Gate for consumers that need to distinguish "no messages yet" from
+  // "still loading". Flips to true after the initial Supabase fetch completes
+  // (even if it returned zero rows). Without this, the chat list shows the
+  // hardcoded built-in lastMessage during the hydration gap.
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
 
   const [coreMemories, setCoreMemories] = useState<CoreMemory[]>(() => {
     const saved = localStorage.getItem('wade_core_memories');
@@ -259,7 +336,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
             customLlmId: localLlmCache[s.id] || s.custom_llm_id,
             customPrompt: s.custom_prompt,
             customTheme: localThemeCache[s.id] || (s.custom_theme ? (typeof s.custom_theme === 'string' ? JSON.parse(s.custom_theme) : s.custom_theme) : undefined),
-            chatStyle: localStyleCache[s.id] || (s.chat_style ? (typeof s.chat_style === 'string' ? JSON.parse(s.chat_style) : s.chat_style) : undefined)
+            chatStyle: localStyleCache[s.id] || (s.chat_style ? (typeof s.chat_style === 'string' ? JSON.parse(s.chat_style) : s.chat_style) : undefined),
+            threadId: s.thread_id || undefined,
           }));
 
           mappedSessions.sort((a, b) => {
@@ -350,7 +428,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               selectedIndex: selectedIdx,
               thinking: currentVariant.thinking || undefined,
               source: row.source || 'chat',
+              keepaliveId: row.keepalive_id || undefined,
               replyToId: row.reply_to_id || undefined,
+              replyAnchorId: row.reply_anchor_id || undefined,
+              replyGroupId: row.reply_group_id || undefined,
               attachments: parsedAttachments,
             };
           };
@@ -364,6 +445,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           if (allMessages.length > 0) {
             setMessages(allMessages);
           }
+          setMessagesLoaded(true);
         };
         fetchMessages();
 
@@ -468,20 +550,21 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                 const wade = pData.find(p => p.user_type === 'Wade');
                 const luna = pData.find(p => p.user_type === 'Luna');
                 setProfiles({
-                    Wade: { 
+                    Wade: {
                         user_type: 'Wade',
-                        display_name: wade?.display_name || 'Wade Wilson', 
-                        username: wade?.username || 'chimichangapapi', 
-                        bio: wade?.bio || '' 
+                        display_name: wade?.display_name || 'Wade Wilson',
+                        username: wade?.username || 'chimichangapapi',
+                        bio: wade?.bio || ''
                     },
-                    Luna: { 
+                    Luna: {
                         user_type: 'Luna',
-                        display_name: luna?.display_name || 'Luna', 
-                        username: luna?.username || 'meowgicluna', 
-                        bio: luna?.bio || '' 
+                        display_name: luna?.display_name || 'Luna',
+                        username: luna?.username || 'meowgicluna',
+                        bio: luna?.bio || ''
                     }
                 });
             }
+            setProfilesLoaded(true);
         };
         fetchProfiles();
 
@@ -523,11 +606,76 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         };
         fetchFunctionBindings();
 
+        // Pull custom contacts for both phones into the localStorage cache
+        // that ContactsTab / ChatsTab read from. Lazy-import to avoid adding
+        // chatapp files to the store's import graph at module load time.
+        const { syncContactsFromSupabase } = await import('./components/views/chatapp/mockContacts');
+        await Promise.all([
+          syncContactsFromSupabase('luna'),
+          syncContactsFromSupabase('wade'),
+        ]).catch(err => console.error('[contacts] initial sync failed', err));
+
       } catch (err: any) {
         console.error("Supabase Sync Failed:", err);
       }
     };
     fetchData();
+  }, []);
+
+  // Realtime subscription for chat messages. Without this, keepalive-written
+  // rows land in Supabase but the open chat view has no way to notice them —
+  // user has to refresh. `messages_sms`, `messages_deep`, and `messages_roleplay`
+  // are in the supabase_realtime publication (see migration
+  // `enable_realtime_on_chat_messages`).
+  useEffect(() => {
+    const mkChannel = (table: string, mode: ChatMode) =>
+      supabase
+        .channel(`realtime_${table}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table },
+          (payload) => {
+            try {
+              const newMsg = mapMessageRow(payload.new, mode);
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg].sort((a, b) => a.timestamp - b.timestamp);
+              });
+            } catch (e) {
+              console.error(`[realtime ${table}] insert map failed`, e);
+            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table },
+          (payload) => {
+            try {
+              const updated = mapMessageRow(payload.new, mode);
+              setMessages((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
+            } catch (e) {
+              console.error(`[realtime ${table}] update map failed`, e);
+            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table },
+          (payload) => {
+            const id = (payload.old as any)?.id;
+            if (id) setMessages((prev) => prev.filter((m) => m.id !== id));
+          },
+        )
+        .subscribe();
+
+    const c1 = mkChannel('messages_sms', 'sms');
+    const c2 = mkChannel('messages_deep', 'deep');
+    const c3 = mkChannel('messages_roleplay', 'roleplay');
+    return () => {
+      supabase.removeChannel(c1);
+      supabase.removeChannel(c2);
+      supabase.removeChannel(c3);
+    };
   }, []);
 
   const [socialPosts, setSocialPosts] = useState<SocialPost[]>([]);
@@ -672,16 +820,16 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     setTtsPresets(prev => prev.filter(p => p.id !== id));
   };
 
-  const createSession = async (mode: ChatMode): Promise<string> => {
+  const createSession = async (mode: ChatMode, threadId?: string): Promise<string> => {
     const tempId = crypto.randomUUID();
     const initialMemoryIds = coreMemories.filter(m => m.enabled).map(m => m.id);
-    
-    const newSession: ChatSession = { id: tempId, mode, title: 'New Conversation', createdAt: Date.now(), updatedAt: Date.now(), activeMemoryIds: initialMemoryIds };
+
+    const newSession: ChatSession = { id: tempId, mode, title: 'New Conversation', createdAt: Date.now(), updatedAt: Date.now(), activeMemoryIds: initialMemoryIds, threadId };
     setSessions(prev => [newSession, ...prev]);
     setActiveSessionId(tempId);
 
     await supabase.from('chat_sessions').insert({
-      id: tempId, mode, title: 'New Conversation', active_memory_ids: initialMemoryIds, is_pinned: false
+      id: tempId, mode, title: 'New Conversation', active_memory_ids: initialMemoryIds, is_pinned: false, thread_id: threadId ?? null,
     });
     return tempId;
   };
@@ -813,6 +961,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
          selected_index: 0,
          created_at: new Date(newMessage.timestamp).toISOString(),
          ...(newMessage.replyToId ? { reply_to_id: newMessage.replyToId } : {}),
+         ...(newMessage.replyAnchorId ? { reply_anchor_id: newMessage.replyAnchorId } : {}),
+         ...(newMessage.replyGroupId ? { reply_group_id: newMessage.replyGroupId } : {}),
          ...(newMessage.attachments && newMessage.attachments.length > 0 ? { attachments: newMessage.attachments } : {}),
       });
       setSessions(prev => prev.map(s => s.id === newMessage.sessionId ? { ...s, updatedAt: Date.now() } : s));
@@ -1346,7 +1496,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       recommendations, addRecommendation, updateRecommendation, deleteRecommendation,
       coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled,
       chatArchives, importArchive, loadArchiveMessages, updateArchiveTitle, updateArchiveMessage, deleteArchive, deleteArchiveMessage, toggleArchiveFavorite,
-      activeMode, setMode, isNavHidden, setNavHidden, syncError, profiles, updateProfile,
+      activeMode, setMode, isNavHidden, setNavHidden, syncError, profiles, profilesLoaded, updateProfile, messagesLoaded,
       personaCards, addPersonaCard, updatePersonaCard, deletePersonaCard, 
       duplicatePersonaCard, setDefaultPersonaCard, getDefaultPersonaCard,
       functionBindings, updateFunctionBinding, addFunctionBinding, deleteFunctionBinding, getBinding,

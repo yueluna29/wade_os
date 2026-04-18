@@ -12,7 +12,7 @@ import { ProfileHeaderView } from './social/ProfileHeaderView';
 
 // Existing subcomponents (UNCHANGED)
 import { PostEditorModal } from './social/PostEditorModal';
-import { ProfileEditorModal } from './social/ProfileEditorModal';
+// ProfileEditorModal kept for legacy use; profile editing now lives in chat app's Me tab.
 
 export const SocialFeed: React.FC = () => {
   const {
@@ -22,7 +22,6 @@ export const SocialFeed: React.FC = () => {
   } = useStore();
 
   // ─── State ───
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPostEditorOpen, setIsPostEditorOpen] = useState(false);
 
   const [expandedPostIds, setExpandedPostIds] = useState<Set<string>>(new Set());
@@ -340,12 +339,8 @@ export const SocialFeed: React.FC = () => {
         <>
           {/* Header */}
           <div className="w-full h-[68px] px-4 bg-wade-bg-card/90 backdrop-blur-md shadow-sm border-b border-wade-border flex items-center justify-between z-20 shrink-0">
-            <button
-              onClick={() => setIsProfileModalOpen(true)}
-              className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors"
-            >
-              <Icons.Settings size={16} />
-            </button>
+            {/* Profile editing moved to Me tab in chat app — leave a spacer for layout symmetry */}
+            <div className="w-8 h-8" />
             <div className="flex-1 flex flex-col items-center justify-center min-w-0">
               <h2 className="font-hand text-2xl text-wade-accent tracking-wide">WadeOS</h2>
               <span className="text-[9px] text-wade-text-muted font-medium tracking-widest uppercase">Social Feed</span>
@@ -409,7 +404,6 @@ export const SocialFeed: React.FC = () => {
 
       {/* ── Modals ── */}
       <PostEditorModal isOpen={isPostEditorOpen} onClose={() => setIsPostEditorOpen(false)} />
-      <ProfileEditorModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} />
 
       {/* ── Zoomed Image Viewer (毛玻璃) ── */}
       {zoomedImage && (

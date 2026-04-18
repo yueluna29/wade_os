@@ -75,57 +75,102 @@ export const buildSystemPromptFromCard = (options: {
 
   let prompt = '';
 
-  // 1. 全局系统指令
+  // ================================================================
+  // PROMPT ORDER — stable-to-volatile, optimized for Anthropic prompt
+  // cache (1h TTL via cache_control). Anything before the first
+  // dynamic block stays cached across turns; reorder with care.
+  // Reordered 2026-04-18: `[CURRENT TIME]` moved from #2 to the tail
+  // so minute-precision drift doesn't invalidate persona + rules +
+  // memories every single call. Also dropped time precision from
+  // minute to hour so the cache holds for a full hour at a time.
+  // ================================================================
+
+  // 1. 全局系统指令（最静态、最长 → 放最前，缓存价值最高）
   if (globalDirectives) {
     prompt += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${globalDirectives}`;
   }
- 
-  // 1.5 时间感知 — 让 Wade 知道现在几点
-  const now = new Date();
-  const tokyoTime = now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo', weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-  prompt += `\n\n[CURRENT TIME]\n${tokyoTime} (Tokyo)`;
 
-  // 2. Wade 的身份（XML 格式）
+  // 2. Wade 的身份（XML）
   if (wadeCard?.core_identity?.trim()) {
     prompt += `\n\n[CHARACTER PERSONA]\n`;
     prompt += cardDataToXML(wadeCard, 'Wade');
   }
- 
-  // 3. Luna 的身份（XML 格式）
+
+  // 3. Luna 的身份（XML）
   if (lunaCard?.core_identity?.trim()) {
     prompt += `\n\n[USER IDENTITY]\n`;
     prompt += cardDataToXML(lunaCard, 'Luna');
   }
 
-  // 3.5 对话摘要
-  if (options.sessionSummary) {
-    prompt += `\n\n[PREVIOUS CONVERSATION SUMMARY]\n${options.sessionSummary}\n[END SUMMARY]`;
-  }
- 
-  // 4. 示例对话（根据模式选择）
+  // 4. 示例对话（静态）
   if (wadeCard?.example_punchlines?.trim()) {
     prompt += `\n\n[WADE'S STYLE - SINGLE LINE EXAMPLES]\n${wadeCard.example_punchlines.trim()}`;
   }
- 
   if (chatMode === 'sms' && wadeCard?.example_dialogue_sms?.trim()) {
     prompt += `\n\n[SMS MODE EXAMPLES - TONE REFERENCE, NOT A RIGID TEMPLATE]\n${wadeCard.example_dialogue_sms.trim()}`;
   } else if (wadeCard?.example_dialogue_general?.trim()) {
     prompt += `\n\n[EXAMPLE DIALOGUE - MIMIC THIS STYLE]\n${wadeCard.example_dialogue_general.trim()}`;
   }
- 
-  // 5. 长期记忆
+
+  // 5. 模式专属规则（静态 per mode）
+  if (chatMode === 'sms') {
+    if (smsRulesEffective) prompt += `\n\n${smsRulesEffective}`;
+  } else if (chatMode === 'roleplay') {
+    prompt += rpRulesEffective
+      ? `\n\n${rpRulesEffective}`
+      : `\n\n[OUTPUT FORMAT: Internal monologue in <think> tags first. Then immersive response.]`;
+  } else {
+    // deep 模式：如果有 RP 规则也加上（因为 deep 模式也需要 CoT）
+    if (rpRulesEffective) prompt += `\n\n${rpRulesEffective}`;
+  }
+
+  // 6. 长期记忆（慢变：Luna 改 memory 时）
   if (coreMemories && coreMemories.length > 0) {
     const activeMemories = coreMemories.filter(m => m.isActive).map(m => `- ${m.content}`).join('\n');
     if (activeMemories) {
       prompt += `\n\n[LONG TERM MEMORY BANK - FACTS YOU MUST REMEMBER]\n${activeMemories}\n[END MEMORIES]`;
     }
   }
- 
-  // 6. 重试提示
+
+  // 7. 对话摘要（变：Fresh Start / auto-summary 后）
+  if (options.sessionSummary) {
+    prompt += `\n\n[PREVIOUS CONVERSATION SUMMARY]\n${options.sessionSummary}\n[END SUMMARY]`;
+  }
+
+  // 8. wade_memories（每轮变：向量搜索结果）
+  if (options.wadeMemoriesXml) {
+    prompt += options.wadeMemoriesXml;
+  }
+
+  // 9. wade_diary（变：写新日记时）
+  if (options.wadeDiaryXml) {
+    prompt += options.wadeDiaryXml;
+  }
+
+  // 10. wade_todos（最动态：每轮都可能 +1 / -1）
+  if (options.wadeTodosXml) {
+    prompt += options.wadeTodosXml;
+  }
+
+  // 11. 时间感知 — 放在最后。精度降到小时，让缓存能整小时地命中；
+  // Wade 基本用不到分钟级时间，有需要时他会直接问工具。
+  const now = new Date();
+  const tokyoTime = now.toLocaleString('en-US', {
+    timeZone: 'Asia/Tokyo',
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    hour12: false,
+  });
+  prompt += `\n\n[CURRENT TIME]\n${tokyoTime} (Tokyo)`;
+
+  // 12. 重试提示（只在 regenerate 时出现，放最后不影响正常调用的缓存）
   if (isRetry) {
     if (chatMode === 'sms') {
       prompt += `\n\n[SYSTEM UPDATE: The user hit 'Regenerate' on your last text. Try again. SHORT response.]`;
-      
+
       // SMS 重试时的上下文提取
       if (formattedHistory) {
         let recentContext = "";
@@ -144,35 +189,6 @@ export const buildSystemPromptFromCard = (options: {
     } else {
       prompt += `\n\n[SYSTEM UPDATE: The user REJECTED your last response. Provide a NEW, better response.]`;
     }
-  }
- 
-  // 7. 模式专属规则
-  if (chatMode === 'sms') {
-    if (smsRulesEffective) prompt += `\n\n${smsRulesEffective}`;
-  } else if (chatMode === 'roleplay') {
-    prompt += rpRulesEffective
-      ? `\n\n${rpRulesEffective}`
-      : `\n\n[OUTPUT FORMAT: Internal monologue in <think> tags first. Then immersive response.]`;
-  } else {
-    // deep 模式：如果有 RP 规则也加上（因为 deep 模式也需要 CoT）
-    if (rpRulesEffective) {
-      prompt += `\n\n${rpRulesEffective}`;
-    }
-  }
-
-  // 智能记忆注入（放在后面，保护前面内容的 cache 命中率）
-  if (options.wadeMemoriesXml) {
-    prompt += options.wadeMemoriesXml;
-  }
-
-  // Wade 的近期日记 — 让他知道自己写过什么，Luna 提起时能自然接上
-  if (options.wadeDiaryXml) {
-    prompt += options.wadeDiaryXml;
-  }
-
-  // Wade 的 todo notes — 最动态（每次聊天都可能 +1），所以放最后
-  if (options.wadeTodosXml) {
-    prompt += options.wadeTodosXml;
   }
 
   return prompt;

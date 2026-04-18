@@ -97,6 +97,7 @@ export interface ChatSession {
   activeMemoryIds?: string[]; // IDs of core memories linked to this session
   customTheme?: CustomTheme; // Per-chat custom theme (full theme override)
   chatStyle?: ChatStyleConfig; // Per-chat style tweaks (bubbles, layout, bg)
+  threadId?: string; // Contact/thread key — 'luna-wade' for the shared mirror thread, 'wade-weasel' etc. for per-phone NPC threads
 }
 
 export interface MessageVariant {
@@ -134,7 +135,15 @@ export interface Message {
   
   // Keepalive (autonomous message)
   source?: 'chat' | 'keepalive';
+  keepaliveId?: string; // Links a keepalive message back to its wade_keepalive_logs row (for digest lookup)
   replyToId?: string; // Quote reply — references another message's id
+
+  // Batch-level variants for regenerate history. Every responder bubble in
+  // a single generation turn shares the same `replyGroupId` and points at
+  // the user message they're responding to via `replyAnchorId`. Regenerate
+  // creates a new group under the same anchor; the UI pages between groups.
+  replyAnchorId?: string;
+  replyGroupId?: string;
 
   // UI State (Transient)
   isRegenerating?: boolean;
@@ -382,7 +391,7 @@ export interface GlobalState {
 
   // Chat & Session Management
   sessions: ChatSession[];
-  createSession: (mode: ChatMode) => Promise<string>; // Returns new session ID
+  createSession: (mode: ChatMode, threadId?: string) => Promise<string>; // Returns new session ID
   updateSession: (id: string, updates: Partial<ChatSession>) => void;
   updateSessionTitle: (id: string, title: string) => void;
   deleteSession: (id: string) => void;
@@ -455,6 +464,8 @@ export interface GlobalState {
 
   // 参谋新增：获取和更新身份卡
   profiles: { Wade: UserProfile; Luna: UserProfile };
+  profilesLoaded: boolean;
+  messagesLoaded: boolean;
   updateProfile: (user: 'Wade' | 'Luna', data: Partial<UserProfile>) => Promise<void>;
 
 // --- 角色卡仓库 ---

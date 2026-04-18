@@ -442,24 +442,69 @@ async function callLlm(llm, prompt, mode) {
 
 // ========== Action Executors ==========
 
+// Normalize a raw Wade message into sensible chat bubbles. Different models
+// disagree wildly on how to split: some over-split ("h|||i|||babe"), some
+// forget `|||` entirely and dump one blob. This post-process pass guards
+// against both failure modes so the UI always gets a reasonable number of
+// well-sized bubbles.
+//
+// Rules:
+//  - Split on `|||` first (Wade's explicit marker)
+//  - If only ONE segment came back but it has blank-line paragraphs,
+//    fall back to splitting on `\n\n` (rescue missed-split models)
+//  - Drop segments that are purely <status>/<think> tags (ghost bubbles)
+//  - Merge segments under 10 visible chars into the next one (fix over-split)
+//  - Cap at 5 bubbles per wake
+const MIN_SEGMENT_CHARS = 10;
+const MAX_BUBBLES = 5;
+
+function stripGhostTags(s) {
+  return s
+    .replace(/<status>[\s\S]*?<\/status>/gi, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .trim();
+}
+
+function normalizeSegments(content) {
+  if (!content) return [];
+
+  // 1. Split on explicit marker
+  let segments = content.split('|||').map(s => s.trim()).filter(Boolean);
+
+  // 2. Missed-split rescue: one big blob with blank-line paragraphs
+  if (segments.length === 1 && /\n\s*\n/.test(segments[0])) {
+    segments = segments[0].split(/\n\s*\n+/).map(s => s.trim()).filter(Boolean);
+  }
+
+  // 3. Drop ghost-only segments
+  segments = segments.filter(s => stripGhostTags(s).length > 0);
+
+  // 4. Merge over-split fragments (< MIN chars) into the next segment
+  const merged = [];
+  for (let i = 0; i < segments.length; i++) {
+    const visibleLen = stripGhostTags(segments[i]).length;
+    const isLast = i === segments.length - 1;
+    if (visibleLen < MIN_SEGMENT_CHARS && !isLast) {
+      segments[i + 1] = segments[i] + ' ' + segments[i + 1];
+      continue;
+    }
+    // Last tiny segment → glue onto previous instead of standing alone
+    if (visibleLen < MIN_SEGMENT_CHARS && isLast && merged.length > 0) {
+      merged[merged.length - 1] = merged[merged.length - 1] + ' ' + segments[i];
+      continue;
+    }
+    merged.push(segments[i]);
+  }
+
+  // 5. Hard cap
+  return merged.slice(0, MAX_BUBBLES);
+}
+
 async function executeMessage(content, keepaliveId, model) {
   const sessionId = await getMostRecentSmsSession();
   if (!sessionId) return;
 
-  // Split by ||| — each segment becomes its own message (text bomb mode)
-  // Ghost-bubble filter: drop segments that are nothing but <status>/<think> tags.
-  // Mirrors ChatInterface line ~702. Without this, MessageBubble's display-side
-  // strip turns these into empty bubbles and silently `return null`s them — DB
-  // keeps the row, UI swallows the message.
-  const segments = content
-    .split('|||')
-    .map(s => s.trim())
-    .filter(Boolean)
-    .filter(s => s
-      .replace(/<status>[\s\S]*?<\/status>/gi, '')
-      .replace(/<think>[\s\S]*?<\/think>/gi, '')
-      .trim().length > 0
-    );
+  const segments = normalizeSegments(content);
 
   for (let i = 0; i < segments.length; i++) {
     await supabase.from('messages_sms').insert({

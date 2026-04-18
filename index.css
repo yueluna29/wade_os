@@ -1,4 +1,16 @@
 :root, [data-theme="default"] {
+  /* Narration text color (chat POV cards) — overridable per phone */
+  --wade-narration-self-text: #c07a84;
+
+  /* Handwriting display font — used for contact names, etc. */
+  --font-hand: 'Pacifico', cursive;
+
+  /* Glass edges — used for modal/card borders and inner highlights.
+     Bright white works on light themes; dark themes dial this way down. */
+  --wade-glass-border: rgba(255, 255, 255, 0.6);
+  --wade-glass-highlight: rgba(255, 255, 255, 0.5);
+  --wade-glass-inset: rgba(255, 255, 255, 0.2);
+
   --wade-accent-rgb: 213, 143, 153;
   --wade-accent: #d58f99;
   --wade-accent-hover-rgb: 192, 122, 132;
@@ -33,6 +45,7 @@
   --wade-bubble-luna-rgb: var(--wade-accent-rgb);
   --wade-bubble-luna-text: #ffffff;
   --wade-bubble-wade: var(--wade-bg-card);
+  --wade-bubble-wade-text: var(--wade-text-main);
 
   --wade-shadow-glow: 0 4px 12px rgba(var(--wade-accent-rgb), 0.4);
 }
@@ -258,6 +271,66 @@ body {
 
 .animate-slide-up {
   animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Phone-level theme overrides
+
+   Same TSX, different look. Whatever variables you redeclare inside
+   .luna-phone or .wade-phone will cascade to all wade-* Tailwind classes
+   inside that container. Variables left out keep the global :root values.
+
+   Future: ThemeStudio can write into these blocks per phone.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.luna-phone {
+  /* Luna keeps the global pink palette by default — override here when needed.
+     Example:
+     --wade-accent: #E83E8C;
+     --wade-accent-rgb: 232, 62, 140;
+  */
+}
+
+.wade-phone {
+  /* Wade's classic Deadpool red on warm charcoal. */
+  --wade-accent: #97181A;
+  --wade-accent-rgb: 151, 24, 26;
+  --wade-accent-hover: #7a1316;
+  --wade-accent-hover-rgb: 122, 19, 22;
+  --wade-accent-light: #2a1516;
+  --wade-accent-light-rgb: 42, 21, 22;
+
+  --wade-bg-base: #1f1f1f;
+  --wade-bg-base-rgb: 31, 31, 31;
+  --wade-bg-card: #303030;
+  --wade-bg-card-rgb: 48, 48, 48;
+  --wade-bg-app: #282828;
+  --wade-bg-app-rgb: 40, 40, 40;
+
+  --wade-text-main: #ededed;
+  --wade-text-main-rgb: 237, 237, 237;
+  --wade-text-muted: #9a9a9a;
+  --wade-text-muted-rgb: 154, 154, 154;
+
+  --wade-border: #3a3a3a;
+  --wade-border-rgb: 58, 58, 58;
+  --wade-border-light: #424242;
+  --wade-border-light-rgb: 66, 66, 66;
+
+  /* Soft warm white that reads cleanly on #282828 */
+  --wade-narration-self-text: #f5e3e6;
+
+  /* Wade-phone bubble palette: self = Wade red, other = soft pink */
+  --wade-bubble-luna: #97181A;
+  --wade-bubble-luna-rgb: 151, 24, 26;
+  --wade-bubble-luna-text: #ffffff;
+  --wade-bubble-wade: #e296b2;
+  --wade-bubble-wade-text: #2a1516;
+
+  /* Soften glass edges dramatically on dark — white at high opacity = harsh glow on charcoal */
+  --wade-glass-border: rgba(255, 255, 255, 0.08);
+  --wade-glass-highlight: rgba(255, 255, 255, 0.06);
+  --wade-glass-inset: rgba(255, 255, 255, 0.08);
 }
 
 /* Scale in animation for modal */

@@ -44,7 +44,7 @@ export const FocusModalEditor = ({ label, initialValue, onSave, onClose }: any) 
               value={val}
               onChange={(e) => setVal(e.target.value)}
               placeholder="Write the details here..."
-              className="w-full flex-1 px-4 py-4 rounded-xl border border-wade-border bg-wade-bg-base text-wade-text-main focus:outline-none focus:border-wade-accent min-h-[40vh] text-sm resize-none transition-colors custom-scrollbar leading-relaxed"
+              className="w-full flex-1 px-4 py-4 rounded-xl border border-wade-border bg-wade-bg-base text-wade-text-main/70 focus:outline-none focus:border-wade-accent min-h-[40vh] text-sm resize-none transition-colors custom-scrollbar leading-relaxed"
             />
           </div>
         </div>

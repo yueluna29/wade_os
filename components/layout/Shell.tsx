@@ -2,13 +2,31 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store';
 import { Icons } from '../ui/Icons';
+import { FloatingActionButton } from '../ui/FloatingActionButton';
+import { Cat, Skull } from 'lucide-react';
 
 interface ShellProps {
   children: React.ReactNode;
 }
 
+// Tabs that "belong to" a particular phone — Shell uses this to theme the
+// nav + outer frame so navigating into Wade's space turns everything dark.
+// Tabs that aren't in either set (home / social / settings / shared apps)
+// fall back to the global :root palette.
+const LUNA_PHONE_TABS = new Set([
+  'luna-phone', 'chat-list', 'divination', 'favorites',
+]);
+const WADE_PHONE_TABS = new Set([
+  'wade-phone', 'wade-chat-list', 'memory', 'wade-memory', 'journal', 'wade-todos',
+]);
+
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const { currentTab, setTab, isNavHidden } = useStore();
+  const phoneClass = LUNA_PHONE_TABS.has(currentTab)
+    ? 'luna-phone'
+    : WADE_PHONE_TABS.has(currentTab)
+      ? 'wade-phone'
+      : '';
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
@@ -72,8 +90,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
   };
 
   return (
-    <div 
-      className="fixed inset-0 w-full flex items-center justify-center bg-wade-border p-0 md:p-6 overflow-hidden"
+    <div
+      className={`${phoneClass} fixed inset-0 w-full flex items-center justify-center bg-wade-border p-0 md:p-6 overflow-hidden transition-colors duration-300`}
       style={{ height: viewportHeight, top: viewportTop }}
     >
       
@@ -86,8 +104,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               <Icons.Home className={`w-6 h-6 md:w-5 md:h-5 ${currentTab === 'home' ? 'stroke-[2.5px] fill-wade-accent/10' : 'stroke-[1.5px]'}`} />
             </button>
 
-            <button onClick={() => setTab('social')} className={`p-3 md:p-1.5 transition-all duration-300 ${currentTab === 'social' ? 'text-wade-accent scale-110' : 'text-wade-accent/50 hover:text-wade-accent/80 scale-90'}`}>
-              <Icons.Social className={`w-6 h-6 md:w-5 md:h-5 ${currentTab === 'social' ? 'stroke-[2.5px] fill-wade-accent/10' : 'stroke-[1.5px]'}`} />
+            <button onClick={() => setTab('luna-phone')} className={`p-3 md:p-1.5 transition-all duration-300 ${currentTab === 'luna-phone' ? 'text-wade-accent scale-110' : 'text-wade-accent/50 hover:text-wade-accent/80 scale-90'}`}>
+              <Cat className={`w-6 h-6 md:w-5 md:h-5 ${currentTab === 'luna-phone' ? 'stroke-[2.5]' : 'stroke-[1.5]'}`} strokeWidth={currentTab === 'luna-phone' ? 2.5 : 1.5} />
             </button>
 
             {/* PLUS BUTTON & POPUP MENU */}
@@ -103,57 +121,17 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
                  className={`fixed z-[100] transition duration-300 ${isMenuOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'} ${isDesktop ? 'translate-x-0 -translate-y-1/2' : '-translate-x-1/2 -translate-y-full'}`}
                >
 
-                 <div className="bg-wade-bg-card/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-wade-accent/20 p-4 md:p-2 rounded-2xl grid grid-cols-4 gap-y-4 gap-x-4 md:flex md:flex-col md:gap-2 items-center min-w-[280px] md:min-w-0 justify-items-center">
-                   
-                   <button onClick={() => handleMenuClick('memory')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Brain className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Brain</span>
+                 <div className="bg-wade-bg-card/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-wade-accent/20 p-4 md:p-2 rounded-2xl flex flex-row md:flex-col gap-4 md:gap-2 items-center justify-center">
+
+                   <button onClick={() => handleMenuClick('social')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
+                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Social className="w-5 h-5 stroke-[1.5px]" /></div>
+                      <span className="text-[10px] font-bold text-wade-text-muted">Social</span>
                    </button>
 
-                   <button onClick={() => handleMenuClick('wade-memory')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Infinity className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Recall</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('divination')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Fate className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Fate</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('favorites')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Star className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Favs</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('settings')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Settings className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">System</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('wade-picks')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Picks className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Picks</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('theme-lab')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Skin className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Theme</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('health')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Activity className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Meds</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('journal')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Journal className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Journal</span>
-                   </button>
-
-                   <button onClick={() => handleMenuClick('wade-todos')} className="flex flex-col items-center gap-1 group w-14 active:scale-95 transition-transform">
-                      <div className="p-2.5 bg-wade-bg-app group-hover:bg-wade-accent-light rounded-xl text-wade-accent transition-colors"><Icons.Pin className="w-5 h-5 stroke-[1.5px]" /></div>
-                      <span className="text-[10px] font-bold text-wade-text-muted">Notes</span>
-                   </button>
+                   <div className="flex flex-col items-center gap-1 w-14 opacity-30">
+                      <div className="p-2.5 bg-wade-bg-app rounded-xl text-wade-accent/50"><Icons.Plus className="w-5 h-5 stroke-[1.5px]" /></div>
+                      <span className="text-[10px] font-bold text-wade-text-muted">Soon</span>
+                   </div>
 
                  </div>
                  {/* Mobile Triangle (Pointing Down) */}
@@ -176,18 +154,19 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
               </button>
             </div>
 
-            <button onClick={() => setTab('chat')} className={`p-3 md:p-1.5 transition-all duration-300 ${currentTab === 'chat' ? 'text-wade-accent scale-110' : 'text-wade-accent/50 hover:text-wade-accent/80 scale-90'}`}>
-              <Icons.Chat className={`w-6 h-6 md:w-5 md:h-5 ${currentTab === 'chat' ? 'stroke-[2.5px] fill-wade-accent/10' : 'stroke-[1.5px]'}`} />
+            <button onClick={() => setTab('wade-phone')} className={`p-3 md:p-1.5 transition-all duration-300 ${currentTab === 'wade-phone' ? 'text-wade-accent scale-110' : 'text-wade-accent/50 hover:text-wade-accent/80 scale-90'}`}>
+              <Skull className={`w-6 h-6 md:w-5 md:h-5 ${currentTab === 'wade-phone' ? 'stroke-[2.5]' : 'stroke-[1.5]'}`} strokeWidth={currentTab === 'wade-phone' ? 2.5 : 1.5} />
             </button>
 
-            <button onClick={() => setTab('persona')} className={`p-3 md:p-1.5 transition-all duration-300 ${currentTab === 'persona' ? 'text-wade-accent scale-110' : 'text-wade-accent/50 hover:text-wade-accent/80 scale-90'}`}>
-              <Icons.User className={`w-6 h-6 md:w-5 md:h-5 ${currentTab === 'persona' ? 'stroke-[2.5px] fill-wade-accent/10' : 'stroke-[1.5px]'}`} />
+            <button onClick={() => setTab('settings')} className={`p-3 md:p-1.5 transition-all duration-300 ${currentTab === 'settings' ? 'text-wade-accent scale-110' : 'text-wade-accent/50 hover:text-wade-accent/80 scale-90'}`}>
+              <Icons.Settings className={`w-6 h-6 md:w-5 md:h-5 ${currentTab === 'settings' ? 'stroke-[2.5px] fill-wade-accent/10' : 'stroke-[1.5px]'}`} />
             </button>
 
           </nav>
 
         <main className="flex-1 h-full overflow-hidden relative order-1 md:order-2 bg-wade-bg-app">
           {children}
+          <FloatingActionButton />
         </main>
 
       </div>
