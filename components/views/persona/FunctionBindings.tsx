@@ -90,16 +90,22 @@ export const FunctionBindings: React.FC = () => {
   // settings field (if the function has one) — that way existing callers
   // like ChatInterfaceMixed's memory retrieval keep reading the right value
   // without needing a rewire.
+  // Pass `label` alongside the field change so updateFunctionBinding can
+  // auto-insert the row with a readable label if it doesn't exist yet.
+  // For custom functions we don't have a known label here, so just leave it.
+  const labelFor = (key: string): string | undefined =>
+    SYSTEM_FUNCTIONS.find(f => f.key === key)?.label;
+
   const setApiFor = (func: typeof SYSTEM_FUNCTIONS[number], llmId: string) => {
     const next = llmId || undefined;
-    updateFunctionBinding(func.key, { llmPresetId: next });
+    updateFunctionBinding(func.key, { llmPresetId: next, label: labelFor(func.key) });
     if (func.settingsKey) {
       updateSettings({ [func.settingsKey]: next || '' } as any);
     }
   };
 
   const setSysFor = (funcKey: string, systemCardId: string) => {
-    updateFunctionBinding(funcKey, { systemCardId: systemCardId || undefined });
+    updateFunctionBinding(funcKey, { systemCardId: systemCardId || undefined, label: labelFor(funcKey) });
   };
 
   return (

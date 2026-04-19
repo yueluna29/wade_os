@@ -1442,6 +1442,37 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     // ========== 功能绑定 CRUD ==========
    
     const updateFunctionBinding = async (functionKey: string, updates: Partial<FunctionBinding>) => {
+      const existing = functionBindings.find(b => b.functionKey === functionKey);
+
+      // Auto-create the row if it doesn't exist yet. Otherwise .update() hits
+      // zero rows and the selection silently vanishes — this happens for any
+      // SYSTEM_FUNCTIONS entry that's in the UI but has never been saved.
+      if (!existing) {
+        const insertRow: any = {
+          function_key: functionKey,
+          label: updates.label || functionKey,
+          persona_card_id: updates.personaCardId || null,
+          system_card_id: updates.systemCardId || null,
+          llm_preset_id: updates.llmPresetId || null,
+        };
+        const { data, error } = await supabase
+          .from('function_bindings')
+          .insert(insertRow)
+          .select()
+          .single();
+        if (data && !error) {
+          setFunctionBindings(prev => [...prev, {
+            id: data.id,
+            functionKey: data.function_key,
+            label: data.label,
+            personaCardId: data.persona_card_id,
+            systemCardId: data.system_card_id,
+            llmPresetId: data.llm_preset_id,
+          }]);
+        }
+        return;
+      }
+
       const dbUpdates: any = { updated_at: new Date().toISOString() };
       if (updates.label !== undefined) dbUpdates.label = updates.label;
       if (updates.personaCardId !== undefined) dbUpdates.persona_card_id = updates.personaCardId || null;
