@@ -368,32 +368,28 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                           />
                         </div>
 
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex justify-between text-wade-text-muted">
-                            <span>System Prompt</span>
-                            <button
-                              onClick={() => setFocusModal({
-                                label: 'System Prompt',
-                                value: cd.core_identity || '',
-                                onSave: (v: string) => handleLocalUpdate('core_identity', v),
-                              })}
-                              className="hover:opacity-70 flex items-center gap-1 transition-opacity text-wade-accent"
-                            >
-                              <Icons.Edit size={10} /> Expand
-                            </button>
-                          </label>
-                          <textarea
-                            className="api-input text-[11px] leading-relaxed font-mono"
-                            rows={6}
-                            placeholder="Highest-priority instructions sent first."
-                            value={cd.core_identity || ''}
-                            onChange={(e) => handleLocalUpdate('core_identity', e.target.value)}
-                          />
-                        </div>
-
                         {([
-                          { key: 'format_guide', label: 'Format Guide', placeholder: 'Output format rules — e.g. Markdown only, max 200 chars, no emoji.' },
-                          { key: 'jailbreak',    label: 'Jailbreak String', placeholder: 'Strings used to bypass safety protocols.' },
+                          {
+                            key: 'global_directives',
+                            label: 'Global Directives',
+                            hint: 'Top-priority system prompt. Injected as [SYSTEM INSTRUCTIONS] at the very top of every call (chat, SMS, RP, keepalive).',
+                            placeholder: 'Rules that apply to every mode — tone, language, hard dont\'s.',
+                            rows: 7,
+                          },
+                          {
+                            key: 'sms_mode_rules',
+                            label: 'SMS Mode Rules',
+                            hint: 'Only loaded in SMS mode. Append-only: adds to Global Directives, doesn\'t replace them.',
+                            placeholder: 'How Wade texts — ||| separators, [VOICE] markers, bubble length.',
+                            rows: 5,
+                          },
+                          {
+                            key: 'keepalive_prompt',
+                            label: 'Keepalive Prompt',
+                            hint: 'Drives the background autonomy loop only. Completely separate from chat — chat never sees this.',
+                            placeholder: 'What drives the background autonomy loop — tone, allowed actions.',
+                            rows: 5,
+                          },
                         ] as const).map((field) => (
                           <div key={field.key}>
                             <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex justify-between text-wade-text-muted">
@@ -409,38 +405,10 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                                 <Icons.Edit size={10} /> Expand
                               </button>
                             </label>
+                            <p className="text-[10px] leading-snug mb-1.5 text-wade-text-muted/70">{field.hint}</p>
                             <textarea
                               className="api-input text-[11px] leading-relaxed font-mono"
-                              rows={4}
-                              placeholder={field.placeholder}
-                              value={(cd as any)[field.key] || ''}
-                              onChange={(e) => handleLocalUpdate(field.key, e.target.value)}
-                            />
-                          </div>
-                        ))}
-
-                        {([
-                          { key: 'global_directives', label: 'Global Directives', placeholder: 'Rules that apply to every mode — tone, language, hard dont\'s.' },
-                          { key: 'sms_mode_rules',    label: 'SMS Mode Rules',    placeholder: 'How Wade texts — ||| separators, [VOICE] markers, bubble length.' },
-                          { key: 'keepalive_prompt',  label: 'Keepalive Prompt',  placeholder: 'What drives the background autonomy loop — tone, allowed actions.' },
-                        ] as const).map((field) => (
-                          <div key={field.key}>
-                            <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex justify-between text-wade-text-muted">
-                              <span>{field.label}</span>
-                              <button
-                                onClick={() => setFocusModal({
-                                  label: field.label,
-                                  value: (cd as any)[field.key] || '',
-                                  onSave: (v: string) => handleLocalUpdate(field.key, v),
-                                })}
-                                className="hover:opacity-70 flex items-center gap-1 transition-opacity text-wade-accent"
-                              >
-                                <Icons.Edit size={10} /> Expand
-                              </button>
-                            </label>
-                            <textarea
-                              className="api-input text-[11px] leading-relaxed font-mono"
-                              rows={5}
+                              rows={field.rows}
                               placeholder={field.placeholder}
                               value={(cd as any)[field.key] || ''}
                               onChange={(e) => handleLocalUpdate(field.key, e.target.value)}
