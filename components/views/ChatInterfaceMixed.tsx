@@ -2423,12 +2423,17 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               </div>
 
               {/* POV one-shot — next send is wrapped as [POV] narration. */}
-              {/* onMouseDown preventDefault keeps the textarea focused so the
-                  mobile keyboard stays up when toggling POV mid-typing. */}
+              {/* Refocus the textarea right after toggling so the mobile
+                  keyboard doesn't dismiss. onMouseDown preventDefault
+                  would be cleaner on desktop but it silently blocks the
+                  synthetic click on iOS Safari, which is what broke the
+                  toggle on Luna's phone. */}
               <button
                 type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setPovMode((v) => !v)}
+                onClick={() => {
+                  setPovMode((v) => !v);
+                  textareaRef.current?.focus();
+                }}
                 aria-pressed={povMode}
                 aria-label={povMode ? 'Cancel POV mode' : 'Send next message as POV narration'}
                 title={povMode ? 'Next send: POV (click to cancel)' : 'Send as POV narration'}
