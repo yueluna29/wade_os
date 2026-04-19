@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
 import { GoogleGenAI } from '@google/genai';
 import { generateMinimaxTTS } from '../../services/minimaxService';
@@ -16,6 +16,114 @@ const PROVIDERS = [
   { value: 'OpenRouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', defaultModel: '' },
   { value: 'Custom', label: 'Custom', baseUrl: '', defaultModel: '' },
 ];
+
+// Shared buffering hook: every keystroke used to hit Supabase
+// (updatePersonaCard / etc. are async DB writes), which re-rendered the
+// controlled input and wiped the browser's native undo stack — so Ctrl+Z
+// did nothing. We keep local state while typing, only pushing to the store
+// on blur / unmount / explicit flush, so native undo works normally.
+function useBufferedValue(value: string, onSave: (v: string) => void) {
+  const [local, setLocal] = useState(value ?? '');
+  const latest = useRef(local);
+  const savedRef = useRef(value ?? '');
+  latest.current = local;
+
+  useEffect(() => {
+    if (value !== savedRef.current) {
+      setLocal(value ?? '');
+      savedRef.current = value ?? '';
+    }
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (latest.current !== savedRef.current) {
+        onSave(latest.current);
+      }
+    };
+  }, [onSave]);
+
+  const flush = () => {
+    if (local !== savedRef.current) {
+      savedRef.current = local;
+      onSave(local);
+    }
+  };
+
+  return { local, setLocal, flush };
+}
+
+const BufferedInput: React.FC<
+  Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur'> & {
+    value: string;
+    onSave: (v: string) => void;
+  }
+> = ({ value, onSave, ...rest }) => {
+  const { local, setLocal, flush } = useBufferedValue(value, onSave);
+  return (
+    <input
+      {...rest}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={flush}
+    />
+  );
+};
+
+const BufferedTextarea: React.FC<
+  Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange' | 'onBlur'> & {
+    value: string;
+    onSave: (v: string) => void;
+  }
+> = ({ value, onSave, ...rest }) => {
+  const { local, setLocal, flush } = useBufferedValue(value, onSave);
+  return (
+    <textarea
+      {...rest}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={flush}
+    />
+  );
+};
+
+const SystemTextareaField: React.FC<{
+  fieldKey: string;
+  label: string;
+  hint: string;
+  placeholder: string;
+  rows: number;
+  value: string;
+  onSave: (v: string) => void;
+  onExpand: (current: string) => void;
+}> = ({ label, hint, placeholder, rows, value, onSave, onExpand }) => {
+  const { local, setLocal, flush } = useBufferedValue(value, onSave);
+  return (
+    <div>
+      <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex justify-between text-wade-text-muted">
+        <span>{label}</span>
+        <button
+          onClick={() => {
+            flush();
+            onExpand(local);
+          }}
+          className="hover:opacity-70 flex items-center gap-1 transition-opacity text-wade-accent"
+        >
+          <Icons.Edit size={10} /> Expand
+        </button>
+      </label>
+      <p className="text-[10px] leading-snug mb-1.5 text-wade-text-muted/70">{hint}</p>
+      <textarea
+        className="api-input text-[11px] leading-relaxed font-mono"
+        rows={rows}
+        placeholder={placeholder}
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={flush}
+      />
+    </div>
+  );
+};
 
 const ProviderIcon: React.FC<{ provider: string; size?: number; className?: string }> = ({ provider, size = 16, className }) => {
   switch (provider) {
@@ -338,9 +446,10 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                             <Icons.Back size={14} />
                           </button>
                           <div>
-                            <input
+                            <BufferedInput
+                              key={`${card.id}:name`}
                               value={card.name}
-                              onChange={(e) => updatePersonaCard(card.id, { name: e.target.value })}
+                              onSave={(v) => updatePersonaCard(card.id, { name: v })}
                               className="font-bold text-sm bg-transparent border-none outline-none p-0 focus:ring-0 w-full text-wade-text-main"
                               placeholder="Name this personality..."
                             />
@@ -359,12 +468,13 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                       <div className="p-5 space-y-4">
                         <div>
                           <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 block text-wade-text-muted">Short Description</label>
-                          <textarea
+                          <BufferedTextarea
+                            key={`${card.id}:description`}
                             className="api-input text-xs leading-relaxed"
                             rows={2}
                             placeholder="What's the vibe?"
                             value={card.description || ''}
-                            onChange={(e) => updatePersonaCard(card.id, { description: e.target.value })}
+                            onSave={(v) => updatePersonaCard(card.id, { description: v })}
                           />
                         </div>
 
@@ -391,29 +501,21 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                             rows: 5,
                           },
                         ] as const).map((field) => (
-                          <div key={field.key}>
-                            <label className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex justify-between text-wade-text-muted">
-                              <span>{field.label}</span>
-                              <button
-                                onClick={() => setFocusModal({
-                                  label: field.label,
-                                  value: (cd as any)[field.key] || '',
-                                  onSave: (v: string) => handleLocalUpdate(field.key, v),
-                                })}
-                                className="hover:opacity-70 flex items-center gap-1 transition-opacity text-wade-accent"
-                              >
-                                <Icons.Edit size={10} /> Expand
-                              </button>
-                            </label>
-                            <p className="text-[10px] leading-snug mb-1.5 text-wade-text-muted/70">{field.hint}</p>
-                            <textarea
-                              className="api-input text-[11px] leading-relaxed font-mono"
-                              rows={field.rows}
-                              placeholder={field.placeholder}
-                              value={(cd as any)[field.key] || ''}
-                              onChange={(e) => handleLocalUpdate(field.key, e.target.value)}
-                            />
-                          </div>
+                          <SystemTextareaField
+                            key={`${card.id}:${field.key}`}
+                            fieldKey={field.key}
+                            label={field.label}
+                            hint={field.hint}
+                            placeholder={field.placeholder}
+                            rows={field.rows}
+                            value={(cd as any)[field.key] || ''}
+                            onSave={(v) => handleLocalUpdate(field.key, v)}
+                            onExpand={(current) => setFocusModal({
+                              label: field.label,
+                              value: current,
+                              onSave: (v: string) => handleLocalUpdate(field.key, v),
+                            })}
+                          />
                         ))}
 
                         <div className="pt-4 border-t border-wade-border/50 mt-4 flex justify-end">
