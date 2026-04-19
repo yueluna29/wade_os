@@ -226,7 +226,7 @@ export const MedsApp: React.FC = () => {
         {/* Action card */}
         <div className={`relative w-full rounded-[28px] border p-6 flex flex-col items-center text-center transition-all duration-500 ${status.cardClass}`}>
           {!selectedIsToday && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-[9px] font-bold tracking-[0.2em] uppercase text-wade-text-muted">
+            <div className="text-[9px] font-bold tracking-[0.2em] uppercase text-wade-text-muted mb-4">
               {selectedLabel}
             </div>
           )}
