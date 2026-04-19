@@ -568,6 +568,18 @@ export const interpretTarot = async (cardName: string, question: string, apiKey?
  * Falls back to returning the previousSummary on any error so a broken
  * summary call never wipes existing context.
  */
+// Detect when the summarizer echoed a raw transcript instead of producing
+// a summary. A legit summary is narrative prose; an echo has many lines
+// that start with "Luna:" / "Wade:" (the speaker labels we fed in). Three
+// or more such line-starts is almost certainly a bad echo — weak models
+// (notably GLM-5, some self-hosted) occasionally do this. Used to gate
+// the return so we don't silently overwrite a good summary with garbage.
+function looksLikeTranscript(text: string): boolean {
+  if (!text) return false;
+  const speakerLines = text.match(/^\s*(Luna|Wade)\s*[:：]/gm) || [];
+  return speakerLines.length >= 3;
+}
+
 export const summarizeConversation = async (
   messages: any[],
   previousSummary: string,
@@ -617,7 +629,12 @@ ${conversationText}
       });
       if (!response.ok) throw new Error(`Summary API ${response.status}: ${(await response.text()).slice(0, 200)}`);
       const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || previousSummary;
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (looksLikeTranscript(raw)) {
+        console.warn('[Summary] LLM echoed transcript — rejecting, keeping previous summary');
+        return previousSummary;
+      }
+      return raw || previousSummary;
     } else {
       // OpenAI-compatible (OpenRouter, Claude, DeepSeek, Custom, etc.)
       const baseUrl = (preset.baseUrl || '').replace(/\/$/, '');
@@ -642,7 +659,12 @@ ${conversationText}
       if (!response.ok) throw new Error(`Summary API ${response.status}: ${(await response.text()).slice(0, 200)}`);
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content;
-      return content?.trim() || previousSummary;
+      const trimmed = content?.trim() || '';
+      if (looksLikeTranscript(trimmed)) {
+        console.warn('[Summary] LLM echoed transcript — rejecting, keeping previous summary');
+        return previousSummary;
+      }
+      return trimmed || previousSummary;
     }
   } catch (error) {
     console.error('[Summary] Generation failed:', error);
