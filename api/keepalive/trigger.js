@@ -120,13 +120,31 @@ async function getKeepaliveBinding() {
   return binding || {};
 }
 
-async function getWadePersona(binding) {
-  if (binding?.persona_card_id) {
-    const { data: boundCard } = await supabase.from('persona_cards').select('card_data').eq('id', binding.persona_card_id).maybeSingle();
-    if (boundCard?.card_data) return boundCard.card_data;
-  }
-  const { data } = await supabase.from('persona_cards').select('card_data').eq('character', 'Wade').eq('is_default', true).limit(1).single();
-  return data?.card_data || {};
+// Wade's persona card is now built from the Me tab fields in app_settings —
+// same source as the chat UI (services/personaBuilder.ts). No more fallback
+// to persona_cards; Me is the single source of truth. Fields the Me tab
+// doesn't expose (global_directives, keepalive_prompt) fall through to the
+// System card in buildKeepalivePrompt.
+async function getWadePersona(_binding) {
+  const { data } = await supabase.from('app_settings').select('*').eq('id', 1).maybeSingle();
+  if (!data) return {};
+  return {
+    core_identity: data.wade_personality || '',
+    personality_traits: data.wade_personality_traits || '',
+    speech_patterns: data.wade_speech_patterns || '',
+    appearance: data.wade_appearance || '',
+    clothing: data.wade_clothing || '',
+    likes: data.wade_likes || '',
+    dislikes: data.wade_dislikes || '',
+    hobbies: data.wade_hobbies || '',
+    birthday: data.wade_birthday || '',
+    mbti: data.wade_mbti || '',
+    height: data.wade_height || '',
+    avatar_url: data.wade_avatar || '',
+    example_dialogue_general: data.example_dialogue || '',
+    example_punchlines: data.wade_single_examples || '',
+    example_dialogue_sms: data.sms_example_dialogue || '',
+  };
 }
 
 async function getSystemCard(binding) {

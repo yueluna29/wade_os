@@ -303,6 +303,8 @@ export interface AppSettings {
   wadeHobbies?: string;
   wadeBirthday?: string; // 👈 加上这行，给 Wade 登记生日！
   wadeMbti?: string;    // 👈 加上这行，给 Wade 登记 MBTI！
+  wadePersonalityTraits?: string;
+  wadeSpeechPatterns?: string;
 
   // Luna's Side
   lunaInfo: string;
@@ -316,6 +318,8 @@ export interface AppSettings {
   lunaClothing?: string;
   lunaAppearance?: string;
   lunaPersonality?: string;
+  lunaPersonalityTraits?: string;
+  lunaSpeechPatterns?: string;
 
   lunaCoverUrl: string;
   wadeCoverUrl: string;

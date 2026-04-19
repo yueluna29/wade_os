@@ -151,6 +151,8 @@ export const MeTab: React.FC<MeTabProps> = ({ phoneOwner }) => {
             setFocus={setFocus}
             isFirst
           />
+          <Row label="Personality Traits" value={f('PersonalityTraits')} onSave={setF('PersonalityTraits')} setFocus={setFocus} />
+          <Row label="Speech Patterns" value={f('SpeechPatterns')} onSave={setF('SpeechPatterns')} setFocus={setFocus} />
           <Row label="Appearance" value={f('Appearance')} onSave={setF('Appearance')} setFocus={setFocus} />
           <Row label="Clothing" value={f('Clothing')} onSave={setF('Clothing')} setFocus={setFocus} isLast />
         </Section>

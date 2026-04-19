@@ -8,6 +8,7 @@ import { supabase } from '../../services/supabase';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { generateFromCard, generateChatTitle, summarizeConversation } from '../../services/aiService';
 import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory } from '../../services/memoryService';
+import { buildCardFromSettings } from '../../services/personaBuilder';
 import type { Message as StoreMessage, ChatSession } from '../../types';
 import {
   CheckCheck, Check, HeartPulse,
@@ -1227,8 +1228,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         throw new Error('No API Key configured. Please set up an API in Settings.');
       }
 
-      const wadeCard = binding?.personaCard?.cardData || getDefaultPersonaCard('Wade')?.cardData;
-      const lunaCard = getDefaultPersonaCard('Luna')?.cardData;
+      // Luna/Wade identity cards are now built on-the-fly from the Me tab
+      // fields (settings.luna* / settings.wade*) — single source of truth.
+      // The old personaCard / functionBinding toggles for Wade/Luna are
+      // bypassed here; only System still reads from the persona_cards table.
+      const wadeCard = buildCardFromSettings('Wade', settings);
+      const lunaCard = buildCardFromSettings('Luna', settings);
       const systemBindingCardId = functionBindings.find((b) => b.functionKey === 'chat_sms')?.systemCardId;
       const boundSystemCard = systemBindingCardId ? personaCards.find((c) => c.id === systemBindingCardId) : undefined;
       const systemCard = boundSystemCard?.cardData || getDefaultPersonaCard('System')?.cardData;
