@@ -2460,7 +2460,24 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               </button>
               <button
                 onClick={() => {
-                  if (editingMessageId) updateMessage(editingMessageId, editDraft);
+                  if (editingMessageId) {
+                    // Preserve the original message's format markers so an
+                    // edit doesn't silently flip a POV / voice message into
+                    // a plain bubble. The modal shows cleaned text (no
+                    // asterisks / prefix), and we re-wrap on save.
+                    const original = storeMessages.find((m) => m.id === editingMessageId);
+                    const raw = (original?.text || '').trim();
+                    let toSave = editDraft;
+                    if (/^\*[\s\S]+\*$/.test(raw)) {
+                      const inner = editDraft.replace(/^\s*\*+|\*+\s*$/g, '').trim();
+                      toSave = inner ? `*${inner}*` : editDraft;
+                    } else if (/^\[VOICE\]/i.test(raw) && !/^\[VOICE\]/i.test(editDraft)) {
+                      toSave = `[VOICE] ${editDraft.replace(/^\s+/, '')}`;
+                    } else if (/^\[POV\]/i.test(raw) && !/^\[POV\]/i.test(editDraft)) {
+                      toSave = `[POV] ${editDraft.replace(/^\s+/, '')}`;
+                    }
+                    updateMessage(editingMessageId, toSave);
+                  }
                   setEditingMessageId(null);
                 }}
                 className="w-32 py-2.5 rounded-xl bg-wade-accent text-white text-xs font-bold hover:bg-wade-accent-hover shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5"
