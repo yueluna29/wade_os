@@ -1932,7 +1932,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 key={msg.id}
                 id={`msg-${msg.id}`}
                 onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
-                className={`w-full py-1.5 mb-2 ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl' : ''}`}
+                className={`w-full py-1.5 mb-2 animate-fade-in ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl' : ''}`}
               >
                 <div className={`relative w-full flex flex-col ${flexColAlign}`}>
                   {isSelected && (
@@ -2006,7 +2006,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               key={msg.id}
               id={`msg-${msg.id}`}
               onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
-              className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'} w-full ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${msg.isEcho ? 'opacity-90' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl py-1' : ''}`}
+              className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'} w-full animate-fade-in ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${msg.isEcho ? 'opacity-90' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl py-1' : ''}`}
             >
               <div className={`relative max-w-[80%] flex flex-col ${isSelf ? 'items-end' : 'items-start'} ${msg.isEcho ? 'ml-1' : ''}`}>
                 {/* SYSTEM DIGEST — mood + actions from this keepalive wake.
