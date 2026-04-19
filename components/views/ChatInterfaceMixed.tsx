@@ -372,12 +372,6 @@ function isLastInGroup(messages: Message[], index: number): boolean {
   const next = messages[index + 1];
   if (!next) return true;
   if (next.type === 'presence') return true;
-  // A regen group pager sits right after the last bubble of its group with
-  // the same role — without this, isLastInGroup would suppress the timestamp
-  // on the real bubble and the pager row (which has no time) would appear to
-  // replace it. Treating the pager as a group boundary keeps time+pager in
-  // the correct reading order.
-  if (next.type === 'group-pager') return true;
   return next.role !== current.role;
 }
 
@@ -580,6 +574,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // the `renderMessages` useMemo below reads it — must exist before that.
   const [activeGroupByAnchor, setActiveGroupByAnchor] = useState<Record<string, string>>({});
 
+  // While a regenerate is in flight, hide every already-existing group for
+  // the targeted anchor so the old reply visually disappears as soon as Luna
+  // clicks the button. Cleared the instant a NEW replyGroupId arrives (the
+  // first bubble of Wade's fresh reply), so the stream takes over naturally.
+  const [regenHidden, setRegenHidden] = useState<{ anchorId: string; groupIds: Set<string> } | null>(null);
+
   // Sessions that belong to this contact's thread. Every contact carries a
   // `threadId` — Luna-Wade is the shared 'luna-wade' thread (mirrors on both
   // phones); other contacts get per-phone keys like 'wade-weasel'.
@@ -704,23 +704,24 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     };
 
     // Walk the rendered list, dropping bubbles from inactive groups and
-    // injecting a synthetic 'group-pager' row AFTER the last bubble of each
-    // active group that has siblings. Non-batched bubbles (no anchor/group)
+    // attaching `groupPager` metadata to the LAST bubble of each active group
+    // that has siblings — so the pager renders inline next to the timestamp
+    // instead of living in its own row. Non-batched bubbles (no anchor/group)
     // pass through unchanged — keepalive echoes, legacy rows, etc.
     const filtered: Message[] = [];
-    const pagerEmitted = new Set<string>();
+    const pagerAttached = new Set<string>();
     for (let i = 0; i < all.length; i++) {
       const msg = all[i];
       const anchor = msg.replyAnchorId;
       const groupId = msg.replyGroupId;
       if (anchor && groupId) {
+        // Regen-hide: while Luna's fresh regen is in flight, swallow every
+        // pre-existing group for her anchor so the old reply vanishes.
+        if (regenHidden && anchor === regenHidden.anchorId && regenHidden.groupIds.has(groupId)) continue;
         if (groupId !== activeGroupId(anchor)) continue;
       }
-      filtered.push(msg);
-      // Detect: is this the LAST bubble of the current active group? Look
-      // ahead in `all` — if the next matching bubble for this (anchor,group)
-      // doesn't exist, we're at the tail.
-      if (anchor && groupId && !pagerEmitted.has(anchor)) {
+      let toPush: Message = msg;
+      if (anchor && groupId && !pagerAttached.has(anchor)) {
         const groups = groupsByAnchor.get(anchor) || [];
         if (groups.length > 1) {
           const isLastOfGroup = !all.slice(i + 1).some(
@@ -728,25 +729,94 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           );
           if (isLastOfGroup) {
             const currentIndex = groups.findIndex((g) => g.id === groupId);
-            filtered.push({
-              id: `pager-${anchor}-${groupId}`,
-              type: 'group-pager',
-              time: '',
-              role: msg.role,
+            toPush = {
+              ...msg,
               groupPager: {
                 anchorId: anchor,
                 totalGroups: groups.length,
                 currentIndex,
-                _ts: msg.time ? Date.now() : 0,
+                _ts: 0,
               },
-            });
-            pagerEmitted.add(anchor);
+            };
+            pagerAttached.add(anchor);
           }
         }
       }
+      filtered.push(toPush);
     }
     return filtered;
-  }, [isShowcase, storeMessages, resolvedSessionId, keepaliveLogs, activeGroupByAnchor]);
+  }, [isShowcase, storeMessages, resolvedSessionId, keepaliveLogs, activeGroupByAnchor, regenHidden]);
+
+  // Clear the regen-hide once a fresh reply group actually shows up, OR when
+  // the user navigates away mid-stream. Without this, a failed regen would
+  // leave the old reply stuck hidden forever.
+  useEffect(() => {
+    if (!regenHidden) return;
+    const hasNewGroup = storeMessages.some(
+      (m) =>
+        m.sessionId === resolvedSessionId &&
+        m.replyAnchorId === regenHidden.anchorId &&
+        !!m.replyGroupId &&
+        !regenHidden.groupIds.has(m.replyGroupId),
+    );
+    if (hasNewGroup) setRegenHidden(null);
+  }, [storeMessages, regenHidden, resolvedSessionId]);
+
+  useEffect(() => {
+    setRegenHidden(null);
+  }, [resolvedSessionId]);
+
+  // Safety: if the regen call fails or returns no bubbles, wadeStatus swings
+  // back to idle without any new group ever appearing. Don't leave the old
+  // reply stuck in the hidden state — restore it after typing ends.
+  useEffect(() => {
+    if (wadeStatus === 'typing') return;
+    if (!regenHidden) return;
+    setRegenHidden(null);
+  }, [wadeStatus, regenHidden]);
+
+  // Compact group-pager rendered inline inside the time/check footer of the
+  // last bubble of each regen group. Same logic as the standalone row it
+  // replaced — closes over storeMessages + setActiveGroupByAnchor so it
+  // always resolves group IDs against current state.
+  const renderGroupPagerInline = (pager: { anchorId: string; totalGroups: number; currentIndex: number }) => {
+    const { anchorId, totalGroups, currentIndex } = pager;
+    const setIndex = (next: number) => {
+      const clamped = ((next % totalGroups) + totalGroups) % totalGroups;
+      const list: { id: string; firstTs: number }[] = [];
+      for (const m2 of storeMessages) {
+        if (m2.sessionId !== resolvedSessionId) continue;
+        if (m2.replyAnchorId !== anchorId || !m2.replyGroupId) continue;
+        const ex = list.find((g) => g.id === m2.replyGroupId);
+        if (ex) ex.firstTs = Math.min(ex.firstTs, m2.timestamp);
+        else list.push({ id: m2.replyGroupId, firstTs: m2.timestamp });
+      }
+      list.sort((a, b) => a.firstTs - b.firstTs);
+      const target = list[clamped];
+      if (target) setActiveGroupByAnchor((prev) => ({ ...prev, [anchorId]: target.id }));
+    };
+    return (
+      <span onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-0.5 text-wade-text-muted/50">
+        <button
+          type="button"
+          aria-label="Previous version"
+          onClick={(e) => { e.stopPropagation(); setIndex(currentIndex - 1); }}
+          className="hover:text-wade-accent transition-colors leading-none px-0.5"
+        >
+          ‹
+        </button>
+        <span className="text-[9px] font-mono tabular-nums">{currentIndex + 1}/{totalGroups}</span>
+        <button
+          type="button"
+          aria-label="Next version"
+          onClick={(e) => { e.stopPropagation(); setIndex(currentIndex + 1); }}
+          className="hover:text-wade-accent transition-colors leading-none px-0.5"
+        >
+          ›
+        </button>
+      </span>
+    );
+  };
 
   // Bump the per-contact "lastOpened" timestamp so ChatsTab's unread badge
   // clears. Also re-bump while the chat is visible — new messages arriving
@@ -1411,6 +1481,19 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       alert('Send something first — nothing to regenerate a reply to yet.');
       return;
     }
+    // Snapshot the reply groups that already exist for Luna's anchor message
+    // so we can hide them while Wade drafts the new one. Cleared automatically
+    // when a new replyGroupId appears for this anchor.
+    const anchorId = sessionMsgs[lastSenderIdx].id;
+    const existingGroups = new Set<string>();
+    for (const m of messagesRef.current) {
+      if (m.sessionId !== resolvedSessionId) continue;
+      if (m.replyAnchorId !== anchorId || !m.replyGroupId) continue;
+      existingGroups.add(m.replyGroupId);
+    }
+    if (existingGroups.size > 0) {
+      setRegenHidden({ anchorId, groupIds: existingGroups });
+    }
     setWadeStatus('typing');
     triggerAIResponse(resolvedSessionId, { isRegen: true });
   };
@@ -1724,68 +1807,6 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           // "away" = Wade woke up and texted while Luna was gone
           // "returned" = Luna came back (her first real msg after echoes)
           // ==========================================
-          // Regen group pager — sits flush under the last bubble of the
-          // currently-active group when multiple generation attempts exist
-          // for the same user message. Tapping ← / → swaps the active group
-          // so the entire reply (all its bubbles) cross-fades between
-          // versions. `activeGroupByAnchor` persists in component state; a
-          // full reload resets it back to "latest by timestamp".
-          if (msg.type === 'group-pager' && msg.groupPager) {
-            const { anchorId, totalGroups, currentIndex } = msg.groupPager;
-            const isSelfSide = msg.role === phoneOwner;
-            const setIndex = (next: number) => {
-              const clamped = ((next % totalGroups) + totalGroups) % totalGroups;
-              // Look up the group id at the clamped index from the raw data.
-              // We could pass it in via groupPager, but recomputing here
-              // avoids stale refs when new groups get generated mid-view.
-              const rawGroups = (() => {
-                const list: { id: string; firstTs: number }[] = [];
-                for (const m2 of storeMessages) {
-                  if (m2.sessionId !== resolvedSessionId) continue;
-                  if (m2.replyAnchorId !== anchorId || !m2.replyGroupId) continue;
-                  const ex = list.find((g) => g.id === m2.replyGroupId);
-                  if (ex) ex.firstTs = Math.min(ex.firstTs, m2.timestamp);
-                  else list.push({ id: m2.replyGroupId, firstTs: m2.timestamp });
-                }
-                list.sort((a, b) => a.firstTs - b.firstTs);
-                return list;
-              })();
-              const target = rawGroups[clamped];
-              if (target) {
-                setActiveGroupByAnchor((prev) => ({ ...prev, [anchorId]: target.id }));
-              }
-            };
-            return (
-              <div
-                key={msg.id}
-                id={`msg-${msg.id}`}
-                className={`w-full flex ${isSelfSide ? 'justify-end' : 'justify-start'} pt-0.5 pb-1 select-none`}
-              >
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-wade-bg-card/60 border border-wade-border/40 text-wade-text-muted/80">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setIndex(currentIndex - 1); }}
-                    aria-label="Previous version"
-                    className="w-5 h-5 flex items-center justify-center rounded-full hover:text-wade-accent hover:bg-wade-accent/10 transition-colors"
-                  >
-                    <span className="text-[11px] leading-none">‹</span>
-                  </button>
-                  <span className="text-[9.5px] font-bold tabular-nums tracking-wider">
-                    {currentIndex + 1}/{totalGroups}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setIndex(currentIndex + 1); }}
-                    aria-label="Next version"
-                    className="w-5 h-5 flex items-center justify-center rounded-full hover:text-wade-accent hover:bg-wade-accent/10 transition-colors"
-                  >
-                    <span className="text-[11px] leading-none">›</span>
-                  </button>
-                </div>
-              </div>
-            );
-          }
-
           if (msg.type === 'presence') {
             const isReturn = msg.presenceState === 'returned';
             const Icon = isReturn ? Sparkles : pickAwayIcon(msg.time);
@@ -1935,6 +1956,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                           onNext={() => cycleVariant(1)}
                         />
                       )}
+                      {msg.groupPager && renderGroupPagerInline(msg.groupPager)}
                     </div>
                   )}
                 </div>
@@ -2096,6 +2118,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                         onNext={() => cycleVariant(1)}
                       />
                     )}
+                    {msg.groupPager && renderGroupPagerInline(msg.groupPager)}
                     {isPlaying && <AudioVisualizer className="ml-1" />}
                   </div>
                 )}
