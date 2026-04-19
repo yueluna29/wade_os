@@ -5,7 +5,7 @@ import { Icons } from '../ui/Icons';
 const apps = [
   { icon: Icons.Chat,     label: 'Chat',    tab: 'chat-list' },
   { icon: Icons.User,     label: 'Persona', tab: 'luna-persona' },
-  { icon: Icons.Activity, label: 'Meds',    tab: 'health' },
+  { icon: Icons.Activity, label: 'Meds',    tab: 'meds' },
   { icon: Icons.Heart,    label: 'Health',  tab: 'health' },
   { icon: Icons.Fate,     label: 'Fate',    tab: 'divination' },
   { icon: Icons.Star,     label: 'Favs',    tab: 'favorites' },

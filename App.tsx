@@ -20,6 +20,7 @@ import { TodosView } from './components/views/TodosView';
 import { LunaPhoneView } from './components/views/LunaPhoneView';
 import { WadePhoneView } from './components/views/WadePhoneView';
 import { ChatAppShell } from './components/views/chatapp/ChatAppShell';
+import { MedsApp } from './components/views/MedsApp';
 
 const AppContent = () => {
   const { currentTab, settings, sessions, activeSessionId } = useStore();
@@ -148,6 +149,7 @@ const AppContent = () => {
       case 'wade-persona': return <ChatAppShell phoneOwner="wade" initialTab="me" />;
       case 'luna-phone': return <LunaPhoneView />;
       case 'wade-phone': return <WadePhoneView />;
+      case 'meds': return <MedsApp />;
       default: return <Home />;
     }
   };
