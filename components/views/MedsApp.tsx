@@ -203,20 +203,11 @@ export const MedsApp: React.FC = () => {
 
         {/* Header */}
         <header className="flex justify-between items-start pt-2 px-1">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setTab('luna-phone')}
-              className="w-9 h-9 rounded-full bg-wade-bg-card border border-wade-border shadow-sm text-wade-text-muted hover:text-wade-accent flex items-center justify-center transition-colors"
-              aria-label="Back"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-3xl text-wade-accent font-hand mb-1 tracking-wide">Stay Alive, Luna.</h1>
-              <p className="text-[10px] text-wade-text-muted font-bold tracking-[0.15em] uppercase">
-                Survival Protocol
-              </p>
-            </div>
+          <div>
+            <h1 className="text-3xl text-wade-accent font-hand mb-1 tracking-wide">Stay Alive, Luna.</h1>
+            <p className="text-[10px] text-wade-text-muted font-bold tracking-[0.15em] uppercase">
+              Survival Protocol
+            </p>
           </div>
           <div className="w-10 h-10 rounded-full bg-wade-bg-card border border-wade-border shadow-[0_2px_8px_rgba(var(--wade-accent-rgb),0.15)] flex items-center justify-center text-wade-accent">
             <HeartPulse className="w-5 h-5 animate-pulse" />
