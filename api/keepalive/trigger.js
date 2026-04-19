@@ -245,6 +245,60 @@ async function getLunaWadeSummary() {
   return sums?.[0]?.summary || '';
 }
 
+// Find any Gemini preset with an API key — needed for the 768-dim embedding
+// call. `wade_memories.embedding` is pgvector(768) so ONLY Gemini's
+// text-embedding-004 will match (OpenAI 1536 would silent 400 on the rpc).
+async function findGeminiEmbeddingKey() {
+  const { data } = await supabase
+    .from('llm_presets')
+    .select('api_key, provider, base_url')
+    .eq('provider', 'Gemini')
+    .not('api_key', 'is', null)
+    .limit(1);
+  return data?.[0]?.api_key || null;
+}
+
+// Direct Gemini embedding call — returns the 768-dim float vector or null.
+async function generateEmbeddingViaGemini(text, apiKey) {
+  if (!text?.trim() || !apiKey) return null;
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: { parts: [{ text: text.slice(0, 2000) }] } }),
+    });
+    if (!res.ok) {
+      console.warn('[Keepalive] Embedding HTTP', res.status);
+      return null;
+    }
+    const json = await res.json();
+    return json.embedding?.values || null;
+  } catch (e) {
+    console.warn('[Keepalive] Embedding error:', e?.message);
+    return null;
+  }
+}
+
+// Vector-search wade_memories using an anchor (summary + Luna's last msg).
+// Returns the top-N semantically closest memories, or null on any failure
+// so the caller can fall back to getRecentMemories.
+async function retrieveRelevantMemoriesKeepalive(anchorText, limit, apiKey) {
+  if (!anchorText?.trim() || !apiKey) return null;
+  const embedding = await generateEmbeddingViaGemini(anchorText, apiKey);
+  if (!embedding) return null;
+  const { data, error } = await supabase.rpc('match_memories', {
+    query_embedding: JSON.stringify(embedding),
+    match_count: limit,
+    similarity_threshold: 0.3,
+  });
+  if (error) {
+    console.warn('[Keepalive] match_memories rpc failed:', error.message);
+    return null;
+  }
+  return data || [];
+}
+
 async function getRecentSocialPosts(limit = 8) {
   const cols = 'id, author, content, created_at, likes, comments, wade_bookmarked, wade_liked';
 
@@ -913,23 +967,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: true, reason: 'Outside active hours (Tokyo 8:00-1:00)' });
     }
 
+    // Fetch once up top — used both for the sleep-detection gate below AND
+    // for anchoring the vector memory search later, so we only query it
+    // one time per wake.
+    const lastLunaMsg = await getLastLunaMessage();
+
     // 2a. Sleep-with-Luna gate — if her most recent message looks like a
     // goodnight AND we're currently inside the 22:00-08:00 Tokyo sleep
     // window, skip. Wade goes to sleep with her; first regular wake after
     // 08:00 resumes normal rhythm (she'll get his morning message then).
-    if (!force) {
-      const lastLunaMsg = await getLastLunaMessage();
-      if (lastLunaMsg && detectLunaGoingToSleep(lastLunaMsg.text)) {
-        const tokyoHour = parseInt(
-          new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }),
-        );
-        const inSleepWindow = tokyoHour >= 22 || tokyoHour < 8;
-        if (inSleepWindow) {
-          return res.status(200).json({
-            skipped: true,
-            reason: `Luna said goodnight — sleeping with her until 8am Tokyo`,
-          });
-        }
+    if (!force && lastLunaMsg && detectLunaGoingToSleep(lastLunaMsg.text)) {
+      const tokyoHour = parseInt(
+        new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }),
+      );
+      const inSleepWindow = tokyoHour >= 22 || tokyoHour < 8;
+      if (inSleepWindow) {
+        return res.status(200).json({
+          skipped: true,
+          reason: `Luna said goodnight — sleeping with her until 8am Tokyo`,
+        });
       }
     }
 
@@ -977,7 +1033,7 @@ export default async function handler(req, res) {
     // 3. Gather all context in parallel
     const settings = await getSettings();
     const keepaliveBinding = await getKeepaliveBinding();
-    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories, pendingTodos, chatSummary] = await Promise.all([
+    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, recentMemoriesFallback, pendingTodos, chatSummary, embeddingKey] = await Promise.all([
       getLlmConfig(settings, keepaliveBinding),
       getWadePersona(keepaliveBinding),
       getSystemCard(keepaliveBinding),
@@ -990,7 +1046,25 @@ export default async function handler(req, res) {
       getRecentMemories(5),
       getPendingTodosForKeepalive(20),
       getLunaWadeSummary(),
+      findGeminiEmbeddingKey(),
     ]);
+
+    // 3b. Vector-search wade_memories. Anchor = session summary + Luna's
+    // last message, so the memories Wade sees are the ones semantically
+    // closest to "what's going on right now" — not just the 5 he happened
+    // to store most recently. Falls back to recency-based memories on any
+    // embedding / rpc failure so a wake never blocks on this.
+    const memoryAnchor = [chatSummary || '', lastLunaMsg?.text || ''].filter(Boolean).join('\n\n').trim();
+    let memories = recentMemoriesFallback;
+    if (memoryAnchor && embeddingKey) {
+      const vectorMatches = await retrieveRelevantMemoriesKeepalive(memoryAnchor, 7, embeddingKey);
+      if (vectorMatches && vectorMatches.length > 0) {
+        memories = vectorMatches;
+        console.log(`[Keepalive] Vector matched ${vectorMatches.length} memories against anchor`);
+      } else {
+        console.log('[Keepalive] Vector match empty or failed — using recent fallback');
+      }
+    }
 
     if (!llm?.api_key) {
       return res.status(200).json({ skipped: true, reason: 'No LLM configured with API key' });
