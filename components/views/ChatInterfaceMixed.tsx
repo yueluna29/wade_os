@@ -7,8 +7,10 @@ import { useStore } from '../../store';
 import { supabase } from '../../services/supabase';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { generateFromCard, generateChatTitle, summarizeConversation } from '../../services/aiService';
-import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory } from '../../services/memoryService';
+import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, WadeMemory } from '../../services/memoryService';
+import { getPendingTodos, formatTodosForChatPrompt, getRecentDiaries, formatDiariesForPrompt, extractTodoTags, writeExtractedFromChat } from '../../services/todoService';
 import { buildCardFromSettings } from '../../services/personaBuilder';
+import { MemoryLiveIndicator } from './memory/MemoryLiveIndicator';
 import type { Message as StoreMessage, ChatSession } from '../../types';
 import {
   CheckCheck, Check, HeartPulse,
@@ -774,6 +776,14 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
 
   useEffect(() => {
     setRegenHidden(null);
+    // Also clear last-turn X-Ray payload + the summary throttle ref so a
+    // session switch starts from a clean slate — otherwise X-Ray keeps
+    // showing the previous session's injected memories/todos, and the
+    // summarizer would be convinced we'd already summarized far into a
+    // freshly-opened chat.
+    setLastWadeMemoriesXml('');
+    setLastWadeTodosXml('');
+    lastSummaryCountRef.current = 0;
   }, [resolvedSessionId]);
 
   // Compact group-pager rendered inline inside the time/check footer of the
@@ -968,6 +978,22 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // [PREVIOUS CONVERSATION SUMMARY] prompt slot and X-Ray's preview of what
   // the LLM actually sees. Refreshed whenever the resolved session flips.
   const [sessionSummary, setSessionSummary] = useState<string>('');
+
+  // Latest memory / todos XML that was fed INTO the LLM on this turn — X-Ray
+  // reads these so Luna can see what Wade actually received, not a placeholder.
+  // Strings, not objects, because generateFromCard is XML-based downstream.
+  const [lastWadeMemoriesXml, setLastWadeMemoriesXml] = useState<string>('');
+  const [lastWadeTodosXml, setLastWadeTodosXml] = useState<string>('');
+
+  // Memories just stored by the background evaluator. Handed to
+  // MemoryLiveIndicator so Luna sees a toast "Wade remembered something" when
+  // her exchange triggered a save. Cleared by the indicator after dismissal.
+  const [newMemories, setNewMemories] = useState<WadeMemory[]>([]);
+
+  // Tracks the conversation length at the last auto-summary. Used to throttle
+  // the summarizer so it fires roughly every 10 new messages past 40.
+  const lastSummaryCountRef = useRef(0);
+
   // One-shot: next send is wrapped as [POV], then auto-resets. Luna taps the
   // drama-mask button to flip into POV mode for a single message.
   const [povMode, setPovMode] = useState(false);
@@ -1389,6 +1415,8 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       // would silently 400. If no Gemini preset exists we simply skip.
       const isLunaWadeChat = phoneOwner === 'luna' && contact.id === 'wade';
       let wadeMemoriesXml = '';
+      let wadeDiaryXml = '';
+      let wadeTodosXml = '';
       const recentLunaTexts = allSessionMsgs
         .filter((m) => m.role === senderRole)
         .slice(-3)
@@ -1407,7 +1435,22 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
             : llmPresets.find((p) => isGemini(p) && p.apiKey);
           const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 10, memEvalLlm, embLlm);
           wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
+          setLastWadeMemoriesXml(wadeMemoriesXml);
         } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
+
+        // Recent diary entries — so Wade stays aware of what past-him wrote.
+        try {
+          const recentDiaries = await getRecentDiaries(3);
+          wadeDiaryXml = formatDiariesForPrompt(recentDiaries);
+        } catch (e) { console.error('[WadeDiary] Fetch failed:', e); }
+
+        // Pending self-notes (todos Wade jotted for himself). Fetched fresh
+        // each turn so the list never goes stale while Luna is typing.
+        try {
+          const pending = await getPendingTodos(20);
+          wadeTodosXml = formatTodosForChatPrompt(pending);
+          setLastWadeTodosXml(wadeTodosXml);
+        } catch (e) { console.error('[WadeTodos] Fetch failed:', e); }
       }
 
       const response = await generateFromCard({
@@ -1423,11 +1466,24 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         isRetry: !!opts.isRegen,
         llmPreset: activeLlm,
         wadeMemoriesXml,
+        wadeDiaryXml,
+        wadeTodosXml,
       });
       // Luna hit stop while the network call was in flight — drop the reply.
       if (ctrl.aborted) return;
 
-      const responseText = response.text;
+      // Strip <todo> / <done> tags from Wade's reply before it's shown or
+      // split into bubbles. The extracted notes / completions are fired off
+      // to wade_todos so Wade sees them on his next wake; the user-facing
+      // text keeps the cleaned body only.
+      const rawResponseText = response.text;
+      const extracted = extractTodoTags(rawResponseText);
+      const responseText = extracted.cleanText;
+      if (extracted.todos.length > 0 || extracted.doneIds.length > 0) {
+        writeExtractedFromChat(extracted, targetSessionId).catch((err) => {
+          console.error('[WadeTodos] writeExtractedFromChat failed:', err);
+        });
+      }
       const thinking = response.thinking;
       const currentModel = activeLlm.model || 'unknown';
       const parts = splitSmsBubbles(responseText);
@@ -1448,7 +1504,51 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           : llmPresets.find((p) => isGeminiPreset(p) && p.apiKey);
         if (memoryEvalLlm?.apiKey) {
           evaluateAndStoreMemory(recentLunaTexts, responseText, targetSessionId, memoryEvalLlm, embLlm2)
+            .then((stored) => { if (stored.length > 0) setNewMemories(stored); })
             .catch((err) => console.error('[WadeMemory] Eval failed:', err));
+        }
+      }
+
+      // Auto-summary — triggers every ~10 messages past the 40-message mark.
+      // Preset priority: summaryLlmId → memoryEvalLlmId → activeLlmId.
+      // Summarizes messages about to fall out of the context window so the
+      // [PREVIOUS CONVERSATION SUMMARY] slot stays current and the LLM doesn't
+      // "forget" earlier turns once we're past contextLimit.
+      if (!opts.isRegen) {
+        const freshMsgs = messagesRef.current.filter((m) => m.sessionId === targetSessionId);
+        const len = freshMsgs.length;
+        if (lastSummaryCountRef.current === 0 && len > 40) {
+          // Bootstrap on the first check so we don't fire retroactively on load.
+          lastSummaryCountRef.current = len - 10;
+        }
+        const shouldSummarize = len > 40 && len >= lastSummaryCountRef.current + 10;
+        if (shouldSummarize) {
+          const summaryLlmId = settings.summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
+          const summaryPreset = summaryLlmId ? llmPresets.find((p) => p.id === summaryLlmId) : null;
+          if (summaryPreset?.apiKey && summaryPreset.model) {
+            const contextLimit = settings.contextLimit || 50;
+            const windowStart = Math.max(0, len - contextLimit);
+            const chunkStart = Math.max(0, windowStart - 20);
+            const messagesToSummarize = freshMsgs.slice(chunkStart, Math.max(windowStart, chunkStart + 1));
+            console.log(`[Summary] Triggering at len=${len} (last=${lastSummaryCountRef.current}) via ${summaryPreset.name} (${summaryPreset.provider})`);
+            lastSummaryCountRef.current = len; // mark immediately so parallel sends don't double-fire
+            summarizeConversation(messagesToSummarize, summaryForPrompt, {
+              provider: summaryPreset.provider,
+              baseUrl: summaryPreset.baseUrl,
+              apiKey: summaryPreset.apiKey,
+              model: summaryPreset.model,
+            })
+              .then(async (newSummary: string) => {
+                if (newSummary && newSummary !== summaryForPrompt) {
+                  setSessionSummary(newSummary);
+                  await supabase.from('session_summaries').upsert({ session_id: targetSessionId, summary: newSummary });
+                  console.log('[Summary] Updated:', newSummary.slice(0, 120));
+                }
+              })
+              .catch((err) => console.error('[Summary] Failed:', err));
+          } else {
+            console.warn('[Summary] No usable preset found — auto-summary skipped.');
+          }
         }
       }
 
@@ -2412,9 +2512,9 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
       />
 
       {/* X-Ray Vision — shows the exact system prompt + history payload the
-          LLM is receiving. `lastWadeMemoriesXml` / `lastWadeTodosXml` stay
-          empty for now because Mixed doesn't inject wade_memories yet (next
-          step in the send-flow plan); X-Ray just surfaces that truthfully. */}
+          LLM is receiving. `lastWadeMemoriesXml` / `lastWadeTodosXml` are the
+          real XML strings fed into generateFromCard on the most recent turn,
+          so this panel now mirrors reality instead of a placeholder. */}
       <XRayModal
         showDebug={showDebug}
         setShowDebug={setShowDebug}
@@ -2430,8 +2530,15 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
         functionBindings={functionBindings}
         getBinding={getBinding}
         getDefaultPersonaCard={getDefaultPersonaCard}
-        lastWadeMemoriesXml=""
-        lastWadeTodosXml=""
+        lastWadeMemoriesXml={lastWadeMemoriesXml}
+        lastWadeTodosXml={lastWadeTodosXml}
+      />
+
+      {/* Memory live indicator — floats in when Wade's background memory
+          evaluator just stored something, so Luna sees what was remembered. */}
+      <MemoryLiveIndicator
+        newMemories={newMemories}
+        onDismiss={() => setNewMemories([])}
       />
 
       {/* Contact card — opened by tapping the header avatar */}
