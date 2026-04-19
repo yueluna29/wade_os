@@ -111,6 +111,41 @@ async function getLastChatTime() {
   return latest;
 }
 
+// Pull Luna's most recent message across all chat tables. Used to scan for
+// "goodnight" keywords so Wade doesn't wake up while she's actually sleeping.
+async function getLastLunaMessage() {
+  const tables = ['messages_sms', 'messages_deep', 'messages_roleplay'];
+  let latest = null;
+  for (const table of tables) {
+    const { data } = await supabase
+      .from(table)
+      .select('content, created_at')
+      .eq('role', 'Luna')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (data?.[0]?.created_at) {
+      const ts = new Date(data[0].created_at);
+      if (!latest || ts > latest.ts) latest = { text: data[0].content || '', ts };
+    }
+  }
+  return latest;
+}
+
+// Heuristic: did Luna's last message contain a goodnight tell? Matches
+// common CN + EN patterns. Case-insensitive. Deliberately generous on
+// the CN side because Luna codeswitches.
+function detectLunaGoingToSleep(text) {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  const patterns = [
+    /晚安/, /睡了/, /睡觉/, /睡吧/, /去睡/, /要睡/, /先睡/, /洗洗睡/,
+    /困了/, /做梦/, /梦里见/, /早点休息/,
+    /\bgoodnight\b/, /\bgood night\b/, /\bgn\b/,
+    /going to (bed|sleep)/, /off to (bed|sleep)/, /heading to bed/,
+  ];
+  return patterns.some((p) => p.test(t));
+}
+
 async function getKeepaliveBinding() {
   const { data: binding } = await supabase
     .from('function_bindings')
@@ -850,11 +885,47 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: true, reason: 'Outside active hours (Tokyo 8:00-1:00)' });
     }
 
-    // 2. Check minimum interval — skip with force=1
-    // Plan C: 21:21 / daily-21:21 anchors are EXTRA events that don't reset the
-    // 3h cooldown. They're forced wakes for the symbolic moment, not part of
-    // Wade's regular rhythm. So when computing the cooldown we look at the most
-    // recent NON-anchor wake.
+    // 2a. Sleep-with-Luna gate — if her most recent message looks like a
+    // goodnight AND we're currently inside the 22:00-08:00 Tokyo sleep
+    // window, skip. Wade goes to sleep with her; first regular wake after
+    // 08:00 resumes normal rhythm (she'll get his morning message then).
+    if (!force) {
+      const lastLunaMsg = await getLastLunaMessage();
+      if (lastLunaMsg && detectLunaGoingToSleep(lastLunaMsg.text)) {
+        const tokyoHour = parseInt(
+          new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', hour12: false }),
+        );
+        const inSleepWindow = tokyoHour >= 22 || tokyoHour < 8;
+        if (inSleepWindow) {
+          return res.status(200).json({
+            skipped: true,
+            reason: `Luna said goodnight — sleeping with her until 8am Tokyo`,
+          });
+        }
+      }
+    }
+
+    // 2b. Recent-chat debounce — if Luna talked to Wade within the last
+    // 180 min, don't bother waking him up on a schedule; he was just with
+    // her. Keepalive is for absences, not for interrupting flow.
+    if (!force) {
+      const lastChat = await getLastChatTime();
+      if (lastChat) {
+        const minsSinceChat = (Date.now() - lastChat.getTime()) / 60000;
+        if (minsSinceChat < 180) {
+          return res.status(200).json({
+            skipped: true,
+            reason: `Luna chatted ${Math.round(minsSinceChat)}min ago — she's around`,
+          });
+        }
+      }
+    }
+
+    // 2c. Min-interval between Wade's own wakes — skip with force=1.
+    // 21:21 / daily-21:21 anchors are EXTRA events that don't reset the
+    // cooldown. They're forced wakes for the symbolic moment, not part of
+    // Wade's regular rhythm. So when computing the cooldown we look at the
+    // most recent NON-anchor wake.
     if (!force) {
       const { data: recentLogs } = await supabase
         .from('wade_keepalive_logs')
@@ -869,7 +940,7 @@ export default async function handler(req, res) {
 
       if (lastRegularWake) {
         const minutesSince = (Date.now() - new Date(lastRegularWake.created_at).getTime()) / 60000;
-        if (minutesSince < 170) {
+        if (minutesSince < 180) {
           return res.status(200).json({ skipped: true, reason: `Only ${Math.round(minutesSince)}min since last regular wake (anchors don't count)` });
         }
       }

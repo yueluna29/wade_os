@@ -1433,7 +1433,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           const embLlm = isGemini(explicitEmb)
             ? explicitEmb
             : llmPresets.find((p) => isGemini(p) && p.apiKey);
-          const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 10, memEvalLlm, embLlm);
+          const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 7, memEvalLlm, embLlm);
           wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
           setLastWadeMemoriesXml(wadeMemoriesXml);
         } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
@@ -1447,7 +1447,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         // Pending self-notes (todos Wade jotted for himself). Fetched fresh
         // each turn so the list never goes stale while Luna is typing.
         try {
-          const pending = await getPendingTodos(20);
+          const pending = await getPendingTodos(10);
           wadeTodosXml = formatTodosForChatPrompt(pending);
           setLastWadeTodosXml(wadeTodosXml);
         } catch (e) { console.error('[WadeTodos] Fetch failed:', e); }
@@ -1491,8 +1491,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       // Background memory eval — fire-and-forget, doesn't block render. Same
       // gate as retrieval (Luna's Wade chat only) so we don't pollute the
       // memory bank with NPC chatter. Skipped on regen because we already
-      // evaluated when the original batch went out.
-      if (isLunaWadeChat && !opts.isRegen && recentLunaTexts.trim()) {
+      // evaluated when the original batch went out. Also skipped for very
+      // short inputs (single-emoji / "ok" / "嗯" type), since the eval LLM
+      // call costs money and those turns never carry memory-worthy content.
+      const trimmedLunaText = recentLunaTexts.trim();
+      const MEMORY_EVAL_MIN_CHARS = 10;
+      if (isLunaWadeChat && !opts.isRegen && trimmedLunaText.length >= MEMORY_EVAL_MIN_CHARS) {
         const memoryEvalLlmId2 = settings.memoryEvalLlmId || settings.activeLlmId;
         const memoryEvalLlm = memoryEvalLlmId2 ? llmPresets.find((p) => p.id === memoryEvalLlmId2) : null;
         const explicitEmbId2 = settings.embeddingLlmId;
