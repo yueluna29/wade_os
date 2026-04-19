@@ -98,11 +98,31 @@ async function getRecentKeepaliveLogs(limit = 5) {
   return (data || []).reverse();
 }
 
+// Return all session IDs that belong to the Luna↔Wade thread. Keepalive
+// needs this to scope every "recent Luna activity" / "most recent session"
+// query so Luna's chats with NPC contacts (Deadpool, etc.) don't trigger
+// Wade's recent-activity debounce, don't bleed into Wade's context, and
+// don't get Wade's reply routed to the wrong thread.
+async function getLunaWadeSessionIds() {
+  const { data } = await supabase
+    .from('chat_sessions')
+    .select('id')
+    .eq('thread_id', 'luna-wade');
+  return (data || []).map((s) => s.id);
+}
+
 async function getLastChatTime() {
+  const sessionIds = await getLunaWadeSessionIds();
+  if (sessionIds.length === 0) return null;
   const tables = ['messages_sms', 'messages_deep', 'messages_roleplay'];
   let latest = null;
   for (const table of tables) {
-    const { data } = await supabase.from(table).select('created_at').order('created_at', { ascending: false }).limit(1);
+    const { data } = await supabase
+      .from(table)
+      .select('created_at')
+      .in('session_id', sessionIds)
+      .order('created_at', { ascending: false })
+      .limit(1);
     if (data?.[0]?.created_at) {
       const t = new Date(data[0].created_at);
       if (!latest || t > latest) latest = t;
@@ -111,9 +131,12 @@ async function getLastChatTime() {
   return latest;
 }
 
-// Pull Luna's most recent message across all chat tables. Used to scan for
-// "goodnight" keywords so Wade doesn't wake up while she's actually sleeping.
+// Pull Luna's most recent message inside the Luna↔Wade thread. Used to scan
+// for "goodnight" keywords so Wade doesn't fall asleep because Luna said gn
+// to Deadpool.
 async function getLastLunaMessage() {
+  const sessionIds = await getLunaWadeSessionIds();
+  if (sessionIds.length === 0) return null;
   const tables = ['messages_sms', 'messages_deep', 'messages_roleplay'];
   let latest = null;
   for (const table of tables) {
@@ -121,6 +144,7 @@ async function getLastLunaMessage() {
       .from(table)
       .select('content, created_at')
       .eq('role', 'Luna')
+      .in('session_id', sessionIds)
       .order('created_at', { ascending: false })
       .limit(1);
     if (data?.[0]?.created_at) {
@@ -211,10 +235,13 @@ async function getLlmConfig(settings, keepaliveBinding) {
 // ========== WadeOS Data Access (Wade's "apps") ==========
 
 async function getRecentChats(limit = 15) {
+  const sessionIds = await getLunaWadeSessionIds();
+  if (sessionIds.length === 0) return [];
   const { data } = await supabase
     .from('messages_sms')
     .select('role, content, created_at')
     .eq('source', 'chat')
+    .in('session_id', sessionIds)
     .order('created_at', { ascending: false })
     .limit(limit);
   return (data || []).reverse();
@@ -351,11 +378,16 @@ async function getRecentMemories(limit = 5) {
   return data || [];
 }
 
+// Route Wade's keepalive message into the most recent Luna↔Wade SMS
+// session specifically — not "whichever SMS session Luna happened to
+// update last", which used to mean his texts could land in a Deadpool
+// thread after she chatted with an NPC.
 async function getMostRecentSmsSession() {
   const { data } = await supabase
     .from('chat_sessions')
     .select('id')
     .eq('mode', 'sms')
+    .eq('thread_id', 'luna-wade')
     .order('updated_at', { ascending: false })
     .limit(1)
     .single();
