@@ -198,7 +198,7 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
   };
 
   return (
-    <div className="h-screen w-full overflow-y-auto p-4 pb-32 flex flex-col items-center bg-wade-bg-app">
+    <div className="h-full w-full overflow-y-auto p-4 pb-24 flex flex-col items-center bg-wade-bg-app">
       <div className="w-full max-w-[500px] space-y-4">
 
         {/* Header */}
