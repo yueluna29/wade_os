@@ -77,9 +77,11 @@ export const MessageActionPill: React.FC<MessageActionPillProps> = ({
         </ActionBtn>
       )}
 
-      <ActionBtn label="Regenerate" onClick={onRegenerate}>
-        <RefreshCw size={14} strokeWidth={2} />
-      </ActionBtn>
+      {onRegenerate && (
+        <ActionBtn label="Regenerate" onClick={onRegenerate}>
+          <RefreshCw size={14} strokeWidth={2} />
+        </ActionBtn>
+      )}
 
       {onEdit && (
         <ActionBtn label="Edit" onClick={onEdit}>

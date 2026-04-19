@@ -1884,7 +1884,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       mode="self"
                       onCopy={() => { navigator.clipboard?.writeText(cleanText); setSelectedMsgId(null); }}
                       onDelete={() => { deleteMessage(idStr); setSelectedMsgId(null); }}
-                      onRegenerate={() => { regenerateLastReply(); setSelectedMsgId(null); }}
+                      onRegenerate={showTime && !isSelf ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
                       onEdit={() => {
                         setEditDraft(msg.text || '');
                         setEditingMessageId(idStr);
@@ -2005,7 +2005,10 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       deleteMessage(String(msg.id));
                       setSelectedMsgId(null);
                     }}
-                    onRegenerate={() => { regenerateLastReply(); setSelectedMsgId(null); }}
+                    // Regenerate always replays the whole reply batch, so only
+                    // surface it on Wade's last bubble — showing it on every
+                    // segment implied per-segment regen, which doesn't exist.
+                    onRegenerate={showTime && !isSelf ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
                     onEdit={() => {
                       // Open modal with the current raw bubble text. For
                       // bubbles backed by a single DB row with variants we
