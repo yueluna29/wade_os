@@ -533,7 +533,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         fetchRecommendations();
 
         const fetchTimeCapsules = async () => {
-            const { data: capData, error: capError } = await supabase.from('time_capsules').select('*').order('created_at', { ascending: false });
+            // Exclude audio_cache — 34 MB of base64 across the active rows
+            // caused the boot fetch to hit Postgres' statement_timeout and
+            // return zero rows. Audio is lazy-loaded per capsule on open.
+            const { data: capData, error: capError } = await supabase
+              .from('time_capsules')
+              .select('id, title, content, created_at, unlock_date, is_locked')
+              .order('created_at', { ascending: false });
             if (capData && !capError) {
                 setCapsules(capData.map(c => ({
                     id: c.id,
@@ -542,7 +548,6 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                     createdAt: c.created_at,
                     unlockDate: c.unlock_date,
                     isLocked: c.is_locked,
-                    audioCache: c.audio_cache
                 })));
             }
         };
@@ -1324,12 +1329,13 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Defensive refetch — callable from TimeCapsulesView on mount so the view
-  // never sits empty if the boot-time fetch was silently swallowed (e.g. an
-  // earlier query in the chain threw and bailed the try block).
+  // never sits empty if the boot-time fetch was silently swallowed. Skips
+  // audio_cache so 34 MB of base64 doesn't blow past Postgres' statement
+  // timeout; audio is lazy-loaded per capsule on reader open.
   const refetchCapsules = async () => {
     const { data, error } = await supabase
       .from('time_capsules')
-      .select('*')
+      .select('id, title, content, created_at, unlock_date, is_locked')
       .order('created_at', { ascending: false });
     if (error) {
       console.error('[TimeCapsules] refetch failed:', error);
@@ -1343,8 +1349,25 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         createdAt: c.created_at,
         unlockDate: c.unlock_date,
         isLocked: c.is_locked,
-        audioCache: c.audio_cache,
       })));
+    }
+  };
+
+  // Pull the audio_cache column for one capsule and merge it into state.
+  // Called when the reader opens so the listen button plays from cache
+  // instead of regenerating TTS.
+  const loadCapsuleAudio = async (id: string) => {
+    const { data, error } = await supabase
+      .from('time_capsules')
+      .select('audio_cache')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) {
+      console.error('[TimeCapsules] audio load failed:', error);
+      return;
+    }
+    if (data?.audio_cache) {
+      setCapsules(prev => prev.map(c => c.id === id ? { ...c, audioCache: data.audio_cache } : c));
     }
   };
 
@@ -1556,7 +1579,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       updateMessageAttachments,
       addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
       socialPosts, addPost, updatePost, deletePost, memos, addMemo,
-      capsules, addCapsule, updateCapsule, deleteCapsule, refetchCapsules,
+      capsules, addCapsule, updateCapsule, deleteCapsule, refetchCapsules, loadCapsuleAudio,
       recommendations, addRecommendation, updateRecommendation, deleteRecommendation,
       coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled,
       chatArchives, importArchive, loadArchiveMessages, updateArchiveTitle, updateArchiveMessage, deleteArchive, deleteArchiveMessage, toggleArchiveFavorite,

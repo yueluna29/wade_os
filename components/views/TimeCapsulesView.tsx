@@ -12,7 +12,7 @@ const Icons = {
 };
 
 export const TimeCapsulesView = () => {
-  const { capsules, setTab, addCapsule, updateCapsule, refetchCapsules } = useStore();
+  const { capsules, setTab, addCapsule, updateCapsule, refetchCapsules, loadCapsuleAudio } = useStore();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [viewingCapsule, setViewingCapsule] = useState<string | null>(null);
@@ -51,6 +51,18 @@ export const TimeCapsulesView = () => {
         ));
       });
   }, [refetchCapsules]);
+
+  // Lazy-load the audio cache for the capsule just opened in the reader.
+  // Real (non-diary) capsules store their TTS audio as a base64 blob and
+  // that column is excluded from the list fetch — pull it on demand so
+  // the listen button plays from cache instead of regenerating.
+  useEffect(() => {
+    if (viewingCapsule && !viewingCapsule.startsWith('diary-')) {
+      loadCapsuleAudio(viewingCapsule).catch((err) =>
+        console.error('[TimeCapsules] audio load failed:', err)
+      );
+    }
+  }, [viewingCapsule, loadCapsuleAudio]);
 
   // Carousel state
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
