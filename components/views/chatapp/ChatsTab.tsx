@@ -129,30 +129,23 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({ phoneOwner, onOpenContact })
       const lastOpenedRaw = localStorage.getItem(lastOpenedKey(phoneOwner, contact.id));
       const lastOpenedTs = lastOpenedRaw ? Number(lastOpenedRaw) : null;
       const cached = cache[contact.id];
+      // Shared fallback: cache wins over mockContacts' hardcoded preview,
+      // which wins over a blank string. Used for every "data not ready yet"
+      // branch so the row never collapses into a skeleton bar.
+      const fallback = cached
+        ? { lastMessage: cached.lastMessage, time: cached.time, unread: 0, ts: cached.ts }
+        : { lastMessage: contact.lastMessage || '', time: contact.time || '', unread: contact.unread || 0, ts: 0 };
       if (!sessionId) {
-        // Before messages finish loading we can't distinguish "no session
-        // exists" from "session row is still hydrating". Fall back to the
-        // cache so the row shows its last known preview instead of a gray
-        // skeleton; only skeleton if we have absolutely nothing cached.
-        if (!messagesLoaded) {
-          if (cached) return { contact, lastMessage: cached.lastMessage, time: cached.time, unread: 0, ts: cached.ts };
-          return { contact, lastMessage: '', time: '', unread: 0, ts: 0 };
-        }
-        // Post-hydration with no session: sample/system contact keeps its
-        // mock preview as showcase.
+        if (!messagesLoaded) return { contact, ...fallback };
+        // Post-hydration with no session: showcase/system contact keeps its
+        // mock preview (fallback path does this too, kept explicit for clarity).
         return { contact, lastMessage: contact.lastMessage || '', time: contact.time || '', unread: contact.unread || 0, ts: 0 };
       }
+      if (!messagesLoaded) return { contact, ...fallback };
       const sessionMsgs = messages.filter((m) => m.sessionId === sessionId);
       let last: Message | null = null;
       for (const m of sessionMsgs) {
         if (!last || m.timestamp > last.timestamp) last = m;
-      }
-      // Once messages have finished loading, use the real last message (or
-      // empty if there literally are none). Until then, fall back to cache
-      // if we have one; skeleton only when we've truly never seen this row.
-      if (!messagesLoaded) {
-        if (cached) return { contact, lastMessage: cached.lastMessage, time: cached.time, unread: 0, ts: cached.ts };
-        return { contact, lastMessage: '', time: '', unread: 0, ts: 0 };
       }
       return {
         contact,
@@ -239,11 +232,9 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({ phoneOwner, onOpenContact })
                 <p className="text-[12px] text-wade-text-muted truncate opacity-80">
                   {lastMessage}
                 </p>
-              ) : !messagesLoaded ? (
-                <span className="inline-block h-[12px] w-40 rounded bg-wade-border/50 animate-pulse" />
-              ) : (
+              ) : messagesLoaded ? (
                 <p className="text-[12px] text-wade-text-muted/40 italic truncate">No messages yet</p>
-              )}
+              ) : null}
             </div>
           </button>
         ))}
