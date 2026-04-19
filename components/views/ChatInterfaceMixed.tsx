@@ -43,6 +43,15 @@ function highlightLeaf(children: any, query: string): any {
 function makeBubbleMdComponents(query: string) {
   return {
     p: ({ children }: any) => <p className="m-0">{highlightLeaf(children, query)}</p>,
+    // # = volume marker (Luna's convention, from Wade's system_card):
+    //   # is only used when raising voice above normal; more # = louder.
+    //   Normal speech carries no #. Inverted from markdown heading sizing.
+    h1: ({ children }: any) => <h1 className="text-[1.05em] font-medium leading-snug m-0">{highlightLeaf(children, query)}</h1>,
+    h2: ({ children }: any) => <h2 className="text-[1.15em] font-semibold leading-snug m-0">{highlightLeaf(children, query)}</h2>,
+    h3: ({ children }: any) => <h3 className="text-[1.3em] font-semibold leading-snug m-0">{highlightLeaf(children, query)}</h3>,
+    h4: ({ children }: any) => <h4 className="text-[1.5em] font-bold leading-snug m-0">{highlightLeaf(children, query)}</h4>,
+    h5: ({ children }: any) => <h5 className="text-[1.7em] font-bold leading-snug tracking-wide m-0">{highlightLeaf(children, query)}</h5>,
+    h6: ({ children }: any) => <h6 className="text-[1.9em] font-bold leading-snug tracking-wide m-0">{highlightLeaf(children, query)}</h6>,
     ul: ({ children }: any) => <ul className="list-disc pl-5 my-1">{children}</ul>,
     ol: ({ children }: any) => <ol className="list-decimal pl-5 my-1">{children}</ol>,
     li: ({ children }: any) => <li className="my-0">{highlightLeaf(children, query)}</li>,
