@@ -1874,9 +1874,9 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 key={msg.id}
                 id={`msg-${msg.id}`}
                 onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
-                className={`w-full flex ${alignClass} py-1.5 mb-2 ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl' : ''}`}
+                className={`w-full py-1.5 mb-2 ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl' : ''}`}
               >
-                <div className={`relative max-w-[85%] flex flex-col ${flexColAlign}`}>
+                <div className={`relative w-full flex flex-col ${flexColAlign}`}>
                   {isSelected && (
                     <MessageActionPill
                       isSelf={isSelf}
@@ -1897,7 +1897,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       e.stopPropagation();
                       setSelectedMsgId(isSelected ? null : msg.id);
                     }}
-                    className={`relative px-5 py-3 flex flex-col ${flexColAlign} cursor-pointer`}
+                    className={`relative w-full px-5 py-3 flex flex-col ${flexColAlign} cursor-pointer`}
                   >
                     {/* Soft mist gradient backdrop */}
                     <div className={`absolute inset-0 ${mistClass} pointer-events-none`} />
