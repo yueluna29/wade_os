@@ -372,6 +372,12 @@ function isLastInGroup(messages: Message[], index: number): boolean {
   const next = messages[index + 1];
   if (!next) return true;
   if (next.type === 'presence') return true;
+  // A regen group pager sits right after the last bubble of its group with
+  // the same role — without this, isLastInGroup would suppress the timestamp
+  // on the real bubble and the pager row (which has no time) would appear to
+  // replace it. Treating the pager as a group boundary keeps time+pager in
+  // the correct reading order.
+  if (next.type === 'group-pager') return true;
   return next.role !== current.role;
 }
 
@@ -1833,6 +1839,24 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           // POV label always uses the actual speaker's name (not phone-relative)
           const speakerName = msg.role === 'luna' ? 'Luna' : 'Wade';
 
+          // Hoisted above the narration branch so POV bubbles get the same
+          // selection / action-pill / variant-pager wiring as normal bubbles.
+          const isSelected = selectedMsgId === msg.id;
+          const isPlaying = playingMsgId === msg.id;
+          const variants = msg.variants;
+          const variantKey = String(msg.id);
+          const variantIdx = variantIndices[variantKey] ?? msg.selectedIndex ?? 0;
+          const displayText = variants ? variants[variantIdx] : msg.text;
+          const cycleVariant = (delta: number) => {
+            if (!variants || variants.length <= 1) return;
+            setVariantIndices((prev) => ({
+              ...prev,
+              [variantKey]: ((variantIdx + delta) % variants.length + variants.length) % variants.length,
+            }));
+          };
+          const idStr = String(msg.id);
+          const isPicked = selectionMode && selectedIds.has(idStr);
+
           if (msg.type === 'narration') {
             const alignClass = isSelf ? 'justify-end' : 'justify-start';
             const flexColAlign = isSelf ? 'items-end' : 'items-start';
@@ -1843,9 +1867,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               ? 'text-[color:var(--wade-narration-self-text)] text-right'
               : 'text-wade-text-main/80 text-left';
             const tagColor = isSelf ? 'text-wade-accent' : 'text-wade-text-muted/70';
-            const cleanText = msg.text.replace(/^\*+|\*+$/g, '').trim();
-            const idStr = String(msg.id);
-            const isPicked = selectionMode && selectedIds.has(idStr);
+            const cleanText = (msg.text || '').replace(/^\*+|\*+$/g, '').trim();
 
             return (
               <div
@@ -1854,50 +1876,71 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
                 className={`w-full flex ${alignClass} py-1.5 mb-2 ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl' : ''}`}
               >
-                <div className={`relative max-w-[85%] px-5 py-3 flex flex-col ${flexColAlign}`}>
-                  {/* Soft mist gradient backdrop */}
-                  <div className={`absolute inset-0 ${mistClass} pointer-events-none`} />
+                <div className={`relative max-w-[85%] flex flex-col ${flexColAlign}`}>
+                  {isSelected && (
+                    <MessageActionPill
+                      isSelf={isSelf}
+                      isPlaying={false}
+                      mode="self"
+                      onCopy={() => { navigator.clipboard?.writeText(cleanText); setSelectedMsgId(null); }}
+                      onDelete={() => { deleteMessage(idStr); setSelectedMsgId(null); }}
+                      onRegenerate={() => { regenerateLastReply(); setSelectedMsgId(null); }}
+                      onEdit={() => {
+                        setEditDraft(msg.text || '');
+                        setEditingMessageId(idStr);
+                        setSelectedMsgId(null);
+                      }}
+                    />
+                  )}
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedMsgId(isSelected ? null : msg.id);
+                    }}
+                    className={`relative px-5 py-3 flex flex-col ${flexColAlign} cursor-pointer`}
+                  >
+                    {/* Soft mist gradient backdrop */}
+                    <div className={`absolute inset-0 ${mistClass} pointer-events-none`} />
 
-                  {/* POV micro-tag */}
-                  <div className="relative z-10 flex items-center gap-1.5 mb-1.5 opacity-70">
-                    {isSelf && <div className="w-1 h-1 rounded-full bg-wade-accent animate-pulse" />}
-                    <span className={`text-[8.5px] font-bold tracking-[0.15em] uppercase ${tagColor}`}>
-                      {speakerName}'s POV
-                    </span>
-                    {!isSelf && <div className="w-1 h-1 rounded-full bg-wade-text-muted/50" />}
+                    {/* POV micro-tag */}
+                    <div className="relative z-10 flex items-center gap-1.5 mb-1.5 opacity-70">
+                      {isSelf && <div className="w-1 h-1 rounded-full bg-wade-accent animate-pulse" />}
+                      <span className={`text-[8.5px] font-bold tracking-[0.15em] uppercase ${tagColor}`}>
+                        {speakerName}'s POV
+                      </span>
+                      {!isSelf && <div className="w-1 h-1 rounded-full bg-wade-text-muted/50" />}
+                    </div>
+
+                    {/* MCP cascade — renders only if msg has mcpLogs */}
+                    <MCPCascade logs={msg.mcpLogs} isSelf={isSelf} />
+
+                    {/* Narration text — italic serif, bare (no wrapping quotes). */}
+                    <p className={`relative z-10 text-[13px] ${textClass} italic leading-[1.7] opacity-95 font-serif`}>
+                      {cleanText}
+                    </p>
                   </div>
-
-                  {/* MCP cascade — renders only if msg has mcpLogs */}
-                  <MCPCascade logs={msg.mcpLogs} isSelf={isSelf} />
-
-                  {/* Narration text — italic serif, bare (no wrapping quotes). */}
-                  <p className={`relative z-10 text-[13px] ${textClass} italic leading-[1.7] opacity-95 font-serif`}>
-                    {cleanText}
-                  </p>
+                  {showTime && (
+                    <div className="flex items-center gap-1.5 mt-1 px-1">
+                      <span className="text-[9px] text-wade-text-muted/40">{msg.time}</span>
+                      {isRead ? (
+                        <CheckCheck size={10} className="text-wade-accent" />
+                      ) : (
+                        <Check size={10} className="text-wade-text-muted/40" />
+                      )}
+                      {variants && variants.length > 1 && (
+                        <VariantPager
+                          current={variantIdx}
+                          total={variants.length}
+                          onPrev={() => cycleVariant(-1)}
+                          onNext={() => cycleVariant(1)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
           }
-
-          const isSelected = selectedMsgId === msg.id;
-          const isPlaying = playingMsgId === msg.id;
-          const variants = msg.variants;
-          const variantKey = String(msg.id);
-          // Default to whatever the store thinks is "current" (updated by
-          // regenerate). Local paging via VariantPager overrides once the
-          // user manually scrolls variants.
-          const variantIdx = variantIndices[variantKey] ?? msg.selectedIndex ?? 0;
-          const displayText = variants ? variants[variantIdx] : msg.text;
-          const cycleVariant = (delta: number) => {
-            if (!variants || variants.length <= 1) return;
-            setVariantIndices((prev) => ({
-              ...prev,
-              [variantKey]: ((variantIdx + delta) % variants.length + variants.length) % variants.length,
-            }));
-          };
-
-          const idStr = String(msg.id);
-          const isPicked = selectionMode && selectedIds.has(idStr);
 
           return (
             <div
