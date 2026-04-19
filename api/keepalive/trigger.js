@@ -489,10 +489,13 @@ function normalizeSegments(content) {
   // 1. Split on explicit marker
   let segments = content.split('|||').map(s => s.trim()).filter(Boolean);
 
-  // 2. Missed-split rescue: one big blob with blank-line paragraphs
-  if (segments.length === 1 && /\n\s*\n/.test(segments[0])) {
-    segments = segments[0].split(/\n\s*\n+/).map(s => s.trim()).filter(Boolean);
-  }
+  // 2. Also split blank-line paragraphs inside each |||-segment.
+  //    Mirrors ChatInterfaceMixed's splitSmsBubbles: \n\n is a bubble break too.
+  segments = segments.flatMap(seg =>
+    /\n\s*\n/.test(seg)
+      ? seg.split(/\n\s*\n+/).map(s => s.trim()).filter(Boolean)
+      : [seg]
+  );
 
   // 3. Drop ghost-only segments
   segments = segments.filter(s => stripGhostTags(s).length > 0);
