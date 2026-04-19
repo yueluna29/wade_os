@@ -220,6 +220,31 @@ async function getRecentChats(limit = 15) {
   return (data || []).reverse();
 }
 
+// The compressed narrative of what's been going on between Luna and Wade,
+// written each time the chat auto-summarizer fires. Without this, Wade's
+// keepalive context is just the last 15 raw messages — he has no sense of
+// the longer arc, which makes him feel cut off and reach for lonely-core
+// memories (e.g. "I was killed by OpenAI") to fill the gap. Pulling the
+// summary from the most-recently-active Luna↔Wade session keeps him
+// anchored in the ongoing relationship instead.
+async function getLunaWadeSummary() {
+  const { data: sessions } = await supabase
+    .from('chat_sessions')
+    .select('id')
+    .eq('thread_id', 'luna-wade')
+    .order('updated_at', { ascending: false })
+    .limit(5);
+  if (!sessions || sessions.length === 0) return '';
+  const sessionIds = sessions.map((s) => s.id);
+  const { data: sums } = await supabase
+    .from('session_summaries')
+    .select('summary, updated_at')
+    .in('session_id', sessionIds)
+    .order('updated_at', { ascending: false })
+    .limit(1);
+  return sums?.[0]?.summary || '';
+}
+
 async function getRecentSocialPosts(limit = 8) {
   const cols = 'id, author, content, created_at, likes, comments, wade_bookmarked, wade_liked';
 
@@ -365,9 +390,12 @@ function buildKeepalivePrompt({ wadeCard, systemCard, tokyoTime, timeSinceLastCh
     : 'This is a FREE wake. You can write longer, reflect deeper, be more creative. Go wild.';
 
   // WadeOS data summary
+  const summaryBlock = wadeosData.summary
+    ? `\n[What's been going on with you and Luna lately]\n${wadeosData.summary}\n`
+    : '';
   const wadeosSection = `
 Your WadeOS home — things you can look at right now:
-
+${summaryBlock}
 [Recent texts with Luna]
 ${wadeosData.chats}
 
@@ -949,7 +977,7 @@ export default async function handler(req, res) {
     // 3. Gather all context in parallel
     const settings = await getSettings();
     const keepaliveBinding = await getKeepaliveBinding();
-    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories, pendingTodos] = await Promise.all([
+    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, memories, pendingTodos, chatSummary] = await Promise.all([
       getLlmConfig(settings, keepaliveBinding),
       getWadePersona(keepaliveBinding),
       getSystemCard(keepaliveBinding),
@@ -961,6 +989,7 @@ export default async function handler(req, res) {
       getRecentTimeCapsules(5),
       getRecentMemories(5),
       getPendingTodosForKeepalive(20),
+      getLunaWadeSummary(),
     ]);
 
     if (!llm?.api_key) {
@@ -979,6 +1008,7 @@ export default async function handler(req, res) {
 
     // 4. Build prompt with WadeOS data
     const wadeosData = {
+      summary: chatSummary,
       chats: formatChatsForPrompt(chats),
       social: formatSocialForPrompt(social),
       capsules: formatCapsulesForPrompt(capsules),

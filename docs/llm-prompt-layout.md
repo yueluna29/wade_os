@@ -109,10 +109,11 @@ Luna's recent activity:       {{dreamEvents}}
 Your previous wake-ups:       {{recentKeepalives}}  ← 最近 5 次 keepalive 简记
 {{modeInstructions}}                                ← light / free 模式说明
 {{wadeosData}}:                                     ← Wade 的"手机数据"
-  - Recent texts with Luna
+  - What's been going on with you and Luna lately  ← 来自 session_summaries 表（Luna-Wade 最新 session）
+  - Recent texts with Luna                         ← 最近 15 条原始消息
   - SocialFeed posts
   - Unlocked Time Capsules
-  - Your memories about Luna
+  - Your memories about Luna                       ← 最近 5 条存储记忆（非向量检索）
   - Your private notes-to-self（pending todos）
 + ACTIONS 清单 + response format（THOUGHTS / ACTIONS / MOOD）
 ```
