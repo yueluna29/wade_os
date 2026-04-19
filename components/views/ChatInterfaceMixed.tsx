@@ -580,6 +580,16 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // first bubble of Wade's fresh reply), so the stream takes over naturally.
   const [regenHidden, setRegenHidden] = useState<{ anchorId: string; groupIds: Set<string> } | null>(null);
 
+  // Pager "delete this version" needs a two-tap confirmation so a single
+  // mis-tap on mobile doesn't nuke a batch. Tracks which anchor is currently
+  // armed; auto-disarms after 3s via the effect below.
+  const [pagerDeleteArmed, setPagerDeleteArmed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pagerDeleteArmed) return;
+    const t = setTimeout(() => setPagerDeleteArmed(null), 3000);
+    return () => clearTimeout(t);
+  }, [pagerDeleteArmed]);
+
   // Sessions that belong to this contact's thread. Every contact carries a
   // `threadId` — Luna-Wade is the shared 'luna-wade' thread (mirrors on both
   // phones); other contacts get per-phone keys like 'wade-weasel'.
@@ -772,8 +782,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // always resolves group IDs against current state.
   const renderGroupPagerInline = (pager: { anchorId: string; totalGroups: number; currentIndex: number }) => {
     const { anchorId, totalGroups, currentIndex } = pager;
-    const setIndex = (next: number) => {
-      const clamped = ((next % totalGroups) + totalGroups) % totalGroups;
+    const resolveGroupsList = () => {
       const list: { id: string; firstTs: number }[] = [];
       for (const m2 of storeMessages) {
         if (m2.sessionId !== resolvedSessionId) continue;
@@ -783,8 +792,27 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         else list.push({ id: m2.replyGroupId, firstTs: m2.timestamp });
       }
       list.sort((a, b) => a.firstTs - b.firstTs);
+      return list;
+    };
+    const setIndex = (next: number) => {
+      const clamped = ((next % totalGroups) + totalGroups) % totalGroups;
+      const list = resolveGroupsList();
       const target = list[clamped];
       if (target) setActiveGroupByAnchor((prev) => ({ ...prev, [anchorId]: target.id }));
+    };
+    const armed = pagerDeleteArmed === anchorId;
+    const deleteCurrentVersion = () => {
+      if (!armed) { setPagerDeleteArmed(anchorId); return; }
+      const list = resolveGroupsList();
+      const current = list[currentIndex];
+      if (!current) { setPagerDeleteArmed(null); return; }
+      const targets = storeMessages.filter(
+        (m) => m.sessionId === resolvedSessionId
+          && m.replyAnchorId === anchorId
+          && m.replyGroupId === current.id,
+      );
+      targets.forEach((m) => deleteMessage(m.id));
+      setPagerDeleteArmed(null);
     };
     return (
       <span onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-0.5 text-wade-text-muted/50">
@@ -804,6 +832,14 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           className="hover:text-wade-accent transition-colors leading-none px-0.5"
         >
           ›
+        </button>
+        <button
+          type="button"
+          aria-label={armed ? 'Confirm delete this version' : 'Delete this version'}
+          onClick={(e) => { e.stopPropagation(); deleteCurrentVersion(); }}
+          className={`ml-0.5 leading-none px-0.5 transition-colors ${armed ? 'text-red-500' : 'hover:text-wade-accent'}`}
+        >
+          {armed ? '?' : '×'}
         </button>
       </span>
     );
