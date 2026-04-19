@@ -766,15 +766,6 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     setRegenHidden(null);
   }, [resolvedSessionId]);
 
-  // Safety: if the regen call fails or returns no bubbles, wadeStatus swings
-  // back to idle without any new group ever appearing. Don't leave the old
-  // reply stuck in the hidden state — restore it after typing ends.
-  useEffect(() => {
-    if (wadeStatus === 'typing') return;
-    if (!regenHidden) return;
-    setRegenHidden(null);
-  }, [wadeStatus, regenHidden]);
-
   // Compact group-pager rendered inline inside the time/check footer of the
   // last bubble of each regen group. Same logic as the standalone row it
   // replaced — closes over storeMessages + setActiveGroupByAnchor so it
@@ -953,6 +944,16 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const [customPromptText, setCustomPromptText] = useState('');
   const [showMemorySelector, setShowMemorySelector] = useState(false);
   const [wadeStatus, setWadeStatus] = useState<'idle' | 'reading' | 'typing'>('idle');
+
+  // Safety: if the regen call fails or returns no bubbles, wadeStatus swings
+  // back to idle without any new group ever appearing. Don't leave the old
+  // reply stuck in the hidden state — restore it after typing ends.
+  useEffect(() => {
+    if (wadeStatus === 'typing') return;
+    if (!regenHidden) return;
+    setRegenHidden(null);
+  }, [wadeStatus, regenHidden]);
+
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
   const [playingMsgId, setPlayingMsgId] = useState<string | number | null>(null);
