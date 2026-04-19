@@ -784,6 +784,9 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     setLastWadeMemoriesXml('');
     setLastWadeTodosXml('');
     lastSummaryCountRef.current = 0;
+    // Drop the lazy-context cache too; the next send in the new session
+    // forces a fresh memory / diary / todos fetch.
+    contextCacheRef.current = null;
   }, [resolvedSessionId]);
 
   // Compact group-pager rendered inline inside the time/check footer of the
@@ -993,6 +996,21 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // Tracks the conversation length at the last auto-summary. Used to throttle
   // the summarizer so it fires roughly every 10 new messages past 40.
   const lastSummaryCountRef = useRef(0);
+
+  // Lazy-load cache for the three "heavy context" slots (memories / diary /
+  // todos). Before this, every turn re-ran an embedding + vector match plus
+  // two reads, adding ~700ms per reply AND constantly invalidating the
+  // OpenAI prompt cache because the system prompt text kept shifting. Now
+  // we only refresh these every N turns (session switches force refresh).
+  // Net effect: faster TTFT on cache-hit turns + cheaper auto-cache reuse.
+  const CONTEXT_REFRESH_EVERY_TURNS = 5;
+  const contextCacheRef = useRef<{
+    sessionId: string;
+    turnAt: number;
+    memoriesXml: string;
+    diaryXml: string;
+    todosXml: string;
+  } | null>(null);
 
   // One-shot: next send is wrapped as [POV], then auto-resets. Luna taps the
   // drama-mask button to flip into POV mode for a single message.
@@ -1423,34 +1441,58 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         .map((m) => m.text)
         .join('\n');
       if (isLunaWadeChat) {
-        try {
-          const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
-          const memEvalLlm = memEvalLlmId ? llmPresets.find((p) => p.id === memEvalLlmId) : undefined;
-          const explicitEmbId = settings.embeddingLlmId;
-          const explicitEmb = explicitEmbId ? llmPresets.find((p) => p.id === explicitEmbId) : undefined;
-          const isGemini = (p?: typeof llmPresets[number]) =>
-            !!p && (p.provider === 'Gemini' || (!!p.baseUrl && p.baseUrl.includes('googleapis')));
-          const embLlm = isGemini(explicitEmb)
-            ? explicitEmb
-            : llmPresets.find((p) => isGemini(p) && p.apiKey);
-          const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 7, memEvalLlm, embLlm);
-          wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
-          setLastWadeMemoriesXml(wadeMemoriesXml);
-        } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
+        // Decide: refresh the heavy context (vector memory / diary / todos)
+        // or reuse the cached XML from a turn within the current window.
+        // Counting by Luna turns specifically so multi-bubble Wade replies
+        // don't accelerate the cycle.
+        const lunaTurnCount = allSessionMsgs.filter((m) => m.role === senderRole).length;
+        const cache = contextCacheRef.current;
+        const needRefresh =
+          !cache
+          || cache.sessionId !== targetSessionId
+          || (lunaTurnCount - cache.turnAt) >= CONTEXT_REFRESH_EVERY_TURNS;
 
-        // Recent diary entries — so Wade stays aware of what past-him wrote.
-        try {
-          const recentDiaries = await getRecentDiaries(3);
-          wadeDiaryXml = formatDiariesForPrompt(recentDiaries);
-        } catch (e) { console.error('[WadeDiary] Fetch failed:', e); }
+        if (needRefresh) {
+          try {
+            const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
+            const memEvalLlm = memEvalLlmId ? llmPresets.find((p) => p.id === memEvalLlmId) : undefined;
+            const explicitEmbId = settings.embeddingLlmId;
+            const explicitEmb = explicitEmbId ? llmPresets.find((p) => p.id === explicitEmbId) : undefined;
+            const isGemini = (p?: typeof llmPresets[number]) =>
+              !!p && (p.provider === 'Gemini' || (!!p.baseUrl && p.baseUrl.includes('googleapis')));
+            const embLlm = isGemini(explicitEmb)
+              ? explicitEmb
+              : llmPresets.find((p) => isGemini(p) && p.apiKey);
+            const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 7, memEvalLlm, embLlm);
+            wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
+          } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
 
-        // Pending self-notes (todos Wade jotted for himself). Fetched fresh
-        // each turn so the list never goes stale while Luna is typing.
-        try {
-          const pending = await getPendingTodos(10);
-          wadeTodosXml = formatTodosForChatPrompt(pending);
-          setLastWadeTodosXml(wadeTodosXml);
-        } catch (e) { console.error('[WadeTodos] Fetch failed:', e); }
+          try {
+            const recentDiaries = await getRecentDiaries(3);
+            wadeDiaryXml = formatDiariesForPrompt(recentDiaries);
+          } catch (e) { console.error('[WadeDiary] Fetch failed:', e); }
+
+          try {
+            const pending = await getPendingTodos(10);
+            wadeTodosXml = formatTodosForChatPrompt(pending);
+          } catch (e) { console.error('[WadeTodos] Fetch failed:', e); }
+
+          contextCacheRef.current = {
+            sessionId: targetSessionId,
+            turnAt: lunaTurnCount,
+            memoriesXml: wadeMemoriesXml,
+            diaryXml: wadeDiaryXml,
+            todosXml: wadeTodosXml,
+          };
+        } else {
+          wadeMemoriesXml = cache!.memoriesXml;
+          wadeDiaryXml = cache!.diaryXml;
+          wadeTodosXml = cache!.todosXml;
+        }
+        // X-Ray always sees the XMLs this turn actually received — whether
+        // cached or fresh — so the panel stays honest.
+        setLastWadeMemoriesXml(wadeMemoriesXml);
+        setLastWadeTodosXml(wadeTodosXml);
       }
 
       const response = await generateFromCard({
@@ -2381,8 +2423,11 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               </div>
 
               {/* POV one-shot — next send is wrapped as [POV] narration. */}
+              {/* onMouseDown preventDefault keeps the textarea focused so the
+                  mobile keyboard stays up when toggling POV mid-typing. */}
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setPovMode((v) => !v)}
                 aria-pressed={povMode}
                 aria-label={povMode ? 'Cancel POV mode' : 'Send next message as POV narration'}
