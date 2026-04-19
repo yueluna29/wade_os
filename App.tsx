@@ -5,7 +5,8 @@ import { Shell } from './components/layout/Shell';
 import { ChatInterface } from './components/views/ChatInterface';
 import { SocialFeed } from './components/views/SocialFeed';
 import { Divination } from './components/views/Divination';
-import { ApiSettings } from './components/views/ApiSettings';
+// Temporary preview switch — swap back to the legacy import to restore V1.
+import { ApiSettingsV2 as ApiSettings } from './components/views/ApiSettingsV2';
 import { PersonaTuning } from './components/views/PersonaTuning';
 import { Memos } from './components/views/Memos';
 import { MemoryBank } from './components/views/MemoryBank';

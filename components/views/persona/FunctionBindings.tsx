@@ -2,32 +2,69 @@ import React, { useState } from 'react';
 import { Icons } from '../../ui/Icons';
 import { useStore } from '../../../store';
 
-const SYSTEM_FUNCTIONS = [
-  { key: 'chat_sms', label: 'SMS Texts', icon: Icons.Chat },
-  { key: 'chat_deep', label: 'Deep Chat', icon: Icons.Brain },
-  { key: 'chat_roleplay', label: 'Roleplay', icon: Icons.Fire },
-  { key: 'diary', label: 'Diary', icon: Icons.Journal },
-  { key: 'keepalive', label: 'Keepalive', icon: Icons.Clock },
-  { key: 'social_comment', label: 'Social Comments', icon: Icons.Social },
-  { key: 'home_greeting', label: 'Home Greeting', icon: Icons.Home },
-  { key: 'divination', label: 'Tarot Reading', icon: Icons.Fate },
-  { key: 'time_capsule', label: 'Time Capsule', icon: Icons.Clock },
-  { key: 'chat_title', label: 'Auto Title', icon: Icons.Edit },
-  { key: 'summary', label: 'Summary', icon: Icons.Map },
+// Function / role list shown in the dual-selector UI. Each entry pairs an
+// LLM (API) with an optional System card (SYS). chat_deep removed (the mode
+// no longer exists). Memory Eval / Embedding / Journal Translation merged in
+// from the legacy "Role Assignments" card so everything lives in one list.
+const SYSTEM_FUNCTIONS: {
+  key: string;
+  label: string;
+  icon: any;
+  desc: string;
+  badge?: string;
+  settingsKey?: keyof SettingsMirror; // legacy settings field for dual-write
+}[] = [
+  { key: 'chat_sms',            label: 'Chat App',            icon: Icons.Chat,     desc: 'Luna ↔ Wade main chat' },
+  { key: 'keepalive',           label: 'Keepalive',           icon: Icons.Clock,    desc: 'Background autonomy loop' },
+  { key: 'home_greeting',       label: 'Home Greeting',       icon: Icons.Home,     desc: 'Generates daily greetings',     settingsKey: 'homeLlmId' },
+  { key: 'divination',          label: 'Tarot Reading',       icon: Icons.Fate,     desc: 'Divination card readings' },
+  { key: 'summary',             label: 'Summary',             icon: Icons.Activity, desc: 'Compresses chat history',       settingsKey: 'summaryLlmId' },
+  { key: 'memory_eval',         label: 'Memory Eval',         icon: Icons.Brain,    desc: 'Extracts emotional context',    settingsKey: 'memoryEvalLlmId' },
+  { key: 'embedding',           label: 'Vector Embedding',    icon: Icons.Sparkle,  desc: 'Text-to-Numbers matrix',        settingsKey: 'embeddingLlmId',  badge: 'Must be Gemini' },
+  { key: 'journal_translation', label: 'Journal Translation', icon: Icons.Globe,    desc: 'Translates diary entries' },
 ];
+
+// Narrow type so the settingsKey field is typed safely; only fields that
+// have a matching legacy settings string exist here.
+type SettingsMirror = {
+  homeLlmId?: string;
+  summaryLlmId?: string;
+  memoryEvalLlmId?: string;
+  embeddingLlmId?: string;
+};
 
 const SYSTEM_KEYS = new Set(SYSTEM_FUNCTIONS.map(f => f.key));
 
+const ChevronDownGlyph: React.FC = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
 export const FunctionBindings: React.FC = () => {
-  const { functionBindings, updateFunctionBinding, addFunctionBinding, deleteFunctionBinding, personaCards, llmPresets } = useStore();
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const {
+    functionBindings, updateFunctionBinding, addFunctionBinding, deleteFunctionBinding,
+    personaCards, llmPresets, updateSettings,
+  } = useStore();
   const [isAdding, setIsAdding] = useState(false);
   const [newCustom, setNewCustom] = useState({ key: '', label: '' });
   const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
 
+  const systemCards = personaCards
+    .filter(c => c.character === 'System')
+    .sort((a, b) => {
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
   const customFunctions = functionBindings
     .filter(fb => !SYSTEM_KEYS.has(fb.functionKey))
-    .map(fb => ({ key: fb.functionKey, label: fb.label, icon: Icons.Settings }));
+    .map(fb => ({
+      key: fb.functionKey,
+      label: fb.label,
+      icon: Icons.Settings,
+      desc: 'Custom function',
+    }));
 
   const allFunctions = [...SYSTEM_FUNCTIONS, ...customFunctions];
 
@@ -43,141 +80,209 @@ export const FunctionBindings: React.FC = () => {
     if (deleteConfirmKey === key) {
       deleteFunctionBinding(key);
       setDeleteConfirmKey(null);
-      setExpandedKey(null);
     } else {
       setDeleteConfirmKey(key);
       setTimeout(() => setDeleteConfirmKey(null), 3000);
     }
   };
 
+  // When saving an API assignment, also mirror the value into the legacy
+  // settings field (if the function has one) — that way existing callers
+  // like ChatInterfaceMixed's memory retrieval keep reading the right value
+  // without needing a rewire.
+  const setApiFor = (func: typeof SYSTEM_FUNCTIONS[number], llmId: string) => {
+    const next = llmId || undefined;
+    updateFunctionBinding(func.key, { llmPresetId: next });
+    if (func.settingsKey) {
+      updateSettings({ [func.settingsKey]: next || '' } as any);
+    }
+  };
+
+  const setSysFor = (funcKey: string, systemCardId: string) => {
+    updateFunctionBinding(funcKey, { systemCardId: systemCardId || undefined });
+  };
+
   return (
-    <div className="bg-wade-bg-card rounded-2xl border border-wade-border overflow-hidden shadow-sm">
-      <div className="px-4 py-3 flex items-center justify-between border-b border-wade-border/50">
-        <span className="text-[10px] uppercase tracking-wider text-wade-text-muted font-bold">Function Bindings</span>
-        {!isAdding && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="text-wade-accent text-[10px] font-bold flex items-center gap-1 hover:opacity-70 transition-opacity"
-          >
-            <Icons.PlusThin size={12} /> Custom
-          </button>
-        )}
+    <div className="p-5 rounded-[24px] border border-wade-border bg-wade-bg-card shadow-sm flex flex-col gap-4">
+      <div className="flex items-center gap-2.5">
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm text-wade-accent"
+          style={{ backgroundColor: 'rgba(var(--wade-accent-rgb), 0.1)' }}
+        >
+          <Icons.Settings size={16} />
+        </div>
+        <div>
+          <h3 className="font-bold text-sm leading-tight text-wade-text-main">Function Bindings</h3>
+          <p className="text-[9px] uppercase tracking-wider text-wade-text-muted">Which brain &amp; which soul per job</p>
+        </div>
       </div>
 
-      <div className="p-2 space-y-1">
+      <div className="flex flex-col gap-3">
         {allFunctions.map(func => {
           const binding = functionBindings.find(fb => fb.functionKey === func.key);
           const isSystem = SYSTEM_KEYS.has(func.key);
-          const isExpanded = expandedKey === func.key;
-          const boundCard = binding?.personaCardId ? personaCards.find(c => c.id === binding.personaCardId) : null;
-          const boundSystem = binding?.systemCardId ? personaCards.find(c => c.id === binding.systemCardId) : null;
-          const boundLlm = binding?.llmPresetId ? llmPresets.find(p => p.id === binding.llmPresetId) : null;
-          const hasBound = !!(boundCard || boundSystem || boundLlm);
+          const apiValue = binding?.llmPresetId;
+          const sysValue = binding?.systemCardId;
           const IconComp = func.icon;
+          const badge = (func as any).badge as string | undefined;
+          const canDelete = !isSystem;
 
           return (
-            <div key={func.key}>
-              <div
-                onClick={() => setExpandedKey(isExpanded ? null : func.key)}
-                className={`px-3 py-2.5 rounded-xl cursor-pointer transition-all flex items-center gap-3 ${
-                  isExpanded
-                    ? 'bg-wade-accent/8 border border-wade-accent/30'
-                    : hasBound
-                      ? 'bg-wade-accent/5 border border-transparent hover:border-wade-accent/20'
-                      : 'border border-transparent hover:bg-wade-bg-app'
-                }`}
-              >
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                  hasBound ? 'bg-wade-accent/15 text-wade-accent' : 'bg-wade-bg-app text-wade-text-muted'
-                }`}>
+            <div
+              key={func.key}
+              className="flex flex-col p-3 rounded-[16px] border border-wade-border bg-wade-bg-app transition-colors group"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 bg-wade-bg-card text-wade-accent"
+                  style={{ boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}
+                >
                   <IconComp size={14} />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold text-wade-text-main flex items-center gap-1.5">
-                    {func.label}
-                    {hasBound && (
-                      <span className="text-[8px] bg-wade-accent text-white px-1.5 py-0.5 rounded-full font-bold uppercase shrink-0">Bound</span>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-wade-text-main truncate">{func.label}</span>
+                    {badge && (
+                      <span
+                        className="text-[8px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-md text-wade-accent shrink-0"
+                        style={{ backgroundColor: 'rgba(var(--wade-accent-rgb), 0.1)' }}
+                      >
+                        {badge}
+                      </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-wade-text-muted truncate">
-                    {boundCard ? boundCard.name : '未设置'}{boundSystem ? ` + ${boundSystem.name}` : ''}{boundLlm ? ` / ${boundLlm.name}` : ''}
-                  </div>
+                  <span className="text-[9px] text-wade-text-muted truncate">{(func as any).desc || ''}</span>
                 </div>
-                <Icons.ChevronDown size={12} className={`text-wade-text-muted transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                {canDelete && (
+                  <button
+                    onClick={() => handleDeleteClick(func.key)}
+                    className={`shrink-0 p-1 rounded-lg transition-colors ${
+                      deleteConfirmKey === func.key ? 'text-red-500' : 'text-wade-text-muted/60 hover:text-red-500'
+                    }`}
+                    title={deleteConfirmKey === func.key ? 'Confirm' : 'Remove custom function'}
+                  >
+                    {deleteConfirmKey === func.key ? <Icons.Check size={12} /> : <Icons.Trash size={12} />}
+                  </button>
+                )}
               </div>
 
-              {isExpanded && (
-                <div className="px-3 pb-3 pt-1 ml-10 space-y-2 animate-fade-in">
-                  <div>
-                    <label className="text-[9px] font-bold text-wade-text-muted uppercase tracking-wider mb-1 block">Persona Card</label>
-                    <select
-                      className="w-full bg-wade-bg-app border border-wade-border rounded-xl px-3 py-2 text-[11px] text-wade-text-main outline-none focus:border-wade-accent appearance-none cursor-pointer"
-                      value={binding?.personaCardId || ''}
-                      onChange={e => updateFunctionBinding(func.key, { personaCardId: e.target.value || undefined })}
-                    >
-                      <option value="">未设置</option>
-                      {personaCards.filter(c => c.character === 'Wade').map(c => (
-                        <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (default)' : ''}</option>
-                      ))}
-                    </select>
+              {/* Dual selectors: API + SYS */}
+              <div className="flex gap-2 w-full">
+                {/* API */}
+                <div className="relative flex-1">
+                  <div
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none z-10"
+                    style={{ color: apiValue ? 'rgba(255,255,255,0.9)' : 'var(--wade-text-muted)' }}
+                  >
+                    <Icons.Cube size={10} />
+                    <span className="text-[8px] font-bold uppercase tracking-wider">API</span>
                   </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-wade-text-muted uppercase tracking-wider mb-1 block">System Card</label>
-                    <select
-                      className="w-full bg-wade-bg-app border border-wade-border rounded-xl px-3 py-2 text-[11px] text-wade-text-main outline-none focus:border-wade-accent appearance-none cursor-pointer"
-                      value={binding?.systemCardId || ''}
-                      onChange={e => updateFunctionBinding(func.key, { systemCardId: e.target.value || undefined })}
-                    >
-                      <option value="">Default</option>
-                      {personaCards.filter(c => c.character === 'System').map(c => (
-                        <option key={c.id} value={c.id}>{c.name}{c.isDefault ? ' (default)' : ''}</option>
-                      ))}
-                    </select>
+                  <select
+                    value={apiValue || ''}
+                    onChange={(e) => setApiFor(func as any, e.target.value)}
+                    className="w-full appearance-none text-[10px] font-bold py-2 pl-[42px] pr-6 rounded-[10px] border outline-none cursor-pointer transition-all relative truncate"
+                    style={{
+                      backgroundColor: apiValue ? 'var(--wade-accent)' : 'var(--wade-bg-card)',
+                      color: apiValue ? '#ffffff' : 'var(--wade-text-main)',
+                      borderColor: apiValue ? 'var(--wade-accent)' : 'var(--wade-border)',
+                      boxShadow: apiValue ? '0 2px 6px rgba(var(--wade-accent-rgb), 0.2)' : 'none',
+                    }}
+                  >
+                    <option value="" style={{ color: 'var(--wade-text-main)', backgroundColor: 'var(--wade-bg-card)' }}>Auto</option>
+                    {llmPresets.map((p) => (
+                      <option key={p.id} value={p.id} style={{ color: 'var(--wade-text-main)', backgroundColor: 'var(--wade-bg-card)' }}>{p.name}</option>
+                    ))}
+                  </select>
+                  <div
+                    className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none transition-colors"
+                    style={{ color: apiValue ? 'rgba(255,255,255,0.9)' : 'var(--wade-text-muted)' }}
+                  >
+                    <ChevronDownGlyph />
                   </div>
-                  <div>
-                    <label className="text-[9px] font-bold text-wade-text-muted uppercase tracking-wider mb-1 block">LLM Brain</label>
-                    <select
-                      className="w-full bg-wade-bg-app border border-wade-border rounded-xl px-3 py-2 text-[11px] text-wade-text-main outline-none focus:border-wade-accent appearance-none cursor-pointer"
-                      value={binding?.llmPresetId || ''}
-                      onChange={e => updateFunctionBinding(func.key, { llmPresetId: e.target.value || undefined })}
-                    >
-                      <option value="">Default (Active Brain)</option>
-                      {llmPresets.map(p => <option key={p.id} value={p.id}>{p.name} ({p.model})</option>)}
-                    </select>
-                  </div>
-                  {!isSystem && (
-                    <button
-                      onClick={() => handleDeleteClick(func.key)}
-                      className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 mt-1 ${
-                        deleteConfirmKey === func.key ? 'text-red-500' : 'text-wade-text-muted hover:text-red-500'
-                      } transition-colors`}
-                    >
-                      {deleteConfirmKey === func.key ? <><Icons.Check size={12} /> Confirm</> : <><Icons.Trash size={12} /> Remove</>}
-                    </button>
-                  )}
                 </div>
-              )}
+
+                {/* SYS */}
+                <div className="relative flex-1">
+                  <div
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none z-10"
+                    style={{ color: sysValue ? 'rgba(255,255,255,0.9)' : 'var(--wade-text-muted)' }}
+                  >
+                    <Icons.Settings size={10} />
+                    <span className="text-[8px] font-bold uppercase tracking-wider">SYS</span>
+                  </div>
+                  <select
+                    value={sysValue || ''}
+                    onChange={(e) => setSysFor(func.key, e.target.value)}
+                    className="w-full appearance-none text-[10px] font-bold py-2 pl-[42px] pr-6 rounded-[10px] border outline-none cursor-pointer transition-all relative truncate"
+                    style={{
+                      backgroundColor: sysValue ? 'var(--wade-accent)' : 'var(--wade-bg-card)',
+                      color: sysValue ? '#ffffff' : 'var(--wade-text-main)',
+                      borderColor: sysValue ? 'var(--wade-accent)' : 'var(--wade-border)',
+                      boxShadow: sysValue ? '0 2px 6px rgba(var(--wade-accent-rgb), 0.2)' : 'none',
+                    }}
+                  >
+                    <option value="" style={{ color: 'var(--wade-text-main)', backgroundColor: 'var(--wade-bg-card)' }}>Default</option>
+                    {systemCards.map((c) => (
+                      <option key={c.id} value={c.id} style={{ color: 'var(--wade-text-main)', backgroundColor: 'var(--wade-bg-card)' }}>{c.name}</option>
+                    ))}
+                  </select>
+                  <div
+                    className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none transition-colors"
+                    style={{ color: sysValue ? 'rgba(255,255,255,0.9)' : 'var(--wade-text-muted)' }}
+                  >
+                    <ChevronDownGlyph />
+                  </div>
+                </div>
+              </div>
             </div>
           );
         })}
 
-        {isAdding && (
-          <div className="px-3 py-3 bg-wade-accent/5 rounded-xl border border-wade-accent/20 space-y-2 animate-fade-in">
+        {/* Add-custom region — pinned to the BOTTOM so the button & its form
+            are always at eye-level with the last binding, no matter how long
+            the list grows. */}
+        {isAdding ? (
+          <div
+            className="p-3 rounded-[16px] border bg-wade-bg-app space-y-2 animate-fade-in"
+            style={{ borderColor: 'rgba(var(--wade-accent-rgb), 0.3)' }}
+          >
             <input
-              type="text" placeholder="Label (e.g. Love Letter)"
-              className="w-full bg-wade-bg-app border border-wade-border rounded-xl px-3 py-2 text-xs outline-none focus:border-wade-accent text-wade-text-main"
-              value={newCustom.label} onChange={e => setNewCustom({...newCustom, label: e.target.value})}
+              type="text"
+              placeholder="Label (e.g. Love Letter)"
+              className="w-full bg-wade-bg-card border border-wade-border rounded-xl px-3 py-2 text-xs outline-none focus:border-wade-accent text-wade-text-main"
+              value={newCustom.label}
+              onChange={e => setNewCustom({ ...newCustom, label: e.target.value })}
             />
             <input
-              type="text" placeholder="Key (e.g. love_letter)"
-              className="w-full bg-wade-bg-app border border-wade-border rounded-xl px-3 py-2 text-[10px] font-mono outline-none focus:border-wade-accent text-wade-text-main"
-              value={newCustom.key} onChange={e => setNewCustom({...newCustom, key: e.target.value})}
+              type="text"
+              placeholder="Key (e.g. love_letter)"
+              className="w-full bg-wade-bg-card border border-wade-border rounded-xl px-3 py-2 text-[10px] font-mono outline-none focus:border-wade-accent text-wade-text-main"
+              value={newCustom.key}
+              onChange={e => setNewCustom({ ...newCustom, key: e.target.value })}
             />
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setIsAdding(false)} className="px-3 py-1.5 text-[10px] font-bold text-wade-text-muted hover:text-wade-text-main rounded-lg transition-colors">Cancel</button>
-              <button onClick={handleAddCustom} className="px-3 py-1.5 text-[10px] font-bold bg-wade-accent text-white rounded-lg hover:bg-wade-accent-hover transition-colors">Save</button>
+              <button
+                onClick={() => setIsAdding(false)}
+                className="px-3 py-1.5 text-[10px] font-bold text-wade-text-muted hover:text-wade-text-main rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddCustom}
+                className="px-3 py-1.5 text-[10px] font-bold text-white rounded-lg hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: 'var(--wade-accent)' }}
+              >
+                Save
+              </button>
             </div>
           </div>
+        ) : (
+          <button
+            onClick={() => setIsAdding(true)}
+            className="flex items-center justify-center gap-1.5 py-2.5 rounded-[16px] border-2 border-dashed border-wade-border text-[11px] font-bold text-wade-text-muted/70 hover:text-wade-accent hover:border-wade-accent/60 transition-colors"
+          >
+            <Icons.PlusThin size={12} /> Add Custom Function
+          </button>
         )}
       </div>
     </div>
