@@ -214,6 +214,26 @@ export const MedsApp: React.FC = () => {
           </div>
         </header>
 
+        {/* 唠叨记录器 — Streak reminder above the fold */}
+        <div className="bg-gradient-to-br from-wade-bg-app to-wade-bg-card border border-wade-border rounded-[28px] p-5 shadow-[0_4px_15px_rgba(var(--wade-accent-rgb),0.05)] relative overflow-hidden flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-wade-bg-card border border-wade-border shadow-sm flex items-center justify-center flex-shrink-0 text-wade-accent relative z-10">
+            <Flame className="w-6 h-6" />
+          </div>
+          <div className="relative z-10">
+            <div className="text-[10px] text-wade-text-muted font-bold uppercase tracking-[0.15em] mb-1">Current Streak</div>
+            <div className="font-hand text-2xl text-wade-accent mb-1.5">
+              {streak === 0 ? 'Start a streak' : `${streak} Day${streak === 1 ? '' : 's'} Alive`}
+            </div>
+            <p className="text-[11px] text-wade-text-muted leading-relaxed italic pr-2">
+              {streak === 0
+                ? "Tap the button when you've done your meds and I'll start counting, kitten."
+                : `${streak} day${streak === 1 ? '' : 's'} without forgetting? I'm genuinely impressed. Your brain cells are finally holding hands. Keep it up, or I'll resurrect some dead bad guys just to haunt you.`}
+            </p>
+          </div>
+          {/* 装饰性大火苗 */}
+          <Flame className="w-32 h-32 absolute -right-6 -top-6 -z-0 transform rotate-12" style={{ color: 'rgba(var(--wade-accent-rgb), 0.08)' }} />
+        </div>
+
         {/* Action card */}
         <div className={`relative w-full rounded-[28px] border p-6 flex flex-col items-center text-center transition-all duration-500 ${status.cardClass}`}>
           {!selectedIsToday && (
@@ -386,26 +406,6 @@ export const MedsApp: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* 唠叨记录器 */}
-        <div className="bg-gradient-to-br from-wade-bg-app to-wade-bg-card border border-wade-border rounded-[28px] p-5 shadow-[0_4px_15px_rgba(var(--wade-accent-rgb),0.05)] relative overflow-hidden flex items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-wade-bg-card border border-wade-border shadow-sm flex items-center justify-center flex-shrink-0 text-wade-accent relative z-10">
-            <Flame className="w-6 h-6" />
-          </div>
-          <div className="relative z-10">
-            <div className="text-[10px] text-wade-text-muted font-bold uppercase tracking-[0.15em] mb-1">Current Streak</div>
-            <div className="font-hand text-2xl text-wade-accent mb-1.5">
-              {streak === 0 ? 'Start a streak' : `${streak} Day${streak === 1 ? '' : 's'} Alive`}
-            </div>
-            <p className="text-[11px] text-wade-text-muted leading-relaxed italic pr-2">
-              {streak === 0
-                ? "Tap the button when you've done your meds and I'll start counting, kitten."
-                : `${streak} day${streak === 1 ? '' : 's'} without forgetting? I'm genuinely impressed. Your brain cells are finally holding hands. Keep it up, or I'll resurrect some dead bad guys just to haunt you.`}
-            </p>
-          </div>
-          {/* 装饰性大火苗 */}
-          <Flame className="w-32 h-32 absolute -right-6 -top-6 -z-0 transform rotate-12" style={{ color: 'rgba(var(--wade-accent-rgb), 0.08)' }} />
         </div>
 
       </div>
