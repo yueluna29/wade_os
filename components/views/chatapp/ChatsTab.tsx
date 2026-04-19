@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Icons } from '../../ui/Icons';
 import { PhoneContact, PhoneOwner, getContactsForPhone } from './mockContacts';
 import { Avatar } from './Avatar';
@@ -110,17 +110,32 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({ phoneOwner, onOpenContact })
     return c;
   }), [rawContacts, settings.wadeAvatar, settings.lunaAvatar, profiles, profilesLoaded]);
 
+  // Per-contact preview cache keyed by phone. Written on every hydrated
+  // render; read synchronously inside the enriched useMemo so the first
+  // paint after boot already has real previews instead of a gray skeleton
+  // bar. Only the slim shape the list item needs (text / time / ts) is
+  // cached — the full messages array stays exclusively in React state.
+  const previewCacheKey = `wadeOS_chatPreviews_${phoneOwner}`;
+
   const enriched = useMemo(() => {
+    let cache: Record<string, { lastMessage: string; time: string; ts: number }> = {};
+    try {
+      const raw = localStorage.getItem(previewCacheKey);
+      if (raw) cache = JSON.parse(raw);
+    } catch { /* bad JSON — ignore, cache just stays empty */ }
+
     const withData = contacts.map((contact) => {
       const sessionId = resolveContactSessionId(contact, sessions);
       const lastOpenedRaw = localStorage.getItem(lastOpenedKey(phoneOwner, contact.id));
       const lastOpenedTs = lastOpenedRaw ? Number(lastOpenedRaw) : null;
+      const cached = cache[contact.id];
       if (!sessionId) {
         // Before messages finish loading we can't distinguish "no session
-        // exists" from "session row is still hydrating" — the built-in mock
-        // preview would flash here on mobile where hydration is slower. Keep
-        // preview empty so the skeleton renders until we actually know.
+        // exists" from "session row is still hydrating". Fall back to the
+        // cache so the row shows its last known preview instead of a gray
+        // skeleton; only skeleton if we have absolutely nothing cached.
         if (!messagesLoaded) {
+          if (cached) return { contact, lastMessage: cached.lastMessage, time: cached.time, unread: 0, ts: cached.ts };
           return { contact, lastMessage: '', time: '', unread: 0, ts: 0 };
         }
         // Post-hydration with no session: sample/system contact keeps its
@@ -133,12 +148,15 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({ phoneOwner, onOpenContact })
         if (!last || m.timestamp > last.timestamp) last = m;
       }
       // Once messages have finished loading, use the real last message (or
-      // empty if there literally are none). Until then, leave preview empty
-      // so the UI can skeleton instead of flashing the hardcoded mock.
-      const preview = messagesLoaded ? previewText(last) : '';
+      // empty if there literally are none). Until then, fall back to cache
+      // if we have one; skeleton only when we've truly never seen this row.
+      if (!messagesLoaded) {
+        if (cached) return { contact, lastMessage: cached.lastMessage, time: cached.time, unread: 0, ts: cached.ts };
+        return { contact, lastMessage: '', time: '', unread: 0, ts: 0 };
+      }
       return {
         contact,
-        lastMessage: preview,
+        lastMessage: previewText(last),
         time: last ? formatListTime(last.timestamp) : '',
         unread: computeUnread(messages, sessionId, selfRole, lastOpenedTs),
         ts: last?.timestamp ?? 0,
@@ -153,7 +171,19 @@ export const ChatsTab: React.FC<ChatsTabProps> = ({ phoneOwner, onOpenContact })
       return b.ts - a.ts;
     });
     return withData;
-  }, [contacts, messages, sessions, selfRole, phoneOwner]);
+  }, [contacts, messages, sessions, selfRole, phoneOwner, messagesLoaded, previewCacheKey]);
+
+  // Persist the hydrated previews so the next boot skips the skeleton entirely.
+  useEffect(() => {
+    if (!messagesLoaded) return;
+    const snapshot: Record<string, { lastMessage: string; time: string; ts: number }> = {};
+    for (const e of enriched) {
+      if (e.ts > 0) {
+        snapshot[e.contact.id] = { lastMessage: e.lastMessage, time: e.time, ts: e.ts };
+      }
+    }
+    try { localStorage.setItem(previewCacheKey, JSON.stringify(snapshot)); } catch { /* quota */ }
+  }, [messagesLoaded, enriched, previewCacheKey]);
 
   return (
     <div className="flex flex-col h-full bg-wade-bg-app">
