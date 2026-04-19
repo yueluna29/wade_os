@@ -13,15 +13,16 @@ const SYSTEM_FUNCTIONS: {
   desc: string;
   badge?: string;
   settingsKey?: keyof SettingsMirror; // legacy settings field for dual-write
+  noSysCard?: boolean; // pure tool call — runtime never reads a System card
 }[] = [
   { key: 'chat_sms',            label: 'Chat App',            icon: Icons.Chat,     desc: 'Luna ↔ Wade main chat' },
   { key: 'keepalive',           label: 'Keepalive',           icon: Icons.Clock,    desc: 'Background autonomy loop' },
   { key: 'home_greeting',       label: 'Home Greeting',       icon: Icons.Home,     desc: 'Generates daily greetings',     settingsKey: 'homeLlmId' },
   { key: 'divination',          label: 'Tarot Reading',       icon: Icons.Fate,     desc: 'Divination card readings' },
   { key: 'summary',             label: 'Summary',             icon: Icons.Activity, desc: 'Compresses chat history',       settingsKey: 'summaryLlmId' },
-  { key: 'memory_eval',         label: 'Memory Eval',         icon: Icons.Brain,    desc: 'Extracts emotional context',    settingsKey: 'memoryEvalLlmId' },
-  { key: 'embedding',           label: 'Vector Embedding',    icon: Icons.Sparkle,  desc: 'Text-to-Numbers matrix',        settingsKey: 'embeddingLlmId',  badge: 'Must be Gemini' },
-  { key: 'journal_translation', label: 'Journal Translation', icon: Icons.Globe,    desc: 'Translates diary entries' },
+  { key: 'memory_eval',         label: 'Memory Eval',         icon: Icons.Brain,    desc: 'Extracts emotional context',    settingsKey: 'memoryEvalLlmId',                                  noSysCard: true },
+  { key: 'embedding',           label: 'Vector Embedding',    icon: Icons.Sparkle,  desc: 'Text-to-Numbers matrix',        settingsKey: 'embeddingLlmId',  badge: 'Must be Gemini', noSysCard: true },
+  { key: 'journal_translation', label: 'Journal Translation', icon: Icons.Globe,    desc: 'Translates diary entries',                                                                       noSysCard: true },
 ];
 
 // Narrow type so the settingsKey field is typed safely; only fields that
@@ -131,6 +132,7 @@ export const FunctionBindings: React.FC = () => {
           const sysValue = binding?.systemCardId;
           const IconComp = func.icon;
           const badge = (func as any).badge as string | undefined;
+          const noSysCard = (func as any).noSysCard === true;
           const canDelete = !isSystem;
 
           return (
@@ -207,7 +209,16 @@ export const FunctionBindings: React.FC = () => {
                   </div>
                 </div>
 
-                {/* SYS */}
+                {/* SYS — hidden for pure-tool functions that never read a System card. */}
+                {noSysCard ? (
+                  <div
+                    className="flex-1 flex items-center justify-center text-[9px] font-bold uppercase tracking-wider rounded-[10px] border border-dashed text-wade-text-muted/60"
+                    style={{ borderColor: 'var(--wade-border)' }}
+                    title="This function is a pure tool call — it doesn't read a System card."
+                  >
+                    Tool-only
+                  </div>
+                ) : (
                 <div className="relative flex-1">
                   <div
                     className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none z-10"
@@ -239,6 +250,7 @@ export const FunctionBindings: React.FC = () => {
                     <ChevronDownGlyph />
                   </div>
                 </div>
+                )}
               </div>
             </div>
           );
