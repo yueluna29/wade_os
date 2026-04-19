@@ -12,19 +12,27 @@ const Icons = {
 };
 
 export const TimeCapsulesView = () => {
-  const { capsules, setTab, addCapsule, updateCapsule } = useStore();
+  const { capsules, setTab, addCapsule, updateCapsule, refetchCapsules } = useStore();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [viewingCapsule, setViewingCapsule] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCapsule, setEditingCapsule] = useState<string | null>(null);
-  
+
   // Wade's diary entries (fetched from wade_diary)
   const [diaryEntries, setDiaryEntries] = useState<Array<{
     id: string; content: string; mood: string | null; created_at: string;
   }>>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Refetch on every mount — the boot-time fetch can silently fail if an
+    // earlier query in the chain throws, leaving the view permanently empty.
+    refetchCapsules().catch((err) => {
+      console.error('[TimeCapsules] capsule refetch failed:', err);
+      setLoadError(`Capsules: ${err?.message || err}`);
+    });
+
     // All keepalive actions write to wade_diary with prefixes like
     // "[Sent Luna a message]", "[Liked a post]", etc. Real diary entries
     // are the only ones WITHOUT a bracket prefix.
@@ -32,12 +40,17 @@ export const TimeCapsulesView = () => {
     supabase.from('wade_diary').select('id, content, mood, created_at')
       .order('created_at', { ascending: false })
       .limit(200)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('[TimeCapsules] diary fetch failed:', error);
+          setLoadError((prev) => prev ? `${prev} | Diary: ${error.message}` : `Diary: ${error.message}`);
+          return;
+        }
         if (data) setDiaryEntries(data.filter(d =>
           d.content && !ACTION_PREFIXES.some(p => d.content.startsWith(p))
         ));
       });
-  }, []);
+  }, [refetchCapsules]);
 
   // Carousel state
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
@@ -226,6 +239,9 @@ export const TimeCapsulesView = () => {
               <p className="text-xs text-wade-text-muted font-medium tracking-wide uppercase opacity-80">
                 {capsules.length} Capsules + {diaryEntries.length} Diaries
               </p>
+              {loadError && (
+                <p className="text-[10px] text-red-500 mt-0.5 break-words max-w-[240px]">Load error — {loadError}</p>
+              )}
             </div>
           </div>
           <button

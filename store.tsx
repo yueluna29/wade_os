@@ -1323,6 +1323,31 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     await supabase.from('time_capsules').delete().eq('id', id);
   };
 
+  // Defensive refetch — callable from TimeCapsulesView on mount so the view
+  // never sits empty if the boot-time fetch was silently swallowed (e.g. an
+  // earlier query in the chain threw and bailed the try block).
+  const refetchCapsules = async () => {
+    const { data, error } = await supabase
+      .from('time_capsules')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('[TimeCapsules] refetch failed:', error);
+      throw error;
+    }
+    if (data) {
+      setCapsules(data.map(c => ({
+        id: c.id,
+        title: c.title,
+        content: c.content,
+        createdAt: c.created_at,
+        unlockDate: c.unlock_date,
+        isLocked: c.is_locked,
+        audioCache: c.audio_cache,
+      })));
+    }
+  };
+
   const addRecommendation = async (r: Omit<Recommendation, 'id'>) => {
     const newRec: Recommendation = { ...r, id: Date.now().toString() };
     setRecommendations(prev => [newRec, ...prev]);
@@ -1531,7 +1556,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       updateMessageAttachments,
       addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
       socialPosts, addPost, updatePost, deletePost, memos, addMemo,
-      capsules, addCapsule, updateCapsule, deleteCapsule,
+      capsules, addCapsule, updateCapsule, deleteCapsule, refetchCapsules,
       recommendations, addRecommendation, updateRecommendation, deleteRecommendation,
       coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled,
       chatArchives, importArchive, loadArchiveMessages, updateArchiveTitle, updateArchiveMessage, deleteArchive, deleteArchiveMessage, toggleArchiveFavorite,

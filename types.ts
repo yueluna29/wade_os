@@ -436,6 +436,7 @@ export interface GlobalState {
   addCapsule: (c: TimeCapsuleItem) => void;
   updateCapsule: (id: string, updates: Partial<TimeCapsuleItem>) => void;
   deleteCapsule: (id: string) => Promise<void>;
+  refetchCapsules: () => Promise<void>;
   recommendations: Recommendation[];
   addRecommendation: (r: Omit<Recommendation, 'id'>) => Promise<void>;
   updateRecommendation: (id: string, r: Partial<Recommendation>) => Promise<void>;
