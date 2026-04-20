@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pin, MessageCircle, Film, Quote, Heart, Sparkles, FolderLock, X, Activity, MapPin, ScanEye } from 'lucide-react';
 import { useStore } from '../../store';
 
@@ -99,9 +99,36 @@ const formatFavDate = (ts: number): string => {
 };
 
 export const VaultTab: React.FC = () => {
-  const { messages } = useStore();
+  const { messages, toggleFavorite } = useStore();
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const confirmTimerRef = useRef<number | null>(null);
+
+  // Reset the secondary-confirm state whenever the modal opens/closes so a
+  // stale "tap again" doesn't leak into the next card.
+  useEffect(() => {
+    setConfirmingRemove(false);
+    if (confirmTimerRef.current) {
+      window.clearTimeout(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
+  }, [selectedItem]);
+
+  const handleRemoveFromVault = () => {
+    if (!selectedItem?._msgId) return;
+    if (confirmingRemove) {
+      toggleFavorite(selectedItem._msgId);
+      setConfirmingRemove(false);
+      setSelectedItem(null);
+    } else {
+      setConfirmingRemove(true);
+      confirmTimerRef.current = window.setTimeout(() => {
+        setConfirmingRemove(false);
+        confirmTimerRef.current = null;
+      }, 3000);
+    }
+  };
 
   const filters = [
     { id: 'All', icon: <Sparkles size={14} /> },
@@ -122,6 +149,8 @@ export const VaultTab: React.FC = () => {
         text: m.text,
         date: formatFavDate(m.timestamp),
         _role: m.role,
+        _source: 'real' as const,
+        _msgId: m.id,
       }));
   }, [messages]);
 
@@ -367,6 +396,20 @@ export const VaultTab: React.FC = () => {
                   <div className="mt-8 text-[12px] text-[color:var(--wade-text-muted)] font-medium uppercase tracking-[0.2em] opacity-60">
                     {selectedItem.date}
                   </div>
+                  {selectedItem._source === 'real' && (
+                    <div className="mt-6 flex justify-center">
+                      <button
+                        onClick={handleRemoveFromVault}
+                        className={`text-[10px] font-medium uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-colors border ${
+                          confirmingRemove
+                            ? 'text-[color:var(--wade-accent)] border-[color:var(--wade-accent)] bg-[color:var(--wade-accent-light)]'
+                            : 'text-[color:var(--wade-text-muted)] border-[color:var(--wade-border)] hover:text-[color:var(--wade-accent)] hover:border-[color:var(--wade-accent)]/50'
+                        }`}
+                      >
+                        {confirmingRemove ? 'Tap again to remove' : 'Remove from Vault'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
