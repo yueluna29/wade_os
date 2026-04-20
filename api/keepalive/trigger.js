@@ -329,7 +329,13 @@ async function generateEmbedding(text, preset) {
       const json = await res.json();
       return json.embedding?.values || null;
     }
-    // OpenAI-compatible path
+    // OpenAI-compatible path. If the preset's model is already an embedder
+    // (e.g. "google/gemini-embedding-2-preview"), use it; otherwise default
+    // to text-embedding-3-small so a chat-model preset still works. 768
+    // dims matches pgvector column.
+    const presetModel = preset.model || '';
+    const isEmbeddingModel = /embedding|embed/i.test(presetModel);
+    const embedModel = isEmbeddingModel ? presetModel : 'text-embedding-3-small';
     const baseUrl = (preset.base_url || '').replace(/\/$/, '');
     const res = await fetch(`${baseUrl}/embeddings`, {
       method: 'POST',
@@ -338,7 +344,7 @@ async function generateEmbedding(text, preset) {
         'Authorization': `Bearer ${preset.api_key}`,
       },
       body: JSON.stringify({
-        model: 'text-embedding-3-small',
+        model: embedModel,
         input,
         dimensions: 768,
       }),

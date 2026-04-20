@@ -278,10 +278,15 @@ async function generateEmbedding(
       return result.embeddings?.[0]?.values || null;
     }
 
-    // OpenAI-compatible path (OpenAI, OpenRouter, DeepSeek etc.). Model is
-    // forced to text-embedding-3-small because the preset's own model is
-    // usually a chat model (e.g. "google/gemini-3-flash-preview") which
-    // can't embed. dimensions=768 keeps output compatible with vector(768).
+    // OpenAI-compatible path (OpenAI, OpenRouter, DeepSeek etc.). If the
+    // preset's own model already looks like an embedding model (e.g.
+    // "google/gemini-embedding-2-preview", "openai/text-embedding-3-large"),
+    // use it directly. Otherwise fall back to text-embedding-3-small so an
+    // accidentally-bound chat preset still produces a usable vector.
+    // dimensions=768 keeps output compatible with pgvector(768).
+    const presetModel = evalPreset.model || '';
+    const isEmbeddingModel = /embedding|embed/i.test(presetModel);
+    const embedModel = isEmbeddingModel ? presetModel : 'text-embedding-3-small';
     const baseUrl = (evalPreset.baseUrl || '').replace(/\/$/, '');
     const res = await fetch(`${baseUrl}/embeddings`, {
       method: 'POST',
@@ -290,7 +295,7 @@ async function generateEmbedding(
         'Authorization': `Bearer ${evalPreset.apiKey}`,
       },
       body: JSON.stringify({
-        model: 'text-embedding-3-small',
+        model: embedModel,
         input,
         dimensions: 768,
       }),
