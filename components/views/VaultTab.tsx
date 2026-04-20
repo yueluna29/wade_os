@@ -124,7 +124,7 @@ export const VaultTab: React.FC = () => {
           <Quote size={20} className="opacity-40" />
           <Pin size={16} className="opacity-80 rotate-12" />
         </div>
-        <p className="text-[14px] text-[color:var(--wade-text-main)] italic leading-relaxed font-serif relative z-10">
+        <p className="text-[14px] text-[color:var(--wade-text-main)] italic leading-relaxed font-vault relative z-10">
           "{item.text}"
         </p>
         <div className="mt-4 text-right text-[10px] text-[color:var(--wade-text-muted)] opacity-60 font-medium uppercase tracking-wider">
@@ -152,7 +152,7 @@ export const VaultTab: React.FC = () => {
             <div className="w-6 h-6 rounded-full flex items-center justify-center bg-[color:var(--wade-accent-light)] text-[color:var(--wade-accent)]">
               <MessageCircle size={12} fill="currentColor" />
             </div>
-            <span className="text-[12px] font-bold text-[color:var(--wade-text-main)] truncate">{item.title}</span>
+            <span className="text-[12px] font-bold italic font-vault text-[color:var(--wade-text-main)] truncate">{item.title}</span>
           </div>
 
           <div className="flex flex-col gap-2.5 relative z-10">
@@ -164,7 +164,7 @@ export const VaultTab: React.FC = () => {
               if (bubble.type === 'narration') {
                 return (
                   <div key={idx} className="relative z-10 pl-3 pr-1 w-full">
-                    <p className="m-0 text-[11px] leading-snug italic opacity-70 font-serif line-clamp-2" style={{ color: isLuna ? 'var(--wade-accent)' : 'var(--wade-text-muted)' }}>
+                    <p className="m-0 text-[11px] leading-snug italic opacity-70 font-vault line-clamp-2" style={{ color: isLuna ? 'var(--wade-accent)' : 'var(--wade-text-muted)' }}>
                       <span className="font-bold tracking-wider text-[9px] uppercase not-italic opacity-60 mr-1">[{bubble.role}]</span>
                       {bubble.text.replace(/\*/g, '')}
                     </p>
@@ -230,11 +230,11 @@ export const VaultTab: React.FC = () => {
             {item.status === 'Locked' && <FolderLock size={10} className="text-[color:var(--wade-text-muted)]" />}
           </div>
 
-          <h3 className="text-[16px] font-bold text-[color:var(--wade-text-main)] mb-1 leading-tight">
+          <h3 className="text-[16px] font-bold italic font-vault text-[color:var(--wade-text-main)] mb-1 leading-tight">
             {item.title}
           </h3>
 
-          <p className="text-[12px] text-[color:var(--wade-text-muted)] line-clamp-3 leading-relaxed opacity-80">
+          <p className="text-[12px] italic font-vault text-[color:var(--wade-text-muted)] line-clamp-3 leading-relaxed opacity-80">
             {item.desc}
           </p>
         </div>
@@ -243,7 +243,7 @@ export const VaultTab: React.FC = () => {
   );
 
   return (
-    <div className="flex flex-col h-full w-full bg-[color:var(--wade-bg-app)] relative font-sans overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-[color:var(--wade-bg-app)] relative overflow-hidden">
 
       {/* 背景环境光晕 */}
       <div className="absolute top-[-10%] left-[-20%] w-[150%] h-[50%] bg-[color:var(--wade-accent-light)] rounded-[100%] blur-[80px] opacity-60 pointer-events-none" />
@@ -315,7 +315,7 @@ export const VaultTab: React.FC = () => {
                 {selectedItem.type === 'chat' && <MessageCircle size={16} className="text-[color:var(--wade-accent)]" />}
                 {selectedItem.type === 'quote' && <Quote size={16} className="text-[color:var(--wade-accent)]" />}
                 {selectedItem.type === 'au' && <Film size={16} className="text-[color:var(--wade-accent)]" />}
-                <span className="text-[14px] font-bold text-[color:var(--wade-text-main)] truncate">
+                <span className="text-[14px] font-bold italic font-vault text-[color:var(--wade-text-main)] truncate">
                   {selectedItem.title || 'Memory Fragment'}
                 </span>
               </div>
@@ -334,7 +334,7 @@ export const VaultTab: React.FC = () => {
               {selectedItem.type === 'quote' && (
                 <div className="text-center">
                   <Quote size={24} className="text-[color:var(--wade-accent)] opacity-30 mx-auto mb-4" />
-                  <p className="text-[18px] text-[color:var(--wade-text-main)] italic leading-relaxed font-serif">
+                  <p className="text-[18px] text-[color:var(--wade-text-main)] italic leading-relaxed font-vault">
                     "{selectedItem.text}"
                   </p>
                   <div className="mt-8 text-[12px] text-[color:var(--wade-text-muted)] font-medium uppercase tracking-[0.2em] opacity-60">
@@ -394,7 +394,7 @@ export const VaultTab: React.FC = () => {
                             )}
 
                             {/* 旁白文字 */}
-                            <p className={`relative z-10 text-[13px] ${textClass} italic leading-[1.7] opacity-95 font-serif`}>
+                            <p className={`relative z-10 text-[13px] ${textClass} italic leading-[1.7] opacity-95 font-vault`}>
                               "{cleanText}"
                             </p>
                           </div>
@@ -435,7 +435,7 @@ export const VaultTab: React.FC = () => {
                       {selectedItem.tag}
                     </span>
                   </div>
-                  <p className="text-[14px] text-[color:var(--wade-text-main)] leading-relaxed">
+                  <p className="text-[14px] italic font-vault text-[color:var(--wade-text-main)] leading-relaxed">
                     {selectedItem.desc}
                   </p>
                   <div className="mt-8 pt-4 border-t border-[color:var(--wade-border)]/50">

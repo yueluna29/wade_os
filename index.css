@@ -359,6 +359,13 @@ body {
   animation: modal-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Vault card typography — English content locks to Georgia; pair with
+   Tailwind `italic` for the novelistic feel. Chinese falls back to the
+   system CJK font automatically. */
+.font-vault {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+}
+
 /* ========== 超强力覆盖所有ReactMarkdown默认样式 ========== */
 
 /* 只清零margin，不清零padding */
