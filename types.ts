@@ -100,6 +100,14 @@ export interface ChatSession {
   threadId?: string; // Contact/thread key — 'luna-wade' for the shared mirror thread, 'wade-weasel' etc. for per-phone NPC threads
 }
 
+export interface VaultGroup {
+  id: string;
+  title?: string;
+  sessionId?: string;
+  messageIds: string[]; // Ordered — render sequence in the chat-card modal.
+  createdAt: number;
+}
+
 export interface MessageVariant {
   text: string;             // 这个版本的文本内容
   thinking?: string | null; // 这个版本的思考过程
@@ -425,6 +433,12 @@ export interface GlobalState {
   forkSession: (targetMsgId: string) => Promise<void>;
 
   toggleFavorite: (id: string) => Promise<void>;
+
+  // Vault: conversation-fragment collections. One group = an ordered list of
+  // message IDs that render together as a single "chat" card in the Vault.
+  vaultGroups: VaultGroup[];
+  saveVaultGroup: (messageIds: string[], title?: string) => Promise<void>;
+  deleteVaultGroup: (id: string) => Promise<void>;
   
   socialPosts: SocialPost[];
   addPost: (p: SocialPost) => void;

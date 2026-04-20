@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AppSettings, GlobalState, Message, SocialPost, Memo, TimeCapsuleItem, Recommendation, ChatMode, LlmPreset, TtsPreset, ChatSession, CoreMemory, ChatArchive, ArchiveMessage, UserProfile, PersonaCard, PersonaCardData, FunctionBinding } from './types';
+import { AppSettings, GlobalState, Message, SocialPost, Memo, TimeCapsuleItem, Recommendation, ChatMode, LlmPreset, TtsPreset, ChatSession, CoreMemory, ChatArchive, ArchiveMessage, UserProfile, PersonaCard, PersonaCardData, FunctionBinding, VaultGroup } from './types';
 import { supabase } from './services/supabase';
 import { ttsCache } from './services/ttsCache';
 
@@ -687,6 +687,25 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
+  const [vaultGroups, setVaultGroups] = useState<VaultGroup[]>([]);
+  useEffect(() => {
+    const fetchVaultGroups = async () => {
+      const { data, error } = await supabase
+        .from('vault_groups')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) { console.error('[vault_groups] fetch failed', error); return; }
+      setVaultGroups((data || []).map((row: any) => ({
+        id: row.id,
+        title: row.title || undefined,
+        sessionId: row.session_id || undefined,
+        messageIds: Array.isArray(row.message_ids) ? row.message_ids : [],
+        createdAt: new Date(row.created_at).getTime(),
+      })));
+    };
+    fetchVaultGroups();
+  }, []);
+
   const [socialPosts, setSocialPosts] = useState<SocialPost[]>([]);
   const [memos, setMemos] = useState<Memo[]>(() => {
     const saved = localStorage.getItem('wade_memos');
@@ -1220,6 +1239,36 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const saveVaultGroup = async (messageIds: string[], title?: string) => {
+    if (!messageIds.length) return;
+    // Order the supplied IDs by the current message timeline so the saved
+    // group replays in chronological order regardless of selection sequence.
+    const tsById = new Map<string, number>();
+    for (const m of messages) tsById.set(m.id, m.timestamp);
+    const ordered = [...messageIds].sort((a, b) => (tsById.get(a) ?? 0) - (tsById.get(b) ?? 0));
+    const firstMsg = messages.find(m => m.id === ordered[0]);
+    const sessionId = firstMsg?.sessionId;
+    const { data, error } = await supabase
+      .from('vault_groups')
+      .insert({ title: title || null, session_id: sessionId || null, message_ids: ordered })
+      .select('*')
+      .single();
+    if (error || !data) { console.error('[saveVaultGroup] insert failed', error); return; }
+    setVaultGroups(prev => [{
+      id: data.id,
+      title: data.title || undefined,
+      sessionId: data.session_id || undefined,
+      messageIds: Array.isArray(data.message_ids) ? data.message_ids : [],
+      createdAt: new Date(data.created_at).getTime(),
+    }, ...prev]);
+  };
+
+  const deleteVaultGroup = async (id: string) => {
+    setVaultGroups(prev => prev.filter(g => g.id !== id));
+    const { error } = await supabase.from('vault_groups').delete().eq('id', id);
+    if (error) console.error('[deleteVaultGroup] delete failed', error);
+  };
+
   const addCoreMemory = async (title: string, content: string, category: CoreMemory['category'] = 'general', tags: string[] = []) => {
     const tempId = crypto.randomUUID();
     const newMemory: CoreMemory = { id: tempId, title, content, category, tags, isActive: true, enabled: true, createdAt: Date.now() };
@@ -1593,6 +1642,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       ttsPresets, addTtsPreset, updateTtsPreset, deleteTtsPreset,
       sessions, createSession, updateSession, updateSessionTitle, deleteSession, toggleSessionPin, activeSessionId, setActiveSessionId,
       messages, addMessage, updateMessage, deleteMessage, toggleFavorite, updateMessageAudioCache,
+      vaultGroups, saveVaultGroup, deleteVaultGroup,
       updateMessageAttachments,
       addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
       socialPosts, addPost, updatePost, deletePost, memos, addMemo,

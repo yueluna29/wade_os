@@ -99,7 +99,7 @@ const formatFavDate = (ts: number): string => {
 };
 
 export const VaultTab: React.FC = () => {
-  const { messages, toggleFavorite } = useStore();
+  const { messages, toggleFavorite, vaultGroups, deleteVaultGroup } = useStore();
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -116,9 +116,12 @@ export const VaultTab: React.FC = () => {
   }, [selectedItem]);
 
   const handleRemoveFromVault = () => {
-    if (!selectedItem?._msgId) return;
+    const isRealQuote = selectedItem?._source === 'real' && selectedItem?._msgId;
+    const isRealGroup = selectedItem?._source === 'real' && selectedItem?._groupId;
+    if (!isRealQuote && !isRealGroup) return;
     if (confirmingRemove) {
-      toggleFavorite(selectedItem._msgId);
+      if (isRealQuote) toggleFavorite(selectedItem._msgId);
+      else if (isRealGroup) deleteVaultGroup(selectedItem._groupId);
       setConfirmingRemove(false);
       setSelectedItem(null);
     } else {
@@ -154,7 +157,39 @@ export const VaultTab: React.FC = () => {
       }));
   }, [messages]);
 
-  const allItems = useMemo(() => [...realFavorites, ...MOCK_VAULT_ITEMS], [realFavorites]);
+  // Real chat-type cards backed by vault_groups. Each group resolves its
+  // message_ids against the live message store so edits flow through; bubbles
+  // with no matching row (deleted since save) get dropped from the render.
+  const realGroups = useMemo(() => {
+    const byId = new Map<string, any>();
+    for (const m of (messages || [])) byId.set(m.id, m);
+    return (vaultGroups || [])
+      .map(g => {
+        const bubbles = g.messageIds
+          .map(id => byId.get(id))
+          .filter(Boolean)
+          .map((m: any) => ({
+            role: m.role === 'Luna' ? 'luna' : 'wade',
+            text: m.text,
+          }));
+        if (!bubbles.length) return null;
+        const titleFallback = bubbles[0]?.text
+          ? (bubbles[0].text.length > 24 ? bubbles[0].text.slice(0, 24) + '…' : bubbles[0].text)
+          : 'Conversation';
+        return {
+          id: `group-${g.id}`,
+          type: 'chat' as const,
+          title: g.title || titleFallback,
+          date: formatFavDate(g.createdAt),
+          bubbles,
+          _source: 'real' as const,
+          _groupId: g.id,
+        };
+      })
+      .filter(Boolean) as any[];
+  }, [vaultGroups, messages]);
+
+  const allItems = useMemo(() => [...realFavorites, ...realGroups, ...MOCK_VAULT_ITEMS], [realFavorites, realGroups]);
 
   const filteredItems = activeFilter === 'All'
     ? allItems
@@ -489,6 +524,20 @@ export const VaultTab: React.FC = () => {
                   <div className="text-center mt-4">
                     <span className="text-[10px] text-[color:var(--wade-text-muted)] opacity-50">{selectedItem.date}</span>
                   </div>
+                  {selectedItem._source === 'real' && (
+                    <div className="mt-6 flex justify-center">
+                      <button
+                        onClick={handleRemoveFromVault}
+                        className={`text-[10px] font-medium uppercase tracking-[0.15em] px-3 py-1.5 rounded-full transition-colors border ${
+                          confirmingRemove
+                            ? 'text-[color:var(--wade-accent)] border-[color:var(--wade-accent)] bg-[color:var(--wade-accent-light)]'
+                            : 'text-[color:var(--wade-text-muted)] border-[color:var(--wade-border)] hover:text-[color:var(--wade-accent)] hover:border-[color:var(--wade-accent)]/50'
+                        }`}
+                      >
+                        {confirmingRemove ? 'Tap again to remove' : 'Remove from Vault'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

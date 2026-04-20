@@ -15,6 +15,7 @@ import type { Message as StoreMessage, ChatSession } from '../../types';
 import {
   CheckCheck, Check, HeartPulse,
   Moon, Coffee, Utensils, Laptop, Book, BedDouble, Sparkles, Drama, X as CloseIcon,
+  Trash2, BookmarkPlus,
 } from 'lucide-react';
 
 // Markdown renderers tuned for chat bubbles: no paragraph margins, compact
@@ -567,6 +568,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     getBinding, coreMemories, toggleCoreMemoryEnabled, profiles, profilesLoaded, messagesLoaded,
     createSession, updateSessionTitle, toggleSessionPin, deleteSession,
     ttsPresets, updateMessageAudioCache, updateMessage, deleteMessage, toggleFavorite,
+    saveVaultGroup,
     addMessage, personaCards, functionBindings, getDefaultPersonaCard, setTab,
   } = useStore();
 
@@ -972,6 +974,8 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // pill, and the input bar is replaced with the batch-action toolbar.
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
+  const batchDeleteTimerRef = useRef<number | null>(null);
   // True between Luna's send and Wade starting to reply — i.e. during the
   // 20s SMS debounce window. Separate from `wadeStatus` because the typing
   // indicator should NOT show while we're just holding off the AI call;
@@ -1706,12 +1710,28 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const exitSelection = () => {
     setSelectionMode(false);
     setSelectedIds(new Set());
+    setConfirmingBatchDelete(false);
+    if (batchDeleteTimerRef.current) {
+      window.clearTimeout(batchDeleteTimerRef.current);
+      batchDeleteTimerRef.current = null;
+    }
   };
   const batchDelete = () => {
     if (selectedIds.size === 0) return;
-    const n = selectedIds.size;
-    if (!window.confirm(`Delete ${n} message${n > 1 ? 's' : ''}? This can't be undone.`)) return;
-    selectedIds.forEach((id) => deleteMessage(id));
+    if (confirmingBatchDelete) {
+      selectedIds.forEach((id) => deleteMessage(id));
+      exitSelection();
+    } else {
+      setConfirmingBatchDelete(true);
+      batchDeleteTimerRef.current = window.setTimeout(() => {
+        setConfirmingBatchDelete(false);
+        batchDeleteTimerRef.current = null;
+      }, 3000);
+    }
+  };
+  const batchSaveGroup = async () => {
+    if (selectedIds.size === 0) return;
+    await saveVaultGroup(Array.from(selectedIds));
     exitSelection();
   };
 
@@ -1863,7 +1883,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
               { icon: <Icons.Fire />, label: "Add Special Sauce", action: () => { setShowPromptEditor(true); setShowMenu(false); const cs = sessions.find(s => s.id === resolvedSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
               { icon: <Icons.Skin />, label: "Chat Style", action: () => { setIsChatThemeOpen(true); setShowMenu(false); } },
               { icon: <Icons.Bug />, label: "X-Ray Vision", action: () => { setShowDebug(true); setShowMenu(false); } },
-              { icon: <Icons.Trash size={14} />, label: "Select & Delete", action: () => { setSelectionMode(true); setSelectedIds(new Set()); setSelectedMsgId(null); setShowMenu(false); } },
+              { icon: <Icons.Trash size={14} />, label: "Select Messages", action: () => { setSelectionMode(true); setSelectedIds(new Set()); setSelectedMsgId(null); setShowMenu(false); } },
               { icon: <Icons.Branch size={14} />, label: "Fresh Start, Same Brain", action: async () => {
                 setShowMenu(false);
                 // Build a REAL LLM-generated summary of the current thread and
@@ -2346,7 +2366,8 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
       </div>
 
       {/* Batch-action toolbar — replaces the input while in multi-select mode.
-          Cancel exits without deleting; Delete prompts before wiping the set. */}
+          Save as Group and Delete both live here; Delete uses in-place tap-again
+          confirm (Check icon) instead of a modal prompt. All colors theme-driven. */}
       {selectionMode && (
         <div className="p-3 pb-6 md:pb-3 bg-wade-bg-card z-30 shrink-0 border-t border-wade-border/50 flex items-center justify-between gap-3">
           <button
@@ -2358,14 +2379,30 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           <span className="text-[12px] text-wade-text-muted/80 font-medium">
             {selectedIds.size} selected
           </span>
-          <button
-            onClick={batchDelete}
-            disabled={selectedIds.size === 0}
-            className="px-4 py-2 rounded-full text-[13px] font-bold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-          >
-            <Icons.Trash size={14} />
-            Delete{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={batchSaveGroup}
+              disabled={selectedIds.size === 0}
+              title="Save as Group"
+              aria-label="Save as Group"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              <BookmarkPlus size={15} strokeWidth={2} />
+            </button>
+            <button
+              onClick={batchDelete}
+              disabled={selectedIds.size === 0}
+              title={confirmingBatchDelete ? 'Tap again to delete' : 'Delete'}
+              aria-label={confirmingBatchDelete ? 'Confirm delete' : 'Delete'}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                confirmingBatchDelete
+                  ? 'text-wade-accent bg-wade-accent/10'
+                  : 'text-wade-text-muted hover:text-wade-accent hover:bg-wade-accent/10'
+              }`}
+            >
+              {confirmingBatchDelete ? <Check size={15} strokeWidth={2} /> : <Trash2 size={15} strokeWidth={2} />}
+            </button>
+          </div>
         </div>
       )}
 
