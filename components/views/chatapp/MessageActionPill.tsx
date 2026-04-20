@@ -10,6 +10,8 @@ interface MessageActionPillProps {
   onCopy?: () => void;
   onTogglePlay?: () => void;
   onStar?: () => void;
+  /** Highlights the Star action so the pill reflects saved state. Theme-driven via wade-accent. */
+  isFavorited?: boolean;
   onDelete?: () => void;
   onRegenerate?: () => void;
   /** Force re-generate the TTS audio (throw away the cache). Wade-side only. */
@@ -30,6 +32,7 @@ export const MessageActionPill: React.FC<MessageActionPillProps> = ({
   onCopy,
   onTogglePlay,
   onStar,
+  isFavorited = false,
   onDelete,
   onRegenerate,
   onRespeak,
@@ -89,11 +92,9 @@ export const MessageActionPill: React.FC<MessageActionPillProps> = ({
         </ActionBtn>
       )}
 
-      {showFull && (
-        <ActionBtn label="Star" onClick={onStar}>
-          <Star size={14} strokeWidth={2} />
-        </ActionBtn>
-      )}
+      <ActionBtn label={isFavorited ? 'Unstar' : 'Star'} onClick={onStar} active={isFavorited}>
+        <Star size={14} strokeWidth={2} fill={isFavorited ? 'currentColor' : 'none'} />
+      </ActionBtn>
 
       <ActionBtn
         label={confirmingDelete ? 'Confirm delete' : 'Delete'}

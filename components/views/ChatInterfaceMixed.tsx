@@ -2099,6 +2099,8 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       isPlaying={false}
                       mode="self"
                       onCopy={() => { navigator.clipboard?.writeText(cleanText); setSelectedMsgId(null); }}
+                      onStar={() => { toggleFavorite(idStr); }}
+                      isFavorited={!!msg.isFavorite}
                       onDelete={() => { deleteMessage(idStr); setSelectedMsgId(null); }}
                       onRegenerate={showTime ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
                       onEdit={() => {
@@ -2214,6 +2216,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       setSelectedMsgId(null);
                     }}
                     onStar={() => { toggleFavorite(String(msg.id)); }}
+                    isFavorited={!!msg.isFavorite}
                     onDelete={() => {
                       // deleteMessage in the store already handles both paths:
                       // - variants > 1: removes the currently-selected variant
