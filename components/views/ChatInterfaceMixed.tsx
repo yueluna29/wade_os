@@ -541,6 +541,7 @@ function buildDisplayFromStore(
       keepaliveSummary: summary,
       replyAnchorId: m.replyAnchorId,
       replyGroupId: m.replyGroupId,
+      isFavorite: m.isFavorite,
     });
   }
   return out;
