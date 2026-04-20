@@ -250,27 +250,57 @@ async function callLlmForEval(
 // =============================================
 
 /**
- * 用 Gemini text-embedding-004 生成向量
- * 如果没有 Gemini key 或失败，返回 null（记忆照样存，只是没向量）
+ * Generate a 768-dim embedding for `text`. wade_memories.embedding is
+ * vector(768), so output must be exactly 768 floats or Postgres rejects
+ * the insert. Supports two paths:
+ *   - Native Gemini: text-embedding-004 (naturally 768-dim)
+ *   - OpenAI-compatible (OpenAI direct, OpenRouter, etc.):
+ *     text-embedding-3-small with dimensions=768 (API truncates to spec)
+ *
+ * Returns null on any failure — memory is stored without vector and
+ * retrieval falls back to keyword matching.
  */
 async function generateEmbedding(
   text: string,
   evalPreset: LlmPreset
 ): Promise<number[] | null> {
   try {
-    // wade_memories.embedding 是 vector(768)，只有 Gemini 的 text-embedding-004
-    // 输出 768 维。OpenAI / OpenRouter 的 text-embedding-3-small 是 1536 维，
-    // 塞进去 PostgREST 直接 400（"expected 768 dimensions, not 1536"）。
-    // 所以非 Gemini 的 preset 一律跳过 embedding，让上游 fallback 到关键词检索。
-    const isGemini = !evalPreset.baseUrl || evalPreset.baseUrl.includes('google');
-    if (!isGemini) return null;
+    const isGeminiNative =
+      !evalPreset.baseUrl || evalPreset.baseUrl.includes('googleapis') || evalPreset.provider === 'Gemini';
+    const input = text.slice(0, 8000);
 
-    const ai = new GoogleGenAI({ apiKey: evalPreset.apiKey });
-    const result = await ai.models.embedContent({
-      model: 'text-embedding-004',
-      contents: text.slice(0, 8000),
+    if (isGeminiNative) {
+      const ai = new GoogleGenAI({ apiKey: evalPreset.apiKey });
+      const result = await ai.models.embedContent({
+        model: 'text-embedding-004',
+        contents: input,
+      });
+      return result.embeddings?.[0]?.values || null;
+    }
+
+    // OpenAI-compatible path (OpenAI, OpenRouter, DeepSeek etc.). Model is
+    // forced to text-embedding-3-small because the preset's own model is
+    // usually a chat model (e.g. "google/gemini-3-flash-preview") which
+    // can't embed. dimensions=768 keeps output compatible with vector(768).
+    const baseUrl = (evalPreset.baseUrl || '').replace(/\/$/, '');
+    const res = await fetch(`${baseUrl}/embeddings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${evalPreset.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-3-small',
+        input,
+        dimensions: 768,
+      }),
     });
-    return result.embeddings?.[0]?.values || null;
+    if (!res.ok) {
+      console.warn('[WadeMemory] OpenAI-compat embedding HTTP', res.status, (await res.text()).slice(0, 200));
+      return null;
+    }
+    const json = await res.json();
+    return json.data?.[0]?.embedding || null;
   } catch (err) {
     console.error('[WadeMemory] Embedding generation failed:', err);
     return null;

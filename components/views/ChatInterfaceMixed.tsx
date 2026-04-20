@@ -1456,13 +1456,16 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           try {
             const memEvalLlmId = settings.memoryEvalLlmId || settings.activeLlmId;
             const memEvalLlm = memEvalLlmId ? llmPresets.find((p) => p.id === memEvalLlmId) : undefined;
+            // Pick an embedding preset. Honor user's explicit embedding binding
+            // even if it's an OpenAI-compatible route (OpenRouter / direct
+            // OpenAI). generateEmbedding handles both native Gemini and
+            // OpenAI-compat paths and always outputs 768 dims. Fall back to
+            // the first Gemini preset only when nothing is explicitly bound.
             const explicitEmbId = settings.embeddingLlmId;
             const explicitEmb = explicitEmbId ? llmPresets.find((p) => p.id === explicitEmbId) : undefined;
-            const isGemini = (p?: typeof llmPresets[number]) =>
-              !!p && (p.provider === 'Gemini' || (!!p.baseUrl && p.baseUrl.includes('googleapis')));
-            const embLlm = isGemini(explicitEmb)
+            const embLlm = explicitEmb?.apiKey
               ? explicitEmb
-              : llmPresets.find((p) => isGemini(p) && p.apiKey);
+              : llmPresets.find((p) => (p.provider === 'Gemini' || p.baseUrl?.includes('googleapis')) && p.apiKey);
             const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 7, memEvalLlm, embLlm);
             wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
           } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
@@ -1541,13 +1544,14 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       if (isLunaWadeChat && !opts.isRegen && trimmedLunaText.length >= MEMORY_EVAL_MIN_CHARS) {
         const memoryEvalLlmId2 = settings.memoryEvalLlmId || settings.activeLlmId;
         const memoryEvalLlm = memoryEvalLlmId2 ? llmPresets.find((p) => p.id === memoryEvalLlmId2) : null;
+        // Same picker shape as the retrieval path above — respect the
+        // user's explicit embedding binding regardless of provider, fall
+        // back to any native Gemini preset if nothing is bound.
         const explicitEmbId2 = settings.embeddingLlmId;
         const explicitEmb2 = explicitEmbId2 ? llmPresets.find((p) => p.id === explicitEmbId2) : undefined;
-        const isGeminiPreset = (p?: typeof llmPresets[number]) =>
-          !!p && (p.provider === 'Gemini' || (!!p.baseUrl && p.baseUrl.includes('googleapis')));
-        const embLlm2 = isGeminiPreset(explicitEmb2)
+        const embLlm2 = explicitEmb2?.apiKey
           ? explicitEmb2
-          : llmPresets.find((p) => isGeminiPreset(p) && p.apiKey);
+          : llmPresets.find((p) => (p.provider === 'Gemini' || p.baseUrl?.includes('googleapis')) && p.apiKey);
         if (memoryEvalLlm?.apiKey) {
           evaluateAndStoreMemory(recentLunaTexts, responseText, targetSessionId, memoryEvalLlm, embLlm2)
             .then((stored) => { if (stored.length > 0) setNewMemories(stored); })

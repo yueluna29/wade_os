@@ -272,35 +272,83 @@ async function getLunaWadeSummary() {
   return sums?.[0]?.summary || '';
 }
 
-// Find any Gemini preset with an API key — needed for the 768-dim embedding
-// call. `wade_memories.embedding` is pgvector(768) so ONLY Gemini's
-// text-embedding-004 will match (OpenAI 1536 would silent 400 on the rpc).
-async function findGeminiEmbeddingKey() {
-  const { data } = await supabase
+// Find the embedding preset. Honor app_settings.embedding_llm_id if set
+// (user's explicit choice, could be native Gemini OR an OpenAI-compat
+// route like OpenRouter). Fall back to any native Gemini preset with a
+// key for the legacy default.
+async function findEmbeddingPreset() {
+  const { data: settings } = await supabase
+    .from('app_settings')
+    .select('embedding_llm_id')
+    .eq('id', 1)
+    .single();
+  if (settings?.embedding_llm_id) {
+    const { data: explicit } = await supabase
+      .from('llm_presets')
+      .select('*')
+      .eq('id', settings.embedding_llm_id)
+      .single();
+    if (explicit?.api_key) return explicit;
+  }
+  const { data: fallback } = await supabase
     .from('llm_presets')
-    .select('api_key, provider, base_url')
+    .select('*')
     .eq('provider', 'Gemini')
     .not('api_key', 'is', null)
     .limit(1);
-  return data?.[0]?.api_key || null;
+  return fallback?.[0] || null;
 }
 
-// Direct Gemini embedding call — returns the 768-dim float vector or null.
-async function generateEmbeddingViaGemini(text, apiKey) {
-  if (!text?.trim() || !apiKey) return null;
+// Generate a 768-dim embedding. Two paths:
+//   - Native Gemini (provider=Gemini or baseUrl contains googleapis):
+//     call text-embedding-004, naturally 768-dim.
+//   - OpenAI-compatible (OpenAI direct / OpenRouter / DeepSeek / Custom):
+//     call {baseUrl}/embeddings with text-embedding-3-small and
+//     dimensions=768. Preset's own model field is ignored because it's
+//     almost always a chat model, not an embedder.
+// Returns null on any failure so the caller falls back cleanly.
+async function generateEmbedding(text, preset) {
+  if (!text?.trim() || !preset?.api_key) return null;
+  const input = text.slice(0, 2000);
+  const isGeminiNative =
+    preset.provider === 'Gemini' ||
+    (preset.base_url && preset.base_url.includes('googleapis')) ||
+    !preset.base_url;
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
-    const res = await fetch(url, {
+    if (isGeminiNative) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${preset.api_key}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: { parts: [{ text: input }] } }),
+      });
+      if (!res.ok) {
+        console.warn('[Keepalive] Gemini embedding HTTP', res.status);
+        return null;
+      }
+      const json = await res.json();
+      return json.embedding?.values || null;
+    }
+    // OpenAI-compatible path
+    const baseUrl = (preset.base_url || '').replace(/\/$/, '');
+    const res = await fetch(`${baseUrl}/embeddings`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: { parts: [{ text: text.slice(0, 2000) }] } }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${preset.api_key}`,
+      },
+      body: JSON.stringify({
+        model: 'text-embedding-3-small',
+        input,
+        dimensions: 768,
+      }),
     });
     if (!res.ok) {
-      console.warn('[Keepalive] Embedding HTTP', res.status);
+      console.warn('[Keepalive] OpenAI-compat embedding HTTP', res.status, (await res.text()).slice(0, 200));
       return null;
     }
     const json = await res.json();
-    return json.embedding?.values || null;
+    return json.data?.[0]?.embedding || null;
   } catch (e) {
     console.warn('[Keepalive] Embedding error:', e?.message);
     return null;
@@ -310,9 +358,9 @@ async function generateEmbeddingViaGemini(text, apiKey) {
 // Vector-search wade_memories using an anchor (summary + Luna's last msg).
 // Returns the top-N semantically closest memories, or null on any failure
 // so the caller can fall back to getRecentMemories.
-async function retrieveRelevantMemoriesKeepalive(anchorText, limit, apiKey) {
-  if (!anchorText?.trim() || !apiKey) return null;
-  const embedding = await generateEmbeddingViaGemini(anchorText, apiKey);
+async function retrieveRelevantMemoriesKeepalive(anchorText, limit, preset) {
+  if (!anchorText?.trim() || !preset) return null;
+  const embedding = await generateEmbedding(anchorText, preset);
   if (!embedding) return null;
   const { data, error } = await supabase.rpc('match_memories', {
     query_embedding: JSON.stringify(embedding),
@@ -1065,7 +1113,7 @@ export default async function handler(req, res) {
     // 3. Gather all context in parallel
     const settings = await getSettings();
     const keepaliveBinding = await getKeepaliveBinding();
-    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, recentMemoriesFallback, pendingTodos, chatSummary, embeddingKey] = await Promise.all([
+    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, recentMemoriesFallback, pendingTodos, chatSummary, embeddingPreset] = await Promise.all([
       getLlmConfig(settings, keepaliveBinding),
       getWadePersona(keepaliveBinding),
       getSystemCard(keepaliveBinding),
@@ -1078,7 +1126,7 @@ export default async function handler(req, res) {
       getRecentMemories(5),
       getPendingTodosForKeepalive(20),
       getLunaWadeSummary(),
-      findGeminiEmbeddingKey(),
+      findEmbeddingPreset(),
     ]);
 
     // 3b. Vector-search wade_memories. Anchor = session summary + Luna's
@@ -1088,8 +1136,8 @@ export default async function handler(req, res) {
     // embedding / rpc failure so a wake never blocks on this.
     const memoryAnchor = [chatSummary || '', lastLunaMsg?.text || ''].filter(Boolean).join('\n\n').trim();
     let memories = recentMemoriesFallback;
-    if (memoryAnchor && embeddingKey) {
-      const vectorMatches = await retrieveRelevantMemoriesKeepalive(memoryAnchor, 7, embeddingKey);
+    if (memoryAnchor && embeddingPreset) {
+      const vectorMatches = await retrieveRelevantMemoriesKeepalive(memoryAnchor, 7, embeddingPreset);
       if (vectorMatches && vectorMatches.length > 0) {
         memories = vectorMatches;
         console.log(`[Keepalive] Vector matched ${vectorMatches.length} memories against anchor`);
