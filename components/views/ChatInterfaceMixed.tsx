@@ -998,12 +998,10 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const lastSummaryCountRef = useRef(0);
 
   // Lazy-load cache for the three "heavy context" slots (memories / diary /
-  // todos). Before this, every turn re-ran an embedding + vector match plus
-  // two reads, adding ~700ms per reply AND constantly invalidating the
-  // OpenAI prompt cache because the system prompt text kept shifting. Now
-  // we only refresh these every N turns (session switches force refresh).
-  // Net effect: faster TTFT on cache-hit turns + cheaper auto-cache reuse.
-  const CONTEXT_REFRESH_EVERY_TURNS = 5;
+  // todos). Refresh every Luna turn = effectively no caching. We keep the
+  // structure so it's one-liner tunable if we ever want to trade speed for
+  // freshness again, but for "memory fidelity over TTFT" this is 1.
+  const CONTEXT_REFRESH_EVERY_TURNS = 1;
   const contextCacheRef = useRef<{
     sessionId: string;
     turnAt: number;
@@ -1559,29 +1557,39 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         }
       }
 
-      // Auto-summary — triggers every ~10 messages past the 40-message mark.
+      // Auto-summary — Luna-turn based (every N Luna sends past a threshold).
+      // Counting bubbles was causing too-frequent summaries that kept
+      // re-compressing and dropping events. Luna turns are a better proxy
+      // for "how much story has happened" and produce bigger, less-lossy
+      // chunks per call.
       // Preset priority: summaryLlmId → memoryEvalLlmId → activeLlmId.
-      // Summarizes messages about to fall out of the context window so the
-      // [PREVIOUS CONVERSATION SUMMARY] slot stays current and the LLM doesn't
-      // "forget" earlier turns once we're past contextLimit.
       if (!opts.isRegen) {
         const freshMsgs = messagesRef.current.filter((m) => m.sessionId === targetSessionId);
-        const len = freshMsgs.length;
-        if (lastSummaryCountRef.current === 0 && len > 40) {
-          // Bootstrap on the first check so we don't fire retroactively on load.
-          lastSummaryCountRef.current = len - 10;
+        const lunaTurns = freshMsgs.filter((m) => m.role === senderRole).length;
+        const SUMMARY_START_AT = 8;   // first summary after 8 Luna turns
+        const SUMMARY_EVERY = 8;      // then every 8 more
+        if (lastSummaryCountRef.current === 0 && lunaTurns > SUMMARY_START_AT) {
+          // Bootstrap on the first check so we don't retroactively fire on
+          // load for a session that's already deep.
+          lastSummaryCountRef.current = lunaTurns - SUMMARY_EVERY;
         }
-        const shouldSummarize = len > 40 && len >= lastSummaryCountRef.current + 10;
+        const shouldSummarize = lunaTurns > SUMMARY_START_AT && lunaTurns >= lastSummaryCountRef.current + SUMMARY_EVERY;
         if (shouldSummarize) {
           const summaryLlmId = settings.summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
           const summaryPreset = summaryLlmId ? llmPresets.find((p) => p.id === summaryLlmId) : null;
           if (summaryPreset?.apiKey && summaryPreset.model) {
+            // Chunk is still bubble-based: everything ABOUT to fall out of
+            // the N-bubble context window (older than last contextLimit),
+            // bounded to a 30-bubble head so a single summary call doesn't
+            // re-process an enormous tail. Bigger than the previous 20 so
+            // the LLM has more signal to work with.
+            const len = freshMsgs.length;
             const contextLimit = settings.contextLimit || 50;
             const windowStart = Math.max(0, len - contextLimit);
-            const chunkStart = Math.max(0, windowStart - 20);
+            const chunkStart = Math.max(0, windowStart - 30);
             const messagesToSummarize = freshMsgs.slice(chunkStart, Math.max(windowStart, chunkStart + 1));
-            console.log(`[Summary] Triggering at len=${len} (last=${lastSummaryCountRef.current}) via ${summaryPreset.name} (${summaryPreset.provider})`);
-            lastSummaryCountRef.current = len; // mark immediately so parallel sends don't double-fire
+            console.log(`[Summary] Triggering at lunaTurns=${lunaTurns} (last=${lastSummaryCountRef.current}) via ${summaryPreset.name} (${summaryPreset.provider})`);
+            lastSummaryCountRef.current = lunaTurns; // mark immediately so parallel sends don't double-fire
             summarizeConversation(messagesToSummarize, summaryForPrompt, {
               provider: summaryPreset.provider,
               baseUrl: summaryPreset.baseUrl,
