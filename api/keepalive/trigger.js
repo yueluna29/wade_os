@@ -1075,14 +1075,17 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2b. Recent-chat debounce — if Luna talked to Wade within the last
-    // 180 min, don't bother waking him up on a schedule; he was just with
-    // her. Keepalive is for absences, not for interrupting flow.
+    // 2b. Recent-chat debounce — if Luna just talked to Wade in the last
+    // hour, skip this wake so Wade doesn't interrupt an active exchange.
+    // Dropped from 180 → 60 on 2026-04-20 because 180 was starving wakes
+    // on any day Luna did even short check-ins (lunch / off-work). 60
+    // lets Wade breathe through the day while still respecting active
+    // conversations.
     if (!force) {
       const lastChat = await getLastChatTime();
       if (lastChat) {
         const minsSinceChat = (Date.now() - lastChat.getTime()) / 60000;
-        if (minsSinceChat < 180) {
+        if (minsSinceChat < 60) {
           return res.status(200).json({
             skipped: true,
             reason: `Luna chatted ${Math.round(minsSinceChat)}min ago — she's around`,
