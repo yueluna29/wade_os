@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pin, MessageCircle, Film, Quote, Heart, Sparkles, FolderLock, X, Activity, MapPin, ScanEye } from 'lucide-react';
+import { useStore } from '../../store';
 
 const MCP_ICONS: Record<string, React.ComponentType<any>> = {
   pulse: Activity,
@@ -89,7 +90,16 @@ const MOCK_VAULT_ITEMS: any[] = [
   }
 ];
 
+const formatFavDate = (ts: number): string => {
+  try {
+    return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '';
+  }
+};
+
 export const VaultTab: React.FC = () => {
+  const { messages } = useStore();
   const [activeFilter, setActiveFilter] = useState('All');
   const [selectedItem, setSelectedItem] = useState<any>(null);
 
@@ -100,9 +110,26 @@ export const VaultTab: React.FC = () => {
     { id: 'Multiverse', icon: <Film size={14} /> }
   ];
 
+  // Real favorites from the chat stream, mapped to "quote" cards.
+  // Newest first. Merged in front of MOCK_VAULT_ITEMS so samples stay visible.
+  const realFavorites = useMemo(() => {
+    return (messages || [])
+      .filter((m: any) => m?.isFavorite && typeof m.text === 'string' && m.text.trim())
+      .sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
+      .map((m: any) => ({
+        id: `msg-${m.id}`,
+        type: 'quote' as const,
+        text: m.text,
+        date: formatFavDate(m.timestamp),
+        _role: m.role,
+      }));
+  }, [messages]);
+
+  const allItems = useMemo(() => [...realFavorites, ...MOCK_VAULT_ITEMS], [realFavorites]);
+
   const filteredItems = activeFilter === 'All'
-    ? MOCK_VAULT_ITEMS
-    : MOCK_VAULT_ITEMS.filter(item => {
+    ? allItems
+    : allItems.filter(item => {
         if (activeFilter === 'Trash Talk') return item.type === 'quote';
         if (activeFilter === 'Core Memories') return item.type === 'chat';
         if (activeFilter === 'Multiverse') return item.type === 'au';
