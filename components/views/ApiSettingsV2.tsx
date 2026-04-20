@@ -271,13 +271,29 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
           await ai.models.generateContent({ model: item.model || 'gemini-3-flash-preview', contents: [{ role: 'user', parts: [{ text: 'ping' }] }] });
           alert(`Wade says: "Chimichangas! Connection established."`);
         } else {
-          const r = await fetch(`${(item.baseUrl || '').replace(/\/$/, '')}/chat/completions`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${item.apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: item.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
-          });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          alert('Wade says: "Maximum effort! API connected."');
+          // Embedding models (text-embedding-*, gemini-embedding-*, etc.)
+          // reject /chat/completions with a 400. Route the test to the
+          // right endpoint based on the model name so both kinds of
+          // presets can be verified from the UI.
+          const isEmbeddingModel = /embedding|embed/i.test(item.model || '');
+          const baseUrl = (item.baseUrl || '').replace(/\/$/, '');
+          if (isEmbeddingModel) {
+            const r = await fetch(`${baseUrl}/embeddings`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${item.apiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: item.model, input: 'ping', dimensions: 768 }),
+            });
+            if (!r.ok) throw new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+            alert('Wade says: "Vector check clean — 768 dims inbound."');
+          } else {
+            const r = await fetch(`${baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${item.apiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: item.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+            });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            alert('Wade says: "Maximum effort! API connected."');
+          }
         }
       } else {
         const audio = await generateMinimaxTTS('test, one two', item);
