@@ -76,7 +76,7 @@ function mapMessageRow(row: any, mode: ChatMode): Message {
     model: currentVariant.model || row.model,
     timestamp: new Date(row.created_at).getTime(),
     mode,
-    isFavorite: false,
+    isFavorite: !!row.is_favorite,
     variants: parsedVariants,
     selectedIndex: selectedIdx,
     thinking: currentVariant.thinking || undefined,
@@ -427,7 +427,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
               model: currentVariant.model || row.model,
               timestamp: new Date(row.created_at).getTime(),
               mode: mode,
-              isFavorite: false,
+              isFavorite: !!row.is_favorite,
               variants: parsedVariants,
               selectedIndex: selectedIdx,
               thinking: currentVariant.thinking || undefined,
@@ -1199,8 +1199,25 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
      setMessages(prev => prev.map(m => m.id === id ? { ...m, isRegenerating } : m));
   };
 
-  const toggleFavorite = (id: string) => {
-    setMessages(prev => prev.map(m => m.id === id ? { ...m, isFavorite: !m.isFavorite } : m));
+  const toggleFavorite = async (id: string) => {
+    // Optimistic flip — immediate visual feedback on the pill + Vault.
+    let nextValue: boolean | null = null;
+    let rolledBackMode: ChatMode | null = null;
+    setMessages(prev => prev.map(m => {
+      if (m.id !== id) return m;
+      nextValue = !m.isFavorite;
+      rolledBackMode = m.mode;
+      return { ...m, isFavorite: nextValue };
+    }));
+    if (nextValue === null || rolledBackMode === null) return;
+    const table = rolledBackMode === 'sms' ? 'messages_sms'
+                : rolledBackMode === 'roleplay' ? 'messages_roleplay'
+                : 'messages_deep';
+    const { error } = await supabase.from(table).update({ is_favorite: nextValue }).eq('id', id);
+    if (error) {
+      console.error('[toggleFavorite] supabase update failed, reverting', error);
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, isFavorite: !nextValue } : m));
+    }
   };
 
   const addCoreMemory = async (title: string, content: string, category: CoreMemory['category'] = 'general', tags: string[] = []) => {

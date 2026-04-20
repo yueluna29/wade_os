@@ -424,7 +424,7 @@ export interface GlobalState {
   // NEW: Fork/Branch
   forkSession: (targetMsgId: string) => Promise<void>;
 
-  toggleFavorite: (id: string) => void;
+  toggleFavorite: (id: string) => Promise<void>;
   
   socialPosts: SocialPost[];
   addPost: (p: SocialPost) => void;
