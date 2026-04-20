@@ -9,6 +9,7 @@ import { Divination } from './components/views/Divination';
 import { ApiSettingsV2 as ApiSettings } from './components/views/ApiSettingsV2';
 import { PersonaTuning } from './components/views/PersonaTuning';
 import { Memos } from './components/views/Memos';
+import { VaultTab } from './components/views/VaultTab';
 import { MemoryBank } from './components/views/MemoryBank';
 import { MemoryDashboard } from './components/views/memory/MemoryDashboard';
 import { Home } from './components/views/Home';
@@ -135,7 +136,7 @@ const AppContent = () => {
       case 'divination': return <Divination />;
       case 'settings': return <ApiSettings />;
       case 'persona': return <PersonaTuning />;
-      case 'favorites': return <Memos />; 
+      case 'favorites': return <VaultTab />;
       case 'memory': return <MemoryBank />;
       case 'wade-memory': return <MemoryDashboard />;
       case 'time-capsules': return <TimeCapsulesView />;

@@ -350,6 +350,15 @@ body {
   animation: scale-in 0.2s ease-out;
 }
 
+/* Modal pop — used by Vault item theater modal */
+@keyframes modal-pop {
+  0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-modal-pop {
+  animation: modal-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* ========== 超强力覆盖所有ReactMarkdown默认样式 ========== */
 
 /* 只清零margin，不清零padding */
