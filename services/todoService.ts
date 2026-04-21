@@ -66,6 +66,37 @@ export async function getDoneTodos(limit = 50): Promise<WadeTodo[]> {
 // WRITE
 // =====================================================================
 
+// Tokenize for fuzzy dedup. Keeps CJK chars + ASCII word chars, lowercases,
+// drops 1-char tokens (too noisy for Jaccard).
+function tokenizeForDedup(s: string): Set<string> {
+  const cleaned = (s || '')
+    .toLowerCase()
+    .replace(/[^\w\s\u4e00-\u9fff]/g, ' ');
+  // Mix word-split (English) with char-split (CJK) so 医院 and hospital both
+  // register as meaningful units. For CJK runs, split into bigrams.
+  const out = new Set<string>();
+  for (const part of cleaned.split(/\s+/).filter(Boolean)) {
+    if (/[\u4e00-\u9fff]/.test(part)) {
+      // CJK: emit all adjacent bigrams
+      for (let i = 0; i < part.length - 1; i++) {
+        out.add(part.slice(i, i + 2));
+      }
+      if (part.length === 1) out.add(part);
+    } else if (part.length >= 2) {
+      out.add(part);
+    }
+  }
+  return out;
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const t of a) if (b.has(t)) intersection++;
+  const union = a.size + b.size - intersection;
+  return intersection / union;
+}
+
 export async function addTodo(input: {
   content: string;
   source: 'chat' | 'keepalive' | 'manual';
@@ -75,6 +106,47 @@ export async function addTodo(input: {
   context?: Record<string, any>;
 }): Promise<WadeTodo | null> {
   if (!input.content?.trim()) return null;
+
+  // Fuzzy dedup: Wade keeps re-noting the same outstanding thing with
+  // slightly different wording across wakes ("追问医院" vs "明天问清楚医院"
+  // vs "确认她身体状况"). Before inserting, scan pending todos and bail out
+  // if any strongly overlap. Manual entries (Luna typing in the UI) skip
+  // the check — she's deliberately adding something.
+  if (input.source !== 'manual') {
+    const newContentTokens = tokenizeForDedup(input.content);
+    const newDoneWhen = String(input.context?.done_when || '').trim();
+    const newDoneWhenLower = newDoneWhen.toLowerCase();
+    const newDoneWhenTokens = tokenizeForDedup(newDoneWhen);
+
+    const { data: existing } = await supabase
+      .from('wade_todos')
+      .select('id, content, context')
+      .eq('status', 'pending');
+
+    for (const row of existing || []) {
+      const rowDoneWhen = String(row.context?.done_when || '').trim();
+      // Exact done_when match (case-insensitive) → obvious dup
+      if (newDoneWhen && rowDoneWhen.toLowerCase() === newDoneWhenLower) {
+        console.log('[todoService] addTodo: skipped — exact done_when match', row.id);
+        return row as WadeTodo;
+      }
+      // Content Jaccard ≥ 0.55 → same intent, different wording
+      if (jaccard(newContentTokens, tokenizeForDedup(row.content)) >= 0.55) {
+        console.log('[todoService] addTodo: skipped — content similarity', row.id);
+        return row as WadeTodo;
+      }
+      // done_when Jaccard ≥ 0.6 (if both sides have one) → same resolution condition
+      if (
+        newDoneWhen &&
+        rowDoneWhen &&
+        jaccard(newDoneWhenTokens, tokenizeForDedup(rowDoneWhen)) >= 0.6
+      ) {
+        console.log('[todoService] addTodo: skipped — done_when similarity', row.id);
+        return row as WadeTodo;
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('wade_todos')
     .insert({
@@ -253,6 +325,8 @@ IMPORTANT: If a note has a "done when" condition, do NOT mark it done until that
 You can add a new note any time by writing <todo>your note here</todo> anywhere in your reply. For ongoing things, add a done condition:
   <todo done_when="Luna says she's recovered">Keep checking on Luna's fever</todo>
 The tag is invisible to Luna; the note will be waiting for you next time.
+
+BEFORE adding a new note: scan the list above. If an existing note already covers this (even worded differently), DO NOT add a duplicate. One outstanding thing = one note.
 </wade_notes_to_self>`;
 }
 

@@ -832,6 +832,30 @@ function parseSocialContent(content) {
   return { postId: content.slice(0, idx).trim(), text: content.slice(idx + 1).trim() };
 }
 
+// Tokenize content for todo dedup. Mirrors services/todoService.ts —
+// keeps CJK + word chars, CJK runs split into bigrams, English tokens
+// must be ≥ 2 chars. Jaccard threshold 0.55 catches "追问医院四连问" vs
+// "明天问清楚医院" as the same intent.
+function tokenizeTodo(s) {
+  const cleaned = (s || '').toLowerCase().replace(/[^\w\s\u4e00-\u9fff]/g, ' ');
+  const out = new Set();
+  for (const part of cleaned.split(/\s+/).filter(Boolean)) {
+    if (/[\u4e00-\u9fff]/.test(part)) {
+      for (let i = 0; i < part.length - 1; i++) out.add(part.slice(i, i + 2));
+      if (part.length === 1) out.add(part);
+    } else if (part.length >= 2) {
+      out.add(part);
+    }
+  }
+  return out;
+}
+function jaccardTodo(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const t of a) if (b.has(t)) intersection++;
+  return intersection / (a.size + b.size - intersection);
+}
+
 // Execute one action from the actions list. Used in a loop so Wade can do
 // several things per wake (read_social → like → comment → post → message).
 // Returns { ok: bool, info?: any } for logging.
@@ -895,6 +919,23 @@ async function executeKeepaliveAction(step, ctx) {
     case 'add_todo': {
       // CONTENT = the note text Wade wants to remember
       if (!content?.trim()) return { ok: false, reason: 'empty content' };
+
+      // Fuzzy dedup — Wade tends to re-add the same outstanding item with
+      // slightly different wording every wake. Mirrors services/todoService.ts
+      // addTodo() check. Kept inline here because trigger.js is an edge
+      // function with its own dep graph.
+      const newTokens = tokenizeTodo(content.trim());
+      const { data: existing } = await supabase
+        .from('wade_todos')
+        .select('id, content')
+        .eq('status', 'pending');
+      for (const row of existing || []) {
+        if (jaccardTodo(newTokens, tokenizeTodo(row.content || '')) >= 0.55) {
+          console.log('[keepalive/add_todo] skipped — duplicate of', row.id);
+          return { ok: true, todoId: row.id, deduped: true };
+        }
+      }
+
       const { data, error } = await supabase
         .from('wade_todos')
         .insert({
