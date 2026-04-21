@@ -305,9 +305,15 @@ Without done_when, you can mark it done whenever. WITH done_when, don't mark it 
     .map(t => {
       const doneWhen = t.context?.done_when;
       const created = new Date(t.created_at).toLocaleString('en-US', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+      const age = formatRelativeAge(t.created_at);
+      // Absolute + relative + timezone. Both are needed: absolute so Wade
+      // can resolve relative words inside the content ("明天"/"tonight"/
+      // "next week") to concrete dates, relative so he feels how long it's
+      // been sitting there.
+      const meta = `written ${created} Tokyo · ${age}`;
       return doneWhen
-        ? `  - [${t.id}] (${created}) ${t.content}  (DONE WHEN: ${doneWhen})`
-        : `  - [${t.id}] (${created}) ${t.content}`;
+        ? `  - [${t.id}] (${meta}) ${t.content}  (DONE WHEN: ${doneWhen})`
+        : `  - [${t.id}] (${meta}) ${t.content}`;
     })
     .join('\n');
 
@@ -320,11 +326,15 @@ ${list}
 
 You can naturally raise any of these in this conversation if the timing fits — they're your own intentions, not assignments. If you've fully handled one AND its done condition (if any) is met, include <done>${todos[0].id}</done> (or whichever id) in your reply so it gets marked complete. Luna won't see the tag.
 
+TIME AWARENESS: If a note contains relative words like "tomorrow / tonight / 明天 / 今晚 / later / next week", those were written from the perspective of the "written" timestamp on that line, NOT right now. Compare "written" against the current time (see [CURRENT TIME]) to figure out whether that moment has already arrived. Example: a note written "Apr 20 22:00 Tokyo" saying "明天一定要问" means ask on Apr 21 — if it's already Apr 22 today, you're overdue, surface it immediately.
+
 IMPORTANT: If a note has a "done when" condition, do NOT mark it done until that condition is actually true. Asking about something once doesn't mean it's resolved — e.g. if Luna has a fever, checking on her once doesn't make her healthy. Keep the note open until the condition is met.
 
 You can add a new note any time by writing <todo>your note here</todo> anywhere in your reply. For ongoing things, add a done condition:
   <todo done_when="Luna says she's recovered">Keep checking on Luna's fever</todo>
 The tag is invisible to Luna; the note will be waiting for you next time.
+
+When writing a new note, PREFER concrete dates over relative words. "Ask on Apr 22 morning" ages better than "ask tomorrow" — future-you reading this won't have to math out which day "tomorrow" referred to.
 
 BEFORE adding a new note: scan the list above. If an existing note already covers this (even worded differently), DO NOT add a duplicate. One outstanding thing = one note.
 </wade_notes_to_self>`;
@@ -370,9 +380,12 @@ export function formatTodosForKeepalivePrompt(todos: WadeTodo[]): string {
     .map(t => {
       const doneWhen = t.context?.done_when;
       const age = formatRelativeAge(t.created_at);
+      const created = new Date(t.created_at).toLocaleString('en-US', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+      // Absolute + relative so "明天/tonight/later" written inside content
+      // can be resolved against the absolute timestamp, not just "left 1d ago".
       return doneWhen
-        ? `  - [${t.id}] ${t.content}  (left ${age}) (DONE WHEN: ${doneWhen})`
-        : `  - [${t.id}] ${t.content}  (left ${age})`;
+        ? `  - [${t.id}] ${t.content}  (written ${created} Tokyo · ${age}) (DONE WHEN: ${doneWhen})`
+        : `  - [${t.id}] ${t.content}  (written ${created} Tokyo · ${age})`;
     })
     .join('\n');
 }

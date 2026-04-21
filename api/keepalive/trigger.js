@@ -549,7 +549,9 @@ ${wadeosData.capsules}
 ${wadeosData.memories}
 
 [Your private notes-to-self (pending todos)]
-${wadeosData.todos || '  (No pending notes)'}`;
+${wadeosData.todos || '  (No pending notes)'}
+${wadeosData.todos ? `
+TIME AWARENESS: relative words inside a note ("tomorrow/tonight/明天/今晚/later") were written from the perspective of the "written" timestamp on that line — NOT right now. Compare "written" against [Current time] above to figure out whether that moment has already arrived. A note written yesterday saying "明天一定要问" means ask TODAY. When writing new notes, prefer concrete dates over relative words.` : ''}`;
 
   let promptBody = customPrompt || `You just woke up. This is NOT Luna talking to you — this is your autonomous time.
 
