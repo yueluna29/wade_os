@@ -26,6 +26,8 @@ export const cardDataToXML = (cardData: PersonaCardData, character: 'Wade' | 'Lu
   // 遍历 cardData 里所有非空字段，自动生成 XML 标签
   const fieldLabels: Record<string, string> = {
     core_identity: 'core_identity',
+    personality_traits: 'personality_traits',
+    speech_patterns: 'speech_patterns',
     appearance: 'appearance',
     clothing: 'clothing',
     likes: 'likes',
@@ -287,7 +289,11 @@ export const generateFromCard = async (config: {
  
     let finalPrompt = prompt;
     if (customPrompt?.trim()) {
-      finalPrompt = `[SPECIAL INSTRUCTIONS FOR THIS CONVERSATION - HIGHEST PRIORITY]\n${customPrompt}\n[FOLLOW THESE INSTRUCTIONS CAREFULLY]\n\n${prompt}`;
+      // XML-wrap the Special Sauce so the model treats it as a structured
+      // directive block embedded in the user turn, not as part of Luna's
+      // message. Closing tag + priority hint keep it distinct from the
+      // actual dialogue that follows.
+      finalPrompt = `<special_instructions priority="highest">\n${customPrompt}\n</special_instructions>\n\n${prompt}`;
     }
  
     const result = await chat.sendMessage({ message: finalPrompt });
@@ -316,7 +322,7 @@ export const generateFromCard = async (config: {
     ];
 
     if (customPrompt?.trim()) {
-      messages.push({ role: 'system', content: [{ type: 'text', text: `[SPECIAL INSTRUCTIONS]\n${customPrompt}`, cache_control: { type: 'ephemeral' } }] });
+      messages.push({ role: 'system', content: [{ type: 'text', text: `<special_instructions priority="highest">\n${customPrompt}\n</special_instructions>`, cache_control: { type: 'ephemeral' } }] });
     }
  
     messages.push({ role: 'user', content: prompt });

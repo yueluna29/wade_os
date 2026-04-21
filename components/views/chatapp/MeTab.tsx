@@ -4,7 +4,7 @@ import { FocusModalEditor } from '../../ui/FocusModalEditor';
 import { uploadToImgBB } from '../../../services/imgbb';
 import { Avatar } from './Avatar';
 import { PhoneOwner } from './mockContacts';
-import { Camera, ChevronRight } from 'lucide-react';
+import { Camera, ChevronRight, Check } from 'lucide-react';
 
 interface MeTabProps {
   phoneOwner: PhoneOwner;
@@ -21,6 +21,9 @@ export const MeTab: React.FC<MeTabProps> = ({ phoneOwner }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [focus, setFocus] = useState<FocusState | null>(null);
   const [uploading, setUploading] = useState(false);
+  // Save-button feedback: 'idle' (accent check, waiting), 'saving' (spinner),
+  // 'saved' (green-ish pulse for 1.2s). Re-arms back to idle automatically.
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const isLuna = phoneOwner === 'luna';
   const prefix = isLuna ? 'luna' : 'wade';
@@ -45,6 +48,31 @@ export const MeTab: React.FC<MeTabProps> = ({ phoneOwner }) => {
     ? 'A painfully soft kitten with a chaotic brain.'
     : 'Breaking the 4th wall since forever.';
   const avatarSrc = isLuna ? settings.lunaAvatar : settings.wadeAvatar;
+
+  // Explicit save trigger — re-pushes the full settings + profiles payload
+  // through updateSettings / updateProfile. updateSettings itself writes to
+  // BOTH app_settings and core_identity_config, so a single click keeps the
+  // two tables aligned even if individual onBlur commits missed. Also acts
+  // as a visual "I saved!" reassurance since auto-save-on-blur is silent.
+  const handleSave = async () => {
+    if (saveState === 'saving') return;
+    setSaveState('saving');
+    try {
+      await updateSettings({}); // no-op merge re-fires the full upsert
+      // Commit any in-flight profile edits (display_name + username are
+      // buffered locally and only committed on blur — re-send them here so
+      // the ✓ button works even if the user clicks it without blurring).
+      await updateProfile(profileTarget, {
+        display_name: pDisplayName,
+        username: pUsername,
+      });
+      setSaveState('saved');
+      setTimeout(() => setSaveState('idle'), 1200);
+    } catch (err) {
+      console.error('[MeTab] save failed:', err);
+      setSaveState('idle');
+    }
+  };
 
   const handleAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,6 +108,26 @@ export const MeTab: React.FC<MeTabProps> = ({ phoneOwner }) => {
                   'repeating-linear-gradient(-45deg, var(--wade-text-main) 0, var(--wade-text-main) 1px, transparent 1px, transparent 12px)',
               }}
             />
+            {/* Subtle save ✓ tucked into the banner corner. Transparent
+                bg + accent outline; flashes filled on success and fades
+                back. All colors via wade-* vars so it re-skins cleanly. */}
+            <button
+              onClick={handleSave}
+              disabled={saveState === 'saving'}
+              aria-label="Save persona"
+              title="Save"
+              className={`absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full flex items-center justify-center border transition-all ${
+                saveState === 'saved'
+                  ? 'bg-wade-accent text-white border-wade-accent'
+                  : 'bg-transparent border-wade-accent/50 text-wade-accent/80 hover:border-wade-accent hover:text-wade-accent hover:bg-wade-accent/10'
+              }`}
+            >
+              {saveState === 'saving' ? (
+                <div className="w-3 h-3 border border-wade-accent/30 border-t-wade-accent rounded-full animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" strokeWidth={2.25} />
+              )}
+            </button>
           </div>
 
           <div className="bg-wade-bg-card -mt-4 relative">

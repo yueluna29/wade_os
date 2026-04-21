@@ -53,12 +53,53 @@ const defaults: ChatStyleConfig = {
   chatFontSize: 'medium',
 };
 
+// Local-only cache of recently-used background image URLs. Keeps Luna from
+// re-uploading the same picture to ImgBB every time she toggles between
+// backgrounds — the chat bg URL table would otherwise fill up with dupes.
+// Capped at 6 slots (3×2 grid), newest first, deduped.
+const BG_CACHE_KEY = 'wade_chat_bg_cache';
+const BG_CACHE_MAX = 8;
+const loadBgCache = (): string[] => {
+  try {
+    const raw = localStorage.getItem(BG_CACHE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string' && s.length > 0).slice(0, BG_CACHE_MAX) : [];
+  } catch {
+    return [];
+  }
+};
+const saveBgCache = (arr: string[]) => {
+  try { localStorage.setItem(BG_CACHE_KEY, JSON.stringify(arr.slice(0, BG_CACHE_MAX))); } catch { /* quota — ignore */ }
+};
+
 export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose, chatStyle, onApply, onReset }) => {
   const [local, setLocal] = useState<ChatStyleConfig>({ ...defaults, ...chatStyle });
   const [activeSection, setActiveSection] = useState<'bubbles' | 'layout' | 'background'>('bubbles');
+  const [bgCache, setBgCache] = useState<string[]>(() => loadBgCache());
+
+  const pushToBgCache = (url: string) => {
+    if (!url) return;
+    setBgCache(prev => {
+      const next = [url, ...prev.filter(u => u !== url)].slice(0, BG_CACHE_MAX);
+      saveBgCache(next);
+      return next;
+    });
+  };
+  const removeFromBgCache = (url: string) => {
+    setBgCache(prev => {
+      const next = prev.filter(u => u !== url);
+      saveBgCache(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     setLocal({ ...defaults, ...chatStyle });
+    // On open, seed the cache with whatever's already active so the first
+    // time Luna opens this panel her current bg shows up in Recent too.
+    if (isOpen && chatStyle?.chatBgImage) pushToBgCache(chatStyle.chatBgImage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatStyle, isOpen]);
 
   // Inject @font-face for local font preview
@@ -395,16 +436,17 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
 
               <div className="border-t border-wade-border/50 pt-3">
                 <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-accent mb-2">Background Image</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={local.chatBgImage || ''}
-                    onChange={e => update('chatBgImage', e.target.value)}
-                    placeholder="Paste image URL..."
-                    className="flex-1 px-3 py-2 text-xs bg-wade-bg-app border border-wade-border rounded-xl focus:outline-none focus:border-wade-accent text-wade-text-main placeholder-wade-text-muted/50"
-                  />
-                  <label className="w-9 h-9 rounded-xl bg-wade-bg-app border border-wade-border flex items-center justify-center text-wade-text-muted hover:text-wade-accent hover:border-wade-accent cursor-pointer transition-colors shrink-0">
-                    <Icons.Image />
+                {/* 3×3 grid — first cell is the Upload tile, next 8 are the
+                    local-cache thumbnails. Currently-selected tile shows an
+                    accent border; the big preview above already shows the
+                    full-size result, so no separate selected-image block. */}
+                <div className="grid grid-cols-3 gap-2">
+                  <label
+                    className="relative aspect-square rounded-xl border-2 border-dashed border-wade-border/60 bg-wade-bg-app/60 flex flex-col items-center justify-center gap-1 text-wade-text-muted hover:text-wade-accent hover:border-wade-accent/70 hover:bg-wade-accent/5 cursor-pointer transition-colors"
+                    title="Upload new background"
+                  >
+                    <Icons.Upload size={16} />
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Upload</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -415,24 +457,48 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                         try {
                           const { uploadToImgBB } = await import('../../../services/imgbb');
                           const url = await uploadToImgBB(file);
-                          if (url) update('chatBgImage', url);
+                          if (url) {
+                            update('chatBgImage', url);
+                            pushToBgCache(url);
+                          }
                         } catch (err) {
                           console.error('Upload failed:', err);
                         }
                       }}
                     />
                   </label>
+                  {bgCache.map((url) => {
+                    const isSelected = local.chatBgImage === url;
+                    return (
+                      <div key={url} className="relative group aspect-square">
+                        <button
+                          onClick={() => update('chatBgImage', url)}
+                          className={`w-full h-full rounded-xl overflow-hidden border-2 transition-all ${
+                            isSelected
+                              ? 'border-wade-accent shadow-md'
+                              : 'border-wade-border/50 hover:border-wade-accent/60'
+                          }`}
+                        >
+                          <img src={url} className="w-full h-full object-cover" loading="lazy" />
+                        </button>
+                        <button
+                          onClick={() => removeFromBgCache(url)}
+                          className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/80 transition-opacity"
+                          aria-label="Remove from recent"
+                        >
+                          <Icons.Close size={8} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
                 {local.chatBgImage && (
-                  <div className="mt-2 relative rounded-xl overflow-hidden border border-wade-border h-24">
-                    <img src={local.chatBgImage} className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => update('chatBgImage', '')}
-                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
-                    >
-                      <Icons.Close />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => update('chatBgImage', '')}
+                    className="mt-2 w-full py-1.5 text-[10px] font-bold uppercase tracking-widest text-wade-text-muted/70 hover:text-wade-accent transition-colors"
+                  >
+                    Clear background
+                  </button>
                 )}
               </div>
             </div>

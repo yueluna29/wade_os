@@ -14,10 +14,10 @@ interface ShellProps {
 // Tabs that aren't in either set (home / social / settings / shared apps)
 // fall back to the global :root palette.
 const LUNA_PHONE_TABS = new Set([
-  'luna-phone', 'chat-list', 'divination', 'favorites',
+  'luna-phone', 'chat-list', 'luna-persona', 'divination', 'favorites',
 ]);
 const WADE_PHONE_TABS = new Set([
-  'wade-phone', 'wade-chat-list', 'memory', 'wade-memory', 'journal', 'wade-todos',
+  'wade-phone', 'wade-chat-list', 'wade-persona', 'memory', 'wade-memory', 'journal', 'wade-todos',
 ]);
 
 export const Shell: React.FC<ShellProps> = ({ children }) => {

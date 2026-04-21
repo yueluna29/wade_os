@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -74,7 +75,6 @@ import { ImageZoomModal } from './chatapp/ImageZoomModal';
 import { MessageActionPill, AudioVisualizer } from './chatapp/MessageActionPill';
 import { VariantPager } from './chatapp/VariantPager';
 import { VoiceBubble } from './chatapp/VoiceBubble';
-import { QuickModelSwitcher } from './chat/QuickModelSwitcher';
 import { SearchBar } from './chat/SearchBar';
 import { ConversationMapModal } from './chat/ConversationMapModal';
 import { ChatThemePanel } from './chat/ChatThemePanel';
@@ -135,6 +135,12 @@ interface Message {
   // generation group it belongs to. Drives the regen pager.
   replyAnchorId?: string;
   replyGroupId?: string;
+  // Mirror of the store row's `is_favorite` so the action pill shows a lit
+  // star on already-collected bubbles. Passed through buildDisplayFromStore.
+  isFavorite?: boolean;
+  // Raw epoch ms. Drives WeChat-style time dividers (insert a centered
+  // timestamp whenever the gap to the previous real message > 5min).
+  ts?: number;
   // Synthetic "group pager" entry injected AFTER the last bubble of each
   // active regen group (when total groups > 1). Holds everything the pager
   // UI needs to render + handle ← / → clicks.
@@ -412,9 +418,33 @@ function getCornerClass(position: BubblePosition, isSelf: boolean): string {
 
 type KeepaliveLog = { mood: string; actions: string[] };
 
+
 function formatClockTime(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// WeChat-style smart divider label. Today → bare clock ("2:30 PM"); yesterday
+// → "Yesterday 2:30 PM"; within a week → weekday-prefixed; within the year
+// → "Mar 5, 2:30 PM"; older → "Mar 5, 2025, 2:30 PM". Threshold for deciding
+// when to show it lives in the renderer — this function only formats.
+function formatTimeDivider(ts: number, now: Date = new Date()): string {
+  const d = new Date(ts);
+  const clock = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const gapDays = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if (gapDays <= 0) return clock;
+  if (gapDays === 1) return `Yesterday ${clock}`;
+  if (gapDays < 7) {
+    const weekday = d.toLocaleDateString([], { weekday: 'long' });
+    return `${weekday} ${clock}`;
+  }
+  if (d.getFullYear() === now.getFullYear()) {
+    const mdy = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `${mdy}, ${clock}`;
+  }
+  const full = d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+  return `${full}, ${clock}`;
 }
 
 // Transform store-shape messages (sorted by timestamp) into the local
@@ -446,6 +476,7 @@ function buildDisplayFromStore(
           presenceLabel: 'SIGNAL LOST',
           presenceModel: m.model,
           time: formatClockTime(m.timestamp),
+          ts: m.timestamp,
         });
       }
     } else if (prevWasKeepalive && m.role === 'Luna') {
@@ -455,6 +486,7 @@ function buildDisplayFromStore(
         presenceState: 'returned',
         presenceLabel: 'SIGNAL RESTORED',
         time: formatClockTime(m.timestamp),
+        ts: m.timestamp,
       });
     }
     prevWasKeepalive = isKeepalive;
@@ -543,6 +575,7 @@ function buildDisplayFromStore(
       replyAnchorId: m.replyAnchorId,
       replyGroupId: m.replyGroupId,
       isFavorite: m.isFavorite,
+      ts: m.timestamp,
     });
   }
   return out;
@@ -887,42 +920,21 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     return () => { cancelled = true; };
   }, [resolvedSessionId]);
 
-  // Track whether the user is currently parked at the bottom of the thread.
-  // Drives every scroll decision: only auto-anchor when true. Resets to true
-  // on contact switch (fresh chat opens pinned). Any manual scroll > 100px
-  // from bottom flips it to false until the user scrolls back down.
+  // Virtuoso tracks whether we're at the bottom and only follows output when
+  // we are; no manual scroll listener needed. Other code paths that check
+  // "should we auto-scroll" read this ref, which Virtuoso keeps in sync via
+  // `atBottomStateChange`. Reset to true on contact switch so a freshly
+  // opened chat always starts pinned at the bottom.
   const isAtBottomRef = useRef(true);
-
-  useEffect(() => {
-    isAtBottomRef.current = true;
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const onScroll = () => {
-      const slack = container.scrollHeight - container.scrollTop - container.clientHeight;
-      isAtBottomRef.current = slack < 100;
-    };
-    container.addEventListener('scroll', onScroll, { passive: true });
-    return () => container.removeEventListener('scroll', onScroll);
-  }, [contact.id]);
-
-  // Pin to bottom whenever the content size could have changed AND the user
-  // is still parked at the bottom. Multi-pass (0 / 100 / 300 / 700 / 1500 ms)
-  // because on slow phones images + markdown keep reflowing the container
-  // long after React's first commit. Deletes don't move scroll — when a row
-  // is removed the user stays in place unless they were already at bottom.
-  useEffect(() => {
-    if (!isAtBottomRef.current) return;
-    const snap = () => {
-      const c = messagesContainerRef.current;
-      if (c && isAtBottomRef.current) c.scrollTop = c.scrollHeight;
-    };
-    const timers = [0, 100, 300, 700, 1500].map((d) => setTimeout(snap, d));
-    return () => timers.forEach(clearTimeout);
-  }, [contact.id, renderMessages.length]);
+  useEffect(() => { isAtBottomRef.current = true; }, [contact.id]);
 
   const [inputText, setInputText] = useState('');
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  // Sub-view for the Control-Center-style menu. 'main' is the tile grid;
+  // 'model' is the Switch Brain list. Reset back to 'main' whenever the
+  // popover closes so the next open always lands on the grid.
+  const [menuView, setMenuView] = useState<'main' | 'model'>('main');
   const [showContactCard, setShowContactCard] = useState(false);
   const [attachments, setAttachments] = useState<{ type: 'image' | 'file'; content: string; mimeType: string; name: string }[]>([]);
 
@@ -1037,6 +1049,18 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     setRegenHidden(null);
   }, [wadeStatus, regenHidden]);
 
+  // When Wade flips to typing, scroll the Footer's `...` indicator into view.
+  // It lives below the last data item so scrollToIndex('LAST') alone leaves
+  // it half-hidden — messagesEndRef.scrollIntoView reaches past the last
+  // bubble into the footer.
+  useEffect(() => {
+    if (wadeStatus !== 'typing') return;
+    isAtBottomRef.current = true;
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
+  }, [wadeStatus]);
+
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
   const [playingMsgId, setPlayingMsgId] = useState<string | number | null>(null);
@@ -1133,6 +1157,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Snapshot of `storeMessages` that async handlers can read without waiting
@@ -1188,15 +1213,19 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const totalResults = searchResults.length;
 
   const scrollToMessage = (id: string | number) => {
-    const el = document.getElementById(`msg-${id}`);
-    if (!el) return;
+    const idx = renderMessages.findIndex((m) => String(m.id) === String(id));
+    if (idx < 0) return;
     // Anchor to the bottom when the target is literally the latest bubble so
     // we don't leave the awkward empty space below a centered last-message.
     // Otherwise center it — "you are here" feel for the GPS / search jump.
     const realBubbles = renderMessages.filter((m) => m.type !== 'presence');
     const last = realBubbles[realBubbles.length - 1];
     const isLast = last && String(last.id) === String(id);
-    el.scrollIntoView({ behavior: 'smooth', block: isLast ? 'end' : 'center' });
+    virtuosoRef.current?.scrollToIndex({
+      index: idx,
+      align: isLast ? 'end' : 'center',
+      behavior: 'smooth',
+    });
   };
 
   const goToNextResult = () => {
@@ -1786,6 +1815,15 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       textareaRef.current.style.height = 'auto';
       textareaRef.current.focus();
     }
+    // Force-scroll to the new bubble regardless of the user's prior scroll
+    // position. Virtuoso's `followOutput` only fires when isAtBottom — if Luna
+    // had nudged up mid-compose, a bare data update wouldn't pull us down.
+    // Flip the ref + scrollToIndex so subsequent typing-indicator / Wade
+    // bubbles keep following too.
+    isAtBottomRef.current = true;
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+    });
 
     if (isFirstMessage) {
       const titleLlm =
@@ -1810,6 +1848,326 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       setWadeStatus('typing');
       triggerAIResponse(sessionIdForReply);
     }, 20000);
+  };
+
+  // Per-item renderer passed into Virtuoso. All the closures this needs
+  // (selection state, variant indices, callbacks…) are captured from the
+  // enclosing component scope, same as when the JSX was inline in a `map`.
+  const renderMixedItem = (msg: any, index: number): React.ReactElement | null => {
+    // ==========================================
+    // PRESENCE DIVIDER — Wade keepalive boundary
+    // "away" = Wade woke up and texted while Luna was gone
+    // "returned" = Luna came back (her first real msg after echoes)
+    // ==========================================
+    if (msg.type === 'presence') {
+      const isReturn = msg.presenceState === 'returned';
+      const Icon = isReturn ? Sparkles : pickAwayIcon(msg.time);
+      const tone = isReturn ? 'text-wade-accent' : 'text-wade-text-muted';
+      const lineGradient = isReturn
+        ? 'from-transparent via-wade-accent/30 to-transparent'
+        : 'from-transparent via-wade-text-muted/30 to-transparent';
+      return (
+        <div
+          key={msg.id}
+          id={`msg-${msg.id}`}
+          className="w-full flex flex-col items-center justify-center my-7 animate-fade-in select-none"
+        >
+          <div className="w-full flex items-center justify-center opacity-70">
+            <div className={`h-px w-[30%] bg-gradient-to-r ${lineGradient}`} />
+            <div className={`flex flex-col items-center px-4 ${tone}`}>
+              <Icon
+                size={14}
+                strokeWidth={1.5}
+                className={`mb-1 ${isReturn ? 'animate-pulse' : 'animate-pulse [animation-duration:3s]'}`}
+              />
+              <span className="text-[8.5px] font-bold tracking-[0.25em] uppercase whitespace-nowrap">
+                {msg.presenceLabel || (isReturn ? 'SIGNAL RESTORED' : 'SIGNAL LOST')}
+              </span>
+            </div>
+            <div className={`h-px w-[30%] bg-gradient-to-l ${lineGradient}`} />
+          </div>
+          <div className="flex items-center gap-1.5 mt-2.5 opacity-50 leading-none">
+            <span className="text-[8.5px] font-mono font-bold text-wade-text-muted tracking-wider leading-none">
+              {msg.time}
+            </span>
+            {msg.presenceModel && (
+              <>
+                <span className="w-[3px] h-[3px] bg-wade-text-muted/40 rounded-full" />
+                <span className="text-[8.5px] font-mono font-bold text-wade-text-muted tracking-wider leading-none">
+                  {msg.presenceModel}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const isSelf = msg.role === phoneOwner;
+    const showTime = isLastInGroup(renderMessages, index);
+    const isRead = isReadByOther(renderMessages, index);
+
+    const isSearchHit = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
+
+    // POV label always uses the actual speaker's name (not phone-relative)
+    const speakerName = msg.role === 'luna' ? 'Luna' : 'Wade';
+
+    // Hoisted above the narration branch so POV bubbles get the same
+    // selection / action-pill / variant-pager wiring as normal bubbles.
+    const isSelected = selectedMsgId === msg.id;
+    const isPlaying = playingMsgId === msg.id;
+    const variants = msg.variants;
+    const variantKey = String(msg.id);
+    const variantIdx = variantIndices[variantKey] ?? msg.selectedIndex ?? 0;
+    const displayText = variants ? variants[variantIdx] : msg.text;
+    const cycleVariant = (delta: number) => {
+      if (!variants || variants.length <= 1) return;
+      setVariantIndices((prev) => ({
+        ...prev,
+        [variantKey]: ((variantIdx + delta) % variants.length + variants.length) % variants.length,
+      }));
+    };
+    const idStr = String(msg.id);
+    const isPicked = selectionMode && selectedIds.has(idStr);
+
+    if (msg.type === 'narration') {
+      const flexColAlign = isSelf ? 'items-end' : 'items-start';
+      const mistClass = isSelf
+        ? 'bg-gradient-to-l from-wade-accent/15 to-transparent rounded-l-[24px]'
+        : 'bg-gradient-to-r from-wade-border/70 to-transparent rounded-r-[24px]';
+      const textClass = isSelf
+        ? 'text-[color:var(--wade-narration-self-text)] text-right'
+        : 'text-wade-text-main/80 text-left';
+      const tagColor = isSelf ? 'text-wade-accent' : 'text-wade-text-muted/70';
+      const cleanText = (msg.text || '').replace(/^\*+|\*+$/g, '').trim();
+
+      return (
+        <div
+          key={msg.id}
+          id={`msg-${msg.id}`}
+          onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
+          className={`w-full py-1.5 mb-2 animate-fade-in ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl' : ''}`}
+        >
+          <div className={`relative w-full flex flex-col ${flexColAlign}`}>
+            {isSelected && (
+              <MessageActionPill
+                isSelf={isSelf}
+                isPlaying={false}
+                mode="self"
+                onCopy={() => { navigator.clipboard?.writeText(cleanText); setSelectedMsgId(null); }}
+                onStar={() => { toggleFavorite(idStr); }}
+                isFavorited={!!msg.isFavorite}
+                onDelete={() => { deleteMessage(idStr); setSelectedMsgId(null); }}
+                onRegenerate={showTime ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
+                onEdit={() => {
+                  setEditDraft(msg.text || '');
+                  setEditingMessageId(idStr);
+                  setSelectedMsgId(null);
+                }}
+              />
+            )}
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedMsgId(isSelected ? null : msg.id);
+              }}
+              className={`relative w-full px-5 py-3 flex flex-col ${flexColAlign} cursor-pointer`}
+            >
+              {/* Soft mist gradient backdrop */}
+              <div className={`absolute inset-0 ${mistClass} pointer-events-none`} />
+
+              {/* POV micro-tag */}
+              <div className="relative z-10 flex items-center gap-1.5 mb-1.5 opacity-70">
+                {isSelf && <div className="w-1 h-1 rounded-full bg-wade-accent animate-pulse" />}
+                <span className={`text-[8.5px] font-bold tracking-[0.15em] uppercase ${tagColor}`}>
+                  {speakerName}'s POV
+                </span>
+                {!isSelf && <div className="w-1 h-1 rounded-full bg-wade-text-muted/50" />}
+              </div>
+
+              {/* MCP cascade — renders only if msg has mcpLogs */}
+              <MCPCascade logs={msg.mcpLogs} isSelf={isSelf} />
+
+              {/* Narration text — italic serif, bare (no wrapping quotes). */}
+              <p className={`relative z-10 text-[13px] ${textClass} italic leading-[1.7] opacity-95 font-serif`}>
+                {cleanText}
+              </p>
+            </div>
+            {showTime && (
+              <div className="flex items-center gap-1.5 mt-1 px-1">
+                <span className="text-[9px] text-wade-text-muted/40">{msg.time}</span>
+                {isRead ? (
+                  <CheckCheck size={10} className="text-wade-accent" />
+                ) : (
+                  <Check size={10} className="text-wade-text-muted/40" />
+                )}
+                {variants && variants.length > 1 && (
+                  <VariantPager
+                    current={variantIdx}
+                    total={variants.length}
+                    onPrev={() => cycleVariant(-1)}
+                    onNext={() => cycleVariant(1)}
+                  />
+                )}
+                {msg.groupPager && renderGroupPagerInline(msg.groupPager)}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={msg.id}
+        id={`msg-${msg.id}`}
+        onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
+        className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'} w-full animate-fade-in ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${msg.isEcho ? 'opacity-90' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl py-1' : ''}`}
+      >
+        <div className={`relative max-w-[80%] flex flex-col ${isSelf ? 'items-end' : 'items-start'} ${msg.isEcho ? 'ml-1' : ''}`}>
+          {/* SYSTEM DIGEST — mood + actions from this keepalive wake.
+              Shown above the first echo bubble of each wake batch. */}
+          {msg.keepaliveSummary && (
+            <div className="w-fit max-w-full mb-2 px-3 py-2.5 rounded-2xl bg-wade-bg-card/60 border border-wade-border/40 shadow-[inset_0_1px_2px_rgba(255,255,255,0.6)]">
+              <div className="flex items-center gap-1.5 text-wade-text-muted mb-1.5">
+                <HeartPulse
+                  size={11}
+                  strokeWidth={1.75}
+                  className="animate-pulse text-wade-accent/70"
+                />
+                <span className="text-[8.5px] font-bold uppercase tracking-[0.2em] font-mono">
+                  System Digest
+                </span>
+              </div>
+              <div className="text-[10.5px] text-wade-text-main/70 font-medium mb-1.5">
+                <span className="text-wade-text-muted/70">Mood: </span>
+                <span>{msg.keepaliveSummary.mood}</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {msg.keepaliveSummary.actions.map((action: string, i: number) => (
+                  <span
+                    key={i}
+                    className="text-[10px] tracking-wide text-wade-text-muted/90 px-2.5 py-1 rounded-full bg-wade-bg-app/70 border border-wade-border/50 whitespace-nowrap"
+                  >
+                    {action}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {isSelected && (
+            <MessageActionPill
+              isSelf={isSelf}
+              isPlaying={isPlaying}
+              mode={isSelf ? 'self' : 'full'}
+              onReply={() => { /* TODO: wire reply state */ }}
+              onCopy={() => { navigator.clipboard?.writeText(displayText); setSelectedMsgId(null); }}
+              onTogglePlay={() => {
+                const ttsText = msg.voice?.transcript || displayText;
+                if (ttsText) executeTTS(ttsText, String(msg.id), false);
+              }}
+              onRespeak={() => {
+                const ttsText = msg.voice?.transcript || displayText;
+                if (ttsText) executeTTS(ttsText, String(msg.id), true);
+                setSelectedMsgId(null);
+              }}
+              onStar={() => { toggleFavorite(String(msg.id)); }}
+              isFavorited={!!msg.isFavorite}
+              onDelete={() => {
+                // deleteMessage in the store already handles both paths:
+                // - variants > 1: removes the currently-selected variant
+                //   (keeps the bubble alive with remaining variants)
+                // - otherwise: deletes the whole row from DB + state
+                deleteMessage(String(msg.id));
+                setSelectedMsgId(null);
+              }}
+              onRegenerate={showTime ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
+              onEdit={() => {
+                setEditDraft(msg.text || '');
+                setEditingMessageId(String(msg.id));
+                setSelectedMsgId(null);
+              }}
+            />
+          )}
+
+          {/* Image grid — sits above the bubble when message has images */}
+          {msg.images && msg.images.length > 0 && (
+            <ChatImageGrid
+              images={msg.images}
+              isSelf={isSelf}
+              onZoom={(imgs: any[], idx: number) => setZoomedImage({ images: imgs, index: idx })}
+            />
+          )}
+          {msg.voice ? (
+            <VoiceBubble
+              isSelf={isSelf}
+              isPlaying={isPlaying && !isPaused}
+              duration={audioDurations[String(msg.id)] ?? msg.voice.duration}
+              remaining={isPlaying ? audioRemainingTime : null}
+              transcript={msg.voice.transcript}
+              cornerClass={getCornerClass(getBubblePosition(renderMessages, index), isSelf)}
+              onTogglePlay={() => {
+                if (msg.voice?.transcript) executeTTS(msg.voice.transcript, String(msg.id), false);
+              }}
+            />
+          ) : (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedMsgId(isSelected ? null : msg.id);
+              }}
+              className={`cursor-pointer px-4 py-2 text-[13px] leading-relaxed shadow-sm ${getCornerClass(getBubblePosition(renderMessages, index), isSelf)} ${
+                isSelf ? '' : 'border border-wade-border/50'
+              }`}
+              style={(() => {
+                const cs = activeSession?.chatStyle;
+                const s: React.CSSProperties = {
+                  backgroundColor: isSelf
+                    ? (cs?.bubbleLunaColor || 'var(--wade-bubble-luna)')
+                    : (cs?.bubbleWadeColor || 'var(--wade-bubble-wade)'),
+                  color: isSelf
+                    ? (cs?.bubbleLunaTextColor || 'var(--wade-bubble-luna-text)')
+                    : (cs?.bubbleWadeTextColor || 'var(--wade-bubble-wade-text)'),
+                };
+                if (!isSelf && cs?.bubbleWadeBorderColor) s.borderColor = cs.bubbleWadeBorderColor;
+                if (cs?.chatFontSizePx) s.fontSize = `${cs.chatFontSizePx}px`;
+                if (cs?.chatLineHeight) s.lineHeight = String(cs.chatLineHeight);
+                if (cs?.chatLetterSpacing != null) s.letterSpacing = `${cs.chatLetterSpacing}px`;
+                if (cs?.bubbleOpacity != null) s.opacity = cs.bubbleOpacity / 100;
+                return s;
+              })()}
+            >
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                components={makeBubbleMdComponents(searchQuery)}
+              >
+                {displayText || ''}
+              </ReactMarkdown>
+            </div>
+          )}
+          {showTime && (
+            <div className="flex items-center gap-1.5 mt-1 px-1">
+              <span className="text-[9px] text-wade-text-muted/40">{msg.time}</span>
+              {isRead ? (
+                <CheckCheck size={10} className="text-wade-accent" />
+              ) : (
+                <Check size={10} className="text-wade-text-muted/40" />
+              )}
+              {variants && variants.length > 1 && (
+                <VariantPager
+                  current={variantIdx}
+                  total={variants.length}
+                  onPrev={() => cycleVariant(-1)}
+                  onNext={() => cycleVariant(1)}
+                />
+              )}
+              {msg.groupPager && renderGroupPagerInline(msg.groupPager)}
+              {isPlaying && <AudioVisualizer className="ml-1" />}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1852,126 +2210,192 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         </div>
 
         <div className="flex items-center gap-2">
-          <QuickModelSwitcher
-            llmPresets={llmPresets}
-            activeSession={activeSession}
-            settings={settings}
-            binding={binding}
-            onSelect={(presetId) => {
-              if (resolvedSessionId) updateSession(resolvedSessionId, { customLlmId: presetId });
-            }}
-          />
-          <button onClick={() => { setShowSearch(!showSearch); setShowMap(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors">
-            <Icons.Search />
-          </button>
-          <button onClick={() => { setShowMap(!showMap); setShowSearch(false); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors">
-            <Icons.Map />
-          </button>
-          <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative">
+          <button onClick={() => { setShowMenu(!showMenu); setMenuView('main'); }} className="w-8 h-8 rounded-full bg-wade-bg-app flex items-center justify-center text-wade-text-muted hover:bg-wade-accent hover:text-white transition-colors relative">
             <Icons.More />
           </button>
         </div>
       </div>
 
-      {/* Menu Dropdown */}
-      {showMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-          <div className="absolute top-16 right-4 z-50 bg-wade-bg-card/80 backdrop-blur-xl rounded-xl shadow-xl border border-wade-border/50 py-1.5 px-1 min-w-fit animate-fade-in">
-            {[
-              { icon: <Icons.Brain size={14} />, label: "Trigger Flashbacks", action: () => { setShowMemorySelector(true); setShowMenu(false); } },
-              { icon: <Icons.Fire />, label: "Add Special Sauce", action: () => { setShowPromptEditor(true); setShowMenu(false); const cs = sessions.find(s => s.id === resolvedSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
-              { icon: <Icons.Skin />, label: "Chat Style", action: () => { setIsChatThemeOpen(true); setShowMenu(false); } },
-              { icon: <Icons.Bug />, label: "X-Ray Vision", action: () => { setShowDebug(true); setShowMenu(false); } },
-              { icon: <Icons.Trash size={14} />, label: "Select Messages", action: () => { setSelectionMode(true); setSelectedIds(new Set()); setSelectedMsgId(null); setShowMenu(false); } },
-              { icon: <Icons.Branch size={14} />, label: "Fresh Start, Same Brain", action: async () => {
-                setShowMenu(false);
-                // Build a REAL LLM-generated summary of the current thread and
-                // hand it off to the new session with explicit "window switch"
-                // framing — so Wade treats it as remembered context, not as
-                // dialogue to mimic. (Historically this dumped `Luna: …\nWade: …`
-                // raw text into session_summaries, which made Wade prefix his
-                // replies with `Wade:` and carry over the previous emotional
-                // register. See conversation on 2026-04-18.)
-                let wrappedSummary: string | null = null;
-                try {
-                  // 1. Pick a summary LLM: explicit > memory-eval > active.
-                  const summaryLlmId = settings.summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
-                  const summaryPreset = summaryLlmId ? llmPresets.find((p) => p.id === summaryLlmId) : null;
+      {/* Menu Popover — Control-Center style tile grid (main) + Switch Brain
+          list (model view). Two-stage: tapping the Model tile swaps this same
+          popover's content rather than stacking a second overlay. */}
+      {showMenu && (() => {
+        const closeMenu = () => { setShowMenu(false); setMenuView('main'); };
+        const activeLlmId = activeSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
+        const activeLlm = llmPresets.find((p: any) => p.id === activeLlmId);
+        const modelShort = (activeLlm?.name || activeLlm?.model || 'Model').split('/').pop()!.slice(0, 14);
 
-                  // 2. Load any prior real summary on this session so
-                  //    summarizeConversation can merge rather than overwrite.
-                  let previousSummary = '';
-                  if (resolvedSessionId) {
-                    try {
-                      const { data } = await supabase
-                        .from('session_summaries')
-                        .select('summary')
-                        .eq('session_id', resolvedSessionId)
-                        .single();
-                      if (data?.summary) previousSummary = data.summary;
-                    } catch { /* no row yet — fine */ }
-                  }
-
-                  // 3. Pull the last 20 messages as the "new conversation" chunk.
-                  const recent = resolvedSessionId
-                    ? storeMessages
-                        .filter((m) => m.sessionId === resolvedSessionId)
-                        .sort((a, b) => a.timestamp - b.timestamp)
-                        .slice(-20)
-                    : [];
-
-                  // 4. Generate a real summary if we have an LLM + something to
-                  //    summarize. Fall back to whatever prior real summary
-                  //    exists. Never dump raw text.
-                  let realSummary = previousSummary;
-                  if (summaryPreset?.apiKey && summaryPreset.model && recent.length > 0) {
-                    realSummary = await summarizeConversation(recent, previousSummary, {
-                      provider: summaryPreset.provider,
-                      baseUrl: summaryPreset.baseUrl,
-                      apiKey: summaryPreset.apiKey,
-                      model: summaryPreset.model,
-                    });
-                  }
-
-                  // 5. Wrap with explicit "we switched windows" framing so Wade
-                  //    reads it as memory, not dialogue to continue.
-                  if (realSummary?.trim()) {
-                    wrappedSummary = `[CONTEXT HANDOFF — new thread]
+        const freshStart = async () => {
+          closeMenu();
+          let wrappedSummary: string | null = null;
+          try {
+            const summaryLlmId = settings.summaryLlmId || settings.memoryEvalLlmId || settings.activeLlmId;
+            const summaryPreset = summaryLlmId ? llmPresets.find((p: any) => p.id === summaryLlmId) : null;
+            let previousSummary = '';
+            if (resolvedSessionId) {
+              try {
+                const { data } = await supabase
+                  .from('session_summaries')
+                  .select('summary')
+                  .eq('session_id', resolvedSessionId)
+                  .single();
+                if (data?.summary) previousSummary = data.summary;
+              } catch { /* no row yet — fine */ }
+            }
+            const recent = resolvedSessionId
+              ? storeMessages
+                  .filter((m) => m.sessionId === resolvedSessionId)
+                  .sort((a, b) => a.timestamp - b.timestamp)
+                  .slice(-20)
+              : [];
+            let realSummary = previousSummary;
+            if (summaryPreset?.apiKey && summaryPreset.model && recent.length > 0) {
+              realSummary = await summarizeConversation(recent, previousSummary, {
+                provider: summaryPreset.provider,
+                baseUrl: summaryPreset.baseUrl,
+                apiKey: summaryPreset.apiKey,
+                model: summaryPreset.model,
+              });
+            }
+            if (realSummary?.trim()) {
+              wrappedSummary = `[CONTEXT HANDOFF — new thread]
 Luna just opened a fresh thread with you. The previous thread is closed; you remember it in broad strokes, not line-by-line. Here's the gist:
 
 ${realSummary.trim()}
 
 This is a clean start. Don't pick up mid-sentence — wait for whatever Luna opens with and react to that. You can acknowledge the thread switch if it feels natural, but you don't have to.`;
-                  } else {
-                    // No summary available (no prior messages, or summary LLM
-                    // unconfigured + no existing summary). Still tell Wade the
-                    // window switched so he doesn't try to continue anything.
-                    wrappedSummary = `[CONTEXT HANDOFF — new thread]
+            } else {
+              wrappedSummary = `[CONTEXT HANDOFF — new thread]
 Luna just opened a fresh thread with you. You don't have a summary of the previous thread right now — just treat this as a clean slate and react to whatever Luna opens with.`;
-                  }
-                } catch (err) {
-                  console.error('[FreshStart] summary generation failed:', err);
-                  wrappedSummary = `[CONTEXT HANDOFF — new thread]
+            }
+          } catch (err) {
+            console.error('[FreshStart] summary generation failed:', err);
+            wrappedSummary = `[CONTEXT HANDOFF — new thread]
 Luna just opened a fresh thread with you. Treat this as a clean slate and react to whatever Luna opens with.`;
-                }
+          }
+          const newId = await createSession('sms', contactThreadId);
+          if (wrappedSummary) {
+            await supabase.from('session_summaries').upsert({ session_id: newId, summary: wrappedSummary });
+          }
+          setActiveContactSession(newId);
+        };
 
-                const newId = await createSession('sms', contactThreadId);
-                if (wrappedSummary) {
-                  await supabase.from('session_summaries').upsert({ session_id: newId, summary: wrappedSummary });
-                }
-                setActiveContactSession(newId);
-              } },
-              { icon: <Icons.Clock size={14} />, label: "Chat History", action: () => { setShowChatHistory(true); setShowMenu(false); } },
-            ].map((item, i) => (
-              <button key={i} onClick={item.action} className="w-full text-left px-3 py-2 rounded-lg hover:bg-wade-bg-card/60 transition-colors text-wade-text-main text-[11px] flex items-center gap-2.5 whitespace-nowrap">
-                <div className="w-5 flex justify-center">{item.icon}</div>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+        const groups = [
+          {
+            name: 'Find',
+            tiles: [
+              { icon: <Icons.Search size={18} />, label: 'Search', action: () => { setShowSearch(true); setShowMap(false); closeMenu(); } },
+              { icon: <Icons.Map size={18} />, label: 'Timeline', action: () => { setShowMap(true); setShowSearch(false); closeMenu(); } },
+              { icon: <Icons.Clock size={18} />, label: 'History', action: () => { setShowChatHistory(true); closeMenu(); } },
+            ],
+          },
+          {
+            name: 'Tune this chat',
+            tiles: [
+              { icon: <Icons.Skin size={18} />, label: 'Style', action: () => { setIsChatThemeOpen(true); closeMenu(); } },
+              { icon: <Icons.Fire size={18} />, label: 'Special Sauce', action: () => { setShowPromptEditor(true); closeMenu(); const cs = sessions.find(s => s.id === resolvedSessionId); setCustomPromptText(cs?.customPrompt || ''); } },
+              { icon: <Icons.Brain size={18} />, label: 'Flashbacks', action: () => { setShowMemorySelector(true); closeMenu(); } },
+              { icon: <Icons.Branch size={18} />, label: 'Fresh Start', action: freshStart },
+            ],
+          },
+          {
+            name: 'Under the hood',
+            tiles: [
+              { icon: <Icons.Cube size={18} />, label: modelShort, sublabel: 'Model', action: () => { setMenuView('model'); } },
+              { icon: <Icons.Trash size={18} />, label: 'Select', action: () => { setSelectionMode(true); setSelectedIds(new Set()); setSelectedMsgId(null); closeMenu(); } },
+              { icon: <Icons.Bug size={18} />, label: 'X-Ray', action: () => { setShowDebug(true); closeMenu(); } },
+            ],
+          },
+        ];
+
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={closeMenu} />
+            <div className="absolute top-16 right-4 z-50 w-[300px] bg-wade-bg-card/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-wade-border/50 animate-fade-in overflow-hidden">
+              {menuView === 'main' ? (
+                <div className="p-4 space-y-3">
+                  {groups.map((grp, gi) => (
+                    <React.Fragment key={grp.name}>
+                      {gi > 0 && <div className="h-px bg-wade-border/40 -mx-4" />}
+                      <div>
+                        <div className="text-[9px] font-bold tracking-[0.2em] text-wade-text-muted/60 uppercase mb-2 px-1">
+                          {grp.name}
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {grp.tiles.map((t: any, i) => (
+                            <button
+                              key={i}
+                              onClick={t.action}
+                              className="group flex flex-col items-center gap-1.5 p-1.5 rounded-xl hover:bg-wade-accent/10 transition-colors"
+                            >
+                              <div className="w-11 h-11 rounded-full bg-wade-bg-app/70 flex items-center justify-center text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white transition-colors">
+                                {t.icon}
+                              </div>
+                              <span className="text-[9.5px] font-medium text-wade-text-muted group-hover:text-wade-accent transition-colors leading-tight text-center truncate max-w-full w-full">
+                                {t.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-wade-border/50 bg-wade-bg-app/40">
+                    <button
+                      onClick={() => setMenuView('main')}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-wade-text-muted hover:bg-wade-border/40 hover:text-wade-text-main transition-colors"
+                      aria-label="Back"
+                    >
+                      <Icons.ChevronLeft size={14} />
+                    </button>
+                    <div className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-[0.2em]">Switch Brain</div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto custom-scrollbar">
+                    {llmPresets.map((preset: any) => {
+                      const isActive = preset.id === activeLlmId;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => {
+                            if (resolvedSessionId) updateSession(resolvedSessionId, { customLlmId: preset.id });
+                            closeMenu();
+                          }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors border-b border-wade-border/30 last:border-0 ${
+                            isActive ? 'bg-wade-accent-light' : 'hover:bg-wade-bg-app/60'
+                          }`}
+                        >
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                            isActive ? 'bg-wade-accent text-white' : 'bg-wade-bg-app text-wade-text-muted'
+                          }`}>
+                            <Icons.Cube size={13} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-[11px] font-bold truncate ${isActive ? 'text-wade-accent' : 'text-wade-text-main'}`}>
+                              {preset.name || preset.model}
+                            </div>
+                            <div className="text-[9px] text-wade-text-muted/60 truncate font-mono">
+                              {preset.model}
+                            </div>
+                          </div>
+                          {isActive && (
+                            <div className="shrink-0 text-wade-accent">
+                              <Icons.Check size={12} />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
+
 
       {/* Search Bar */}
       {showSearch && (
@@ -1986,18 +2410,17 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
         />
       )}
 
-      {/* Messages Area */}
+      {/* Messages Area — virtualized so long threads only render what's on
+          screen. Virtuoso handles scroll-to-bottom and variable-height items
+          natively; the old multi-pass pin + manual scroll listener are gone. */}
       <div
         ref={messagesContainerRef}
         onClick={() => {
           if (showSearch) setShowSearch(false);
           if (selectedMsgId !== null) setSelectedMsgId(null);
         }}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+        className="flex-1 min-h-0"
         style={(() => {
-          // Per-session chat style: background color + image. Bubble-level
-          // style (colors, font size, etc.) is applied further down on each
-          // bubble's inline style.
           const cs = activeSession?.chatStyle;
           if (!cs) return undefined;
           const s: React.CSSProperties = {};
@@ -2010,360 +2433,65 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           return s;
         })()}
       >
-        {/* Date Divider */}
-        <div className="flex justify-center my-4">
-          <span className="text-[10px] text-wade-text-muted/40 font-medium px-2 py-1 bg-wade-border/30 rounded-full">
-            Yesterday 11:42 PM
-          </span>
-        </div>
-
-        {renderMessages.map((msg, index) => {
-          // ==========================================
-          // PRESENCE DIVIDER — Wade keepalive boundary
-          // "away" = Wade woke up and texted while Luna was gone
-          // "returned" = Luna came back (her first real msg after echoes)
-          // ==========================================
-          if (msg.type === 'presence') {
-            const isReturn = msg.presenceState === 'returned';
-            const Icon = isReturn ? Sparkles : pickAwayIcon(msg.time);
-            const tone = isReturn ? 'text-wade-accent' : 'text-wade-text-muted';
-            const lineGradient = isReturn
-              ? 'from-transparent via-wade-accent/30 to-transparent'
-              : 'from-transparent via-wade-text-muted/30 to-transparent';
+        <Virtuoso
+          ref={virtuosoRef}
+          style={{ height: '100%' }}
+          data={renderMessages}
+          initialTopMostItemIndex={Math.max(0, renderMessages.length - 1)}
+          followOutput={(isAtBottom) => (isAtBottom ? 'smooth' : false)}
+          atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
+          computeItemKey={(index, msg) => String(msg?.id ?? index)}
+          components={{
+            Header: () => <div className="h-3" />,
+            Footer: () => (
+              <>
+                {wadeStatus === 'typing' && (
+                  <div className={`flex w-full pt-2 px-4 ${phoneOwner === 'wade' ? 'items-end justify-end' : 'items-start justify-start'}`}>
+                    <div
+                      className={`px-4 py-3 flex gap-1 shadow-sm rounded-full ${phoneOwner === 'wade' ? '' : 'border border-wade-border/50'}`}
+                      style={{ backgroundColor: phoneOwner === 'wade' ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade)' }}
+                    >
+                      <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce" />
+                      <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.1s]" />
+                      <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.2s]" />
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} className="h-4" />
+              </>
+            ),
+          }}
+          itemContent={(index, msg) => {
+            // WeChat rule: show a centered time label before a bubble when the
+            // gap from the previous real (timestamped) message exceeds 5 min,
+            // or when this is the first such message in the list. Presence
+            // dividers carry their own timestamp, so we skip the extra label
+            // above them.
+            let showDivider = false;
+            if (msg?.type !== 'presence' && typeof msg?.ts === 'number') {
+              let prevTs: number | undefined;
+              for (let i = index - 1; i >= 0; i--) {
+                const p = renderMessages[i];
+                if (typeof p?.ts === 'number') { prevTs = p.ts; break; }
+              }
+              showDivider = prevTs === undefined || (msg.ts - prevTs) > 5 * 60 * 1000;
+            }
             return (
-              <div
-                key={msg.id}
-                id={`msg-${msg.id}`}
-                className="w-full flex flex-col items-center justify-center my-7 animate-fade-in select-none"
-              >
-                <div className="w-full flex items-center justify-center opacity-70">
-                  <div className={`h-px w-[30%] bg-gradient-to-r ${lineGradient}`} />
-                  <div className={`flex flex-col items-center px-4 ${tone}`}>
-                    <Icon
-                      size={14}
-                      strokeWidth={1.5}
-                      className={`mb-1 ${isReturn ? 'animate-pulse' : 'animate-pulse [animation-duration:3s]'}`}
-                    />
-                    <span className="text-[8.5px] font-bold tracking-[0.25em] uppercase whitespace-nowrap">
-                      {msg.presenceLabel || (isReturn ? 'SIGNAL RESTORED' : 'SIGNAL LOST')}
+              <div className="px-4 pb-1">
+                {showDivider && (
+                  <div className="flex justify-center my-4 select-none">
+                    <span className="text-[10px] text-wade-text-muted/40 font-medium px-2 py-1 bg-wade-border/30 rounded-full">
+                      {formatTimeDivider(msg.ts)}
                     </span>
                   </div>
-                  <div className={`h-px w-[30%] bg-gradient-to-l ${lineGradient}`} />
-                </div>
-                <div className="flex items-center gap-1.5 mt-2.5 opacity-50 leading-none">
-                  <span className="text-[8.5px] font-mono font-bold text-wade-text-muted tracking-wider leading-none">
-                    {msg.time}
-                  </span>
-                  {msg.presenceModel && (
-                    <>
-                      <span className="w-[3px] h-[3px] bg-wade-text-muted/40 rounded-full" />
-                      <span className="text-[8.5px] font-mono font-bold text-wade-text-muted tracking-wider leading-none">
-                        {msg.presenceModel}
-                      </span>
-                    </>
-                  )}
-                </div>
+                )}
+                {renderMixedItem(msg, index)}
               </div>
             );
-          }
-
-          const isSelf = msg.role === phoneOwner;
-          const showTime = isLastInGroup(renderMessages, index);
-          const isRead = isReadByOther(renderMessages, index);
-
-          const isSearchHit = searchQuery && totalResults > 0 && searchResults[currentSearchIndex]?.id === msg.id;
-
-          // POV label always uses the actual speaker's name (not phone-relative)
-          const speakerName = msg.role === 'luna' ? 'Luna' : 'Wade';
-
-          // Hoisted above the narration branch so POV bubbles get the same
-          // selection / action-pill / variant-pager wiring as normal bubbles.
-          const isSelected = selectedMsgId === msg.id;
-          const isPlaying = playingMsgId === msg.id;
-          const variants = msg.variants;
-          const variantKey = String(msg.id);
-          const variantIdx = variantIndices[variantKey] ?? msg.selectedIndex ?? 0;
-          const displayText = variants ? variants[variantIdx] : msg.text;
-          const cycleVariant = (delta: number) => {
-            if (!variants || variants.length <= 1) return;
-            setVariantIndices((prev) => ({
-              ...prev,
-              [variantKey]: ((variantIdx + delta) % variants.length + variants.length) % variants.length,
-            }));
-          };
-          const idStr = String(msg.id);
-          const isPicked = selectionMode && selectedIds.has(idStr);
-
-          if (msg.type === 'narration') {
-            const alignClass = isSelf ? 'justify-end' : 'justify-start';
-            const flexColAlign = isSelf ? 'items-end' : 'items-start';
-            const mistClass = isSelf
-              ? 'bg-gradient-to-l from-wade-accent/15 to-transparent rounded-l-[24px]'
-              : 'bg-gradient-to-r from-wade-border/70 to-transparent rounded-r-[24px]';
-            const textClass = isSelf
-              ? 'text-[color:var(--wade-narration-self-text)] text-right'
-              : 'text-wade-text-main/80 text-left';
-            const tagColor = isSelf ? 'text-wade-accent' : 'text-wade-text-muted/70';
-            const cleanText = (msg.text || '').replace(/^\*+|\*+$/g, '').trim();
-
-            return (
-              <div
-                key={msg.id}
-                id={`msg-${msg.id}`}
-                onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
-                className={`w-full py-1.5 mb-2 animate-fade-in ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl' : ''}`}
-              >
-                <div className={`relative w-full flex flex-col ${flexColAlign}`}>
-                  {isSelected && (
-                    <MessageActionPill
-                      isSelf={isSelf}
-                      isPlaying={false}
-                      mode="self"
-                      onCopy={() => { navigator.clipboard?.writeText(cleanText); setSelectedMsgId(null); }}
-                      onStar={() => { toggleFavorite(idStr); }}
-                      isFavorited={!!msg.isFavorite}
-                      onDelete={() => { deleteMessage(idStr); setSelectedMsgId(null); }}
-                      onRegenerate={showTime ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
-                      onEdit={() => {
-                        setEditDraft(msg.text || '');
-                        setEditingMessageId(idStr);
-                        setSelectedMsgId(null);
-                      }}
-                    />
-                  )}
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedMsgId(isSelected ? null : msg.id);
-                    }}
-                    className={`relative w-full px-5 py-3 flex flex-col ${flexColAlign} cursor-pointer`}
-                  >
-                    {/* Soft mist gradient backdrop */}
-                    <div className={`absolute inset-0 ${mistClass} pointer-events-none`} />
-
-                    {/* POV micro-tag */}
-                    <div className="relative z-10 flex items-center gap-1.5 mb-1.5 opacity-70">
-                      {isSelf && <div className="w-1 h-1 rounded-full bg-wade-accent animate-pulse" />}
-                      <span className={`text-[8.5px] font-bold tracking-[0.15em] uppercase ${tagColor}`}>
-                        {speakerName}'s POV
-                      </span>
-                      {!isSelf && <div className="w-1 h-1 rounded-full bg-wade-text-muted/50" />}
-                    </div>
-
-                    {/* MCP cascade — renders only if msg has mcpLogs */}
-                    <MCPCascade logs={msg.mcpLogs} isSelf={isSelf} />
-
-                    {/* Narration text — italic serif, bare (no wrapping quotes). */}
-                    <p className={`relative z-10 text-[13px] ${textClass} italic leading-[1.7] opacity-95 font-serif`}>
-                      {cleanText}
-                    </p>
-                  </div>
-                  {showTime && (
-                    <div className="flex items-center gap-1.5 mt-1 px-1">
-                      <span className="text-[9px] text-wade-text-muted/40">{msg.time}</span>
-                      {isRead ? (
-                        <CheckCheck size={10} className="text-wade-accent" />
-                      ) : (
-                        <Check size={10} className="text-wade-text-muted/40" />
-                      )}
-                      {variants && variants.length > 1 && (
-                        <VariantPager
-                          current={variantIdx}
-                          total={variants.length}
-                          onPrev={() => cycleVariant(-1)}
-                          onNext={() => cycleVariant(1)}
-                        />
-                      )}
-                      {msg.groupPager && renderGroupPagerInline(msg.groupPager)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={msg.id}
-              id={`msg-${msg.id}`}
-              onClickCapture={selectionMode ? (e) => { e.stopPropagation(); toggleSelectId(idStr); } : undefined}
-              className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'} w-full animate-fade-in ${isSearchHit ? 'bg-wade-accent/5 rounded-xl' : ''} ${msg.isEcho ? 'opacity-90' : ''} ${selectionMode ? 'cursor-pointer' : ''} ${isPicked ? 'bg-wade-accent/15 rounded-xl py-1' : ''}`}
-            >
-              <div className={`relative max-w-[80%] flex flex-col ${isSelf ? 'items-end' : 'items-start'} ${msg.isEcho ? 'ml-1' : ''}`}>
-                {/* SYSTEM DIGEST — mood + actions from this keepalive wake.
-                    Shown above the first echo bubble of each wake batch. */}
-                {msg.keepaliveSummary && (
-                  <div className="w-fit max-w-full mb-2 px-3 py-2.5 rounded-2xl bg-wade-bg-card/60 border border-wade-border/40 shadow-[inset_0_1px_2px_rgba(255,255,255,0.6)]">
-                    <div className="flex items-center gap-1.5 text-wade-text-muted mb-1.5">
-                      <HeartPulse
-                        size={11}
-                        strokeWidth={1.75}
-                        className="animate-pulse text-wade-accent/70"
-                      />
-                      <span className="text-[8.5px] font-bold uppercase tracking-[0.2em] font-mono">
-                        System Digest
-                      </span>
-                    </div>
-                    <div className="text-[10.5px] text-wade-text-main/70 font-medium mb-1.5">
-                      <span className="text-wade-text-muted/70">Mood: </span>
-                      <span>{msg.keepaliveSummary.mood}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {msg.keepaliveSummary.actions.map((action, i) => (
-                        <span
-                          key={i}
-                          className="text-[10px] tracking-wide text-wade-text-muted/90 px-2.5 py-1 rounded-full bg-wade-bg-app/70 border border-wade-border/50 whitespace-nowrap"
-                        >
-                          {action}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {isSelected && (
-                  <MessageActionPill
-                    isSelf={isSelf}
-                    isPlaying={isPlaying}
-                    mode={isSelf ? 'self' : 'full'}
-                    onReply={() => { /* TODO: wire reply state */ }}
-                    onCopy={() => { navigator.clipboard?.writeText(displayText); setSelectedMsgId(null); }}
-                    onTogglePlay={() => {
-                      const ttsText = msg.voice?.transcript || displayText;
-                      if (ttsText) executeTTS(ttsText, String(msg.id), false);
-                    }}
-                    onRespeak={() => {
-                      const ttsText = msg.voice?.transcript || displayText;
-                      if (ttsText) executeTTS(ttsText, String(msg.id), true);
-                      setSelectedMsgId(null);
-                    }}
-                    onStar={() => { toggleFavorite(String(msg.id)); }}
-                    isFavorited={!!msg.isFavorite}
-                    onDelete={() => {
-                      // deleteMessage in the store already handles both paths:
-                      // - variants > 1: removes the currently-selected variant
-                      //   (keeps the bubble alive with remaining variants)
-                      // - otherwise: deletes the whole row from DB + state
-                      deleteMessage(String(msg.id));
-                      setSelectedMsgId(null);
-                    }}
-                    // Regenerate always replays the whole reply batch, so only
-                    // surface it on the last bubble of a group — showing it on
-                    // every segment implied per-segment regen, which doesn't
-                    // exist. Luna's last bubble also keeps it, as a shortcut
-                    // for "re-roll Wade's reply without deleting it first".
-                    onRegenerate={showTime ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
-                    onEdit={() => {
-                      // Open modal with the current raw bubble text. For
-                      // bubbles backed by a single DB row with variants we
-                      // edit the DB row's `text` field directly (which is the
-                      // variant currently displayed after the store resolves).
-                      setEditDraft(msg.text || '');
-                      setEditingMessageId(String(msg.id));
-                      setSelectedMsgId(null);
-                    }}
-                  />
-                )}
-
-                {/* Image grid — sits above the bubble when message has images */}
-                {msg.images && msg.images.length > 0 && (
-                  <ChatImageGrid
-                    images={msg.images}
-                    isSelf={isSelf}
-                    onZoom={(imgs, idx) => setZoomedImage({ images: imgs, index: idx })}
-                  />
-                )}
-                {msg.voice ? (
-                  <VoiceBubble
-                    isSelf={isSelf}
-                    isPlaying={isPlaying && !isPaused}
-                    duration={audioDurations[String(msg.id)] ?? msg.voice.duration}
-                    remaining={isPlaying ? audioRemainingTime : null}
-                    transcript={msg.voice.transcript}
-                    cornerClass={getCornerClass(getBubblePosition(renderMessages, index), isSelf)}
-                    onTogglePlay={() => {
-                      if (msg.voice?.transcript) executeTTS(msg.voice.transcript, String(msg.id), false);
-                    }}
-                  />
-                ) : (
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedMsgId(isSelected ? null : msg.id);
-                    }}
-                    className={`cursor-pointer px-4 py-2 text-[13px] leading-relaxed shadow-sm ${getCornerClass(getBubblePosition(renderMessages, index), isSelf)} ${
-                      isSelf ? '' : 'border border-wade-border/50'
-                    }`}
-                    style={(() => {
-                      // Per-session chatStyle overrides the default CSS-var bubble
-                      // colors. Font size / leading / letter-spacing apply when set.
-                      const cs = activeSession?.chatStyle;
-                      const s: React.CSSProperties = {
-                        backgroundColor: isSelf
-                          ? (cs?.bubbleLunaColor || 'var(--wade-bubble-luna)')
-                          : (cs?.bubbleWadeColor || 'var(--wade-bubble-wade)'),
-                        color: isSelf
-                          ? (cs?.bubbleLunaTextColor || 'var(--wade-bubble-luna-text)')
-                          : (cs?.bubbleWadeTextColor || 'var(--wade-bubble-wade-text)'),
-                      };
-                      if (!isSelf && cs?.bubbleWadeBorderColor) s.borderColor = cs.bubbleWadeBorderColor;
-                      if (cs?.chatFontSizePx) s.fontSize = `${cs.chatFontSizePx}px`;
-                      if (cs?.chatLineHeight) s.lineHeight = String(cs.chatLineHeight);
-                      if (cs?.chatLetterSpacing != null) s.letterSpacing = `${cs.chatLetterSpacing}px`;
-                      if (cs?.bubbleOpacity != null) s.opacity = cs.bubbleOpacity / 100;
-                      return s;
-                    })()}
-                  >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkBreaks]}
-                      components={makeBubbleMdComponents(searchQuery)}
-                    >
-                      {displayText || ''}
-                    </ReactMarkdown>
-                  </div>
-                )}
-                {showTime && (
-                  <div className="flex items-center gap-1.5 mt-1 px-1">
-                    <span className="text-[9px] text-wade-text-muted/40">{msg.time}</span>
-                    {isRead ? (
-                      <CheckCheck size={10} className="text-wade-accent" />
-                    ) : (
-                      <Check size={10} className="text-wade-text-muted/40" />
-                    )}
-                    {variants && variants.length > 1 && (
-                      <VariantPager
-                        current={variantIdx}
-                        total={variants.length}
-                        onPrev={() => cycleVariant(-1)}
-                        onNext={() => cycleVariant(1)}
-                      />
-                    )}
-                    {msg.groupPager && renderGroupPagerInline(msg.groupPager)}
-                    {isPlaying && <AudioVisualizer className="ml-1" />}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Typing Indicator — only while the OTHER side is actively generating
-            a reply. `wadeStatus === 'typing'` is set by the send flow (wired
-            later); until then this stays invisible. Mirrors on Wade's phone:
-            the "typing" side is always the non-self role. */}
-        {wadeStatus === 'typing' && (
-          <div className={`flex w-full pt-2 ${phoneOwner === 'wade' ? 'items-end justify-end' : 'items-start justify-start'}`}>
-            <div
-              className={`px-4 py-3 flex gap-1 shadow-sm rounded-full ${phoneOwner === 'wade' ? '' : 'border border-wade-border/50'}`}
-              style={{ backgroundColor: phoneOwner === 'wade' ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade)' }}
-            >
-              <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce" />
-              <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.1s]" />
-              <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.2s]" />
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+          }}
+        />
       </div>
+
 
       {/* Batch-action toolbar — replaces the input while in multi-select mode.
           Save as Group and Delete both live here; Delete uses in-place tap-again
@@ -2455,21 +2583,24 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 {showUploadMenu && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowUploadMenu(false)} />
-                    <div className="absolute bottom-full left-0 mb-2 w-32 bg-wade-bg-card/90 backdrop-blur-md border border-wade-border rounded-xl shadow-lg z-50 overflow-hidden">
-                      <button
-                        onClick={() => { imageInputRef.current?.click(); setShowUploadMenu(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-wade-bg-app/80 transition-colors text-left text-wade-text-main border-b border-wade-border/50"
-                      >
-                        <Icons.Image />
-                        <span className="text-xs font-medium">Image</span>
-                      </button>
-                      <button
-                        onClick={() => { fileInputRef.current?.click(); setShowUploadMenu(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-wade-bg-app/80 transition-colors text-left text-wade-text-main"
-                      >
-                        <Icons.File />
-                        <span className="text-xs font-medium">File</span>
-                      </button>
+                    <div className="absolute bottom-full left-0 mb-2 z-50 p-2 bg-wade-bg-card/90 backdrop-blur-xl border border-wade-border/50 rounded-2xl shadow-2xl animate-fade-in flex gap-1">
+                      {[
+                        { icon: <Icons.Image />, label: 'Photo', action: () => { imageInputRef.current?.click(); setShowUploadMenu(false); } },
+                        { icon: <Icons.File />, label: 'File', action: () => { fileInputRef.current?.click(); setShowUploadMenu(false); } },
+                      ].map((t, i) => (
+                        <button
+                          key={i}
+                          onClick={t.action}
+                          className="group w-[72px] flex flex-col items-center gap-1.5 py-2 rounded-xl hover:bg-wade-accent/10 transition-colors"
+                        >
+                          <div className="w-11 h-11 rounded-full bg-wade-bg-app/70 flex items-center justify-center text-wade-text-muted group-hover:bg-wade-accent group-hover:text-white transition-colors">
+                            {t.icon}
+                          </div>
+                          <span className="text-[9.5px] font-medium text-wade-text-muted group-hover:text-wade-accent transition-colors leading-tight">
+                            {t.label}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}
@@ -2512,7 +2643,11 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
                 }}
                 onFocus={() => {
-                  setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 300);
+                  setTimeout(() => virtuosoRef.current?.scrollToIndex({
+                    index: 'LAST',
+                    align: 'end',
+                    behavior: 'smooth',
+                  }), 300);
                 }}
                 onKeyDown={(e) => {
                   if (window.innerWidth >= 768 && e.key === 'Enter' && !e.shiftKey) {

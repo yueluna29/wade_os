@@ -751,8 +751,12 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         luna_personality: newSettings.lunaPersonality,
         luna_personality_traits: newSettings.lunaPersonalityTraits,
         luna_speech_patterns: newSettings.lunaSpeechPatterns,
-        luna_cover_url: newSettings.lunaCoverUrl,
-        wade_cover_url: newSettings.wadeCoverUrl,
+        // luna_cover_url / wade_cover_url intentionally NOT written here —
+        // those columns only exist on core_identity_config. Including them
+        // would make PostgREST reject the entire app_settings upsert with
+        // "column does not exist", silently wiping every other field in
+        // this call. They're mirrored via the core_identity_config upsert
+        // below.
         active_llm_id: newSettings.activeLlmId,
         active_tts_id: newSettings.activeTtsId,
         home_llm_id: newSettings.homeLlmId,
@@ -762,6 +766,38 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
         custom_theme: {
           active: newSettings.customTheme
         }
+      });
+
+      // Mirror identity fields into core_identity_config — load prefers this
+      // table over app_settings, so skipping it here caused user edits to get
+      // silently overwritten on the next page reload. Keep both in sync.
+      await supabase.from('core_identity_config').upsert({
+        id: 1,
+        wade_core_identity: newSettings.wadePersonality,
+        wade_avatar_url: newSettings.wadeAvatar,
+        wade_height: newSettings.wadeHeight,
+        wade_appearance: newSettings.wadeAppearance,
+        wade_clothing: newSettings.wadeClothing,
+        wade_likes: newSettings.wadeLikes,
+        wade_dislikes: newSettings.wadeDislikes,
+        wade_hobbies: newSettings.wadeHobbies,
+        wade_birthday: newSettings.wadeBirthday,
+        wade_mbti: newSettings.wadeMbti,
+        wade_cover_url: newSettings.wadeCoverUrl,
+        example_dialogue_general: newSettings.exampleDialogue,
+        example_punchlines: newSettings.wadeSingleExamples,
+        example_dialogue_sms: newSettings.smsExampleDialogue,
+        luna_core_identity: newSettings.lunaPersonality,
+        luna_avatar_url: newSettings.lunaAvatar,
+        luna_appearance: newSettings.lunaAppearance,
+        luna_clothing: newSettings.lunaClothing,
+        luna_likes: newSettings.lunaLikes,
+        luna_dislikes: newSettings.lunaDislikes,
+        luna_hobbies: newSettings.lunaHobbies,
+        luna_birthday: newSettings.lunaBirthday,
+        luna_mbti: newSettings.lunaMbti,
+        luna_height: newSettings.lunaHeight,
+        luna_cover_url: newSettings.lunaCoverUrl,
       });
 
       // Sync saved themes to dedicated table if changed
