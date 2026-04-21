@@ -2112,6 +2112,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
               onTogglePlay={() => {
                 if (msg.voice?.transcript) executeTTS(msg.voice.transcript, String(msg.id), false);
               }}
+              onSelect={() => setSelectedMsgId(isSelected ? null : msg.id)}
             />
           ) : (
             <div

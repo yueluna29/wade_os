@@ -13,6 +13,10 @@ interface VoiceBubbleProps {
   transcript?: string;
   cornerClass: string;
   onTogglePlay: () => void;
+  /** Optional: fires when the bubble body (not the play button) is tapped.
+   * Used by the chat view to toggle the action pill for voice messages —
+   * matches the "tap to select" behavior of text bubbles. */
+  onSelect?: () => void;
 }
 
 const formatDuration = (sec: number) => {
@@ -34,6 +38,7 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
   transcript,
   cornerClass,
   onTogglePlay,
+  onSelect,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const showCountdown = isPlaying && remaining != null;
@@ -51,6 +56,7 @@ export const VoiceBubble: React.FC<VoiceBubbleProps> = ({
         onClick={(e) => {
           e.stopPropagation();
           if (transcript) setExpanded((v) => !v);
+          onSelect?.();
         }}
         className={`shadow-sm px-3 py-2 w-[260px] relative cursor-pointer select-none ${cornerClass} ${
           isSelf ? '' : 'border border-wade-border/50'
