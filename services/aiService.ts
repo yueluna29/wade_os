@@ -108,9 +108,14 @@ export const buildSystemPromptFromCard = (options: {
   if (wadeCard?.example_punchlines?.trim()) {
     prompt += `\n\n[WADE'S STYLE - SINGLE LINE EXAMPLES]\n${wadeCard.example_punchlines.trim()}`;
   }
-  if (chatMode === 'sms' && wadeCard?.example_dialogue_sms?.trim()) {
+  // Mixed mode: SMS and general/RP examples are both useful reference since a
+  // single thread now contains both short-bubble texting AND longer narration
+  // turns. Send whichever fields have content — Wade's range comes from seeing
+  // both, not from being constrained to one.
+  if (wadeCard?.example_dialogue_sms?.trim()) {
     prompt += `\n\n[SMS MODE EXAMPLES - TONE REFERENCE, NOT A RIGID TEMPLATE]\n${wadeCard.example_dialogue_sms.trim()}`;
-  } else if (wadeCard?.example_dialogue_general?.trim()) {
+  }
+  if (wadeCard?.example_dialogue_general?.trim()) {
     prompt += `\n\n[EXAMPLE DIALOGUE - MIMIC THIS STYLE]\n${wadeCard.example_dialogue_general.trim()}`;
   }
 
@@ -128,7 +133,14 @@ export const buildSystemPromptFromCard = (options: {
 
   // 6. 长期记忆（慢变：Luna 改 memory 时）
   if (coreMemories && coreMemories.length > 0) {
-    const activeMemories = coreMemories.filter(m => m.isActive).map(m => `- ${m.content}`).join('\n');
+    // Prefix the title (when present) as a bracketed topic tag so the model
+    // can quickly locate which fact is relevant without re-parsing the
+    // sentence. Memories without a title fall back to bare content — no
+    // visual noise, and the format stays backwards-compatible.
+    const activeMemories = coreMemories.filter(m => m.isActive).map(m => {
+      const title = m.title?.trim();
+      return title ? `- [${title}] ${m.content}` : `- ${m.content}`;
+    }).join('\n');
     if (activeMemories) {
       prompt += `\n\n[LONG TERM MEMORY BANK - FACTS YOU MUST REMEMBER]\n${activeMemories}\n[END MEMORIES]`;
     }
