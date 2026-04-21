@@ -26,17 +26,31 @@ import {
 
 type Tab = 'todo' | 'done';
 
-const formatRelativeTime = (iso: string): string => {
-  const ms = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  const w = Math.floor(d / 7);
-  return `${w}w ago`;
+// Smart absolute format — Wade's todos need concrete dates so "明天一定要问"
+// written two days ago is unambiguously readable ("yesterday"/"Mon 22:15" etc).
+// Same-day shows clock only, yesterday is labeled, within a week uses weekday,
+// older falls back to full date.
+const formatTodoTime = (iso: string): string => {
+  const d = new Date(iso);
+  const now = new Date();
+  const clock = d.toLocaleTimeString('en-US', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
+  const startOfDay = (x: Date) => {
+    const tzx = new Date(x.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+    return new Date(tzx.getFullYear(), tzx.getMonth(), tzx.getDate()).getTime();
+  };
+  const gapDays = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if (gapDays <= 0) return `Today ${clock}`;
+  if (gapDays === 1) return `Yesterday ${clock}`;
+  if (gapDays < 7) {
+    const weekday = d.toLocaleDateString('en-US', { timeZone: 'Asia/Tokyo', weekday: 'short' });
+    return `${weekday} ${clock}`;
+  }
+  if (d.getFullYear() === now.getFullYear()) {
+    const md = d.toLocaleDateString('en-US', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric' });
+    return `${md} ${clock}`;
+  }
+  const full = d.toLocaleDateString('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'short', day: 'numeric' });
+  return `${full} ${clock}`;
 };
 
 const sourceLabel = (source: string): string => {
@@ -203,8 +217,8 @@ export const TodosView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 <span>·</span>
                 <span>
                   {tab === 'todo'
-                    ? `left ${formatRelativeTime(todo.created_at)}`
-                    : `done ${todo.done_at ? formatRelativeTime(todo.done_at) : '?'}${todo.done_in ? ` (${todo.done_in})` : ''}`}
+                    ? `written ${formatTodoTime(todo.created_at)}`
+                    : `done ${todo.done_at ? formatTodoTime(todo.done_at) : '?'}${todo.done_in ? ` (${todo.done_in})` : ''}`}
                 </span>
               </div>
 
