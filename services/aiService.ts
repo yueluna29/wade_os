@@ -374,13 +374,45 @@ export const generateFromCard = async (config: {
  
     const data = await response.json();
     const message = data.choices?.[0]?.message;
- 
+
+    // Normalize cache/usage info across providers. OpenRouter exposes:
+    //   usage.prompt_tokens_details.cached_tokens        (cache reads)
+    //   usage.prompt_tokens_details.cache_creation_tokens (some providers)
+    // Anthropic passthrough adds:
+    //   usage.cache_creation_input_tokens
+    //   usage.cache_read_input_tokens
+    // Pick whichever is present and collapse into one shape.
+    const rawUsage = data.usage;
+    const usage = rawUsage ? {
+      promptTokens: rawUsage.prompt_tokens ?? rawUsage.input_tokens,
+      completionTokens: rawUsage.completion_tokens ?? rawUsage.output_tokens,
+      cachedTokens:
+        rawUsage.prompt_tokens_details?.cached_tokens ??
+        rawUsage.cache_read_input_tokens ??
+        0,
+      cacheCreationTokens:
+        rawUsage.prompt_tokens_details?.cache_creation_tokens ??
+        rawUsage.cache_creation_input_tokens ??
+        0,
+      raw: rawUsage,
+    } : undefined;
+
+    if (usage) {
+      const cached = usage.cachedTokens || 0;
+      const total = usage.promptTokens || 0;
+      const hitRate = total > 0 ? Math.round((cached / total) * 100) : 0;
+      console.log(
+        `[aiService] usage → prompt:${total} (cache read:${cached} = ${hitRate}%, cache create:${usage.cacheCreationTokens || 0}) completion:${usage.completionTokens || 0}`
+      );
+    }
+
     if (llmPreset.isImageGen && message?.images?.length > 0) {
       const imageUrl = message.images[0].image_url?.url;
-      if (imageUrl) return { text: imageUrl, thinking: undefined };
+      if (imageUrl) return { text: imageUrl, thinking: undefined, usage };
     }
- 
-    return parseThinking(message?.content || "");
+
+    const parsed = parseThinking(message?.content || "");
+    return { ...parsed, usage };
   }
 };
  
@@ -408,6 +440,18 @@ const parseThinking = (rawText: string): GeminiResponse => {
 export interface GeminiResponse {
   text: string;
   thinking?: string;
+  /** Usage breakdown surfaced from the provider — undefined when we couldn't
+   * parse it. OpenRouter / OpenAI-compat returns `prompt_tokens`, `completion_tokens`
+   * and `prompt_tokens_details.cached_tokens`. Anthropic passthrough adds
+   * `cache_creation_input_tokens` / `cache_read_input_tokens`. We normalize
+   * everything into one shape so UI code doesn't have to switch on provider. */
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    cachedTokens?: number;       // tokens served from cache (read)
+    cacheCreationTokens?: number; // tokens written into cache this turn
+    raw?: any;                    // the full usage object for debugging
+  };
 }
 
 export const generateChatTitle = async (firstMessage: string, apiKeyOrPreset?: string | { provider: string; model: string; apiKey: string; baseUrl: string }): Promise<string> => {

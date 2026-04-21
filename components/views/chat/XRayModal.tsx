@@ -24,13 +24,21 @@ interface XRayModalProps {
   lastWadeMemoriesXml?: string;
   lastWadeTodosXml?: string;
   lastWadeDiaryXml?: string;
+  // Last-turn usage breakdown — drives the cache-hit panel. undefined if the
+  // provider didn't report usage or no send has happened yet this session.
+  lastUsage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    cachedTokens?: number;
+    cacheCreationTokens?: number;
+  } | null;
 }
 
 export const XRayModal: React.FC<XRayModalProps> = ({
   showDebug, setShowDebug, settings, messages, sessions,
   activeSessionId, activeMode, coreMemories, llmPresets, sessionSummary,
   personaCards, functionBindings, getBinding, getDefaultPersonaCard,
-  lastWadeMemoriesXml, lastWadeTodosXml, lastWadeDiaryXml
+  lastWadeMemoriesXml, lastWadeTodosXml, lastWadeDiaryXml, lastUsage
 }) => {
   const [expandedMemoryIds, setExpandedMemoryIds] = useState<string[]>([]);
   const [expandedHistoryIndices, setExpandedHistoryIndices] = useState<number[]>([]);
@@ -202,6 +210,71 @@ export const XRayModal: React.FC<XRayModalProps> = ({
               <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">{memEvalLlm?.name || 'No LLM set'}</div>
             </div>
           </div>
+
+          {/* Last-turn usage & cache — only meaningful once a send has
+              happened and the provider returned a usage block. Shows
+              prompt/completion token counts plus cache read vs cache
+              creation so Luna can verify prompt caching is actually
+              kicking in on models that bill separately for it. */}
+          {lastUsage ? (() => {
+            const total = lastUsage.promptTokens || 0;
+            const cached = lastUsage.cachedTokens || 0;
+            const created = lastUsage.cacheCreationTokens || 0;
+            const hitPct = total > 0 ? Math.round((cached / total) * 100) : 0;
+            const fresh = Math.max(0, total - cached);
+            return (
+              <XRaySection title="Last Turn" subtitle="Usage & cache · updated after each send">
+                <div className="bg-wade-bg-card p-5 rounded-2xl border border-wade-border shadow-sm">
+                  <div className="grid grid-cols-4 gap-3 mb-4">
+                    <div className="text-center">
+                      <div className="text-[8.5px] font-bold uppercase tracking-[0.15em] text-wade-text-muted/70 mb-1">Prompt</div>
+                      <div className="text-sm font-black text-wade-text-main tracking-tight">{total.toLocaleString()}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[8.5px] font-bold uppercase tracking-[0.15em] text-wade-text-muted/70 mb-1">Completion</div>
+                      <div className="text-sm font-black text-wade-text-main tracking-tight">{(lastUsage.completionTokens || 0).toLocaleString()}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[8.5px] font-bold uppercase tracking-[0.15em] text-wade-text-muted/70 mb-1">Cache Read</div>
+                      <div className={`text-sm font-black tracking-tight ${cached > 0 ? 'text-wade-accent' : 'text-wade-text-muted/60'}`}>
+                        {cached.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[8.5px] font-bold uppercase tracking-[0.15em] text-wade-text-muted/70 mb-1">Cache Write</div>
+                      <div className={`text-sm font-black tracking-tight ${created > 0 ? 'text-wade-accent' : 'text-wade-text-muted/60'}`}>
+                        {created.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Hit rate bar */}
+                  <div className="mb-1">
+                    <div className="flex justify-between items-baseline mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-wade-text-muted/70">Cache Hit</span>
+                      <span className="text-[10px] font-mono text-wade-text-main/80">{hitPct}%</span>
+                    </div>
+                    <div className="h-2 bg-wade-bg-app rounded-full overflow-hidden flex">
+                      {cached > 0 && (
+                        <div className="bg-wade-accent h-full" style={{ width: `${(cached / Math.max(total, 1)) * 100}%` }} />
+                      )}
+                      {fresh > 0 && (
+                        <div className="bg-wade-accent/30 h-full" style={{ width: `${(fresh / Math.max(total, 1)) * 100}%` }} />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-[9px] text-wade-text-muted/60">
+                      <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-wade-accent" /> cached {cached.toLocaleString()}</div>
+                      <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-wade-accent/30" /> fresh {fresh.toLocaleString()}</div>
+                    </div>
+                  </div>
+                  {cached === 0 && total > 0 && (
+                    <div className="mt-3 text-[10px] text-wade-text-muted/70 italic leading-relaxed">
+                      No cache read this turn. First send after a system-prompt change, or the provider doesn't support prompt caching on this model.
+                    </div>
+                  )}
+                </div>
+              </XRaySection>
+            );
+          })() : null}
 
           {/* Sections - 按照实际发送给 LLM 的顺序排列 */}
           <XRaySection title="Global Directives" subtitle="System Instructions">

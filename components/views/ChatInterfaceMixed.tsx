@@ -1006,6 +1006,14 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const [lastWadeMemoriesXml, setLastWadeMemoriesXml] = useState<string>('');
   const [lastWadeTodosXml, setLastWadeTodosXml] = useState<string>('');
   const [lastWadeDiaryXml, setLastWadeDiaryXml] = useState<string>('');
+  // Last-turn usage from the LLM — drives the X-Ray cache hit panel so Luna
+  // can verify cache reads are happening on the new model.
+  const [lastUsage, setLastUsage] = useState<{
+    promptTokens?: number;
+    completionTokens?: number;
+    cachedTokens?: number;
+    cacheCreationTokens?: number;
+  } | null>(null);
 
   // Memories just stored by the background evaluator. Handed to
   // MemoryLiveIndicator so Luna sees a toast "Wade remembered something" when
@@ -1551,6 +1559,17 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       });
       // Luna hit stop while the network call was in flight — drop the reply.
       if (ctrl.aborted) return;
+
+      // Capture usage (cache reads / creation / totals) so X-Ray can surface
+      // it. undefined when the provider didn't return a usage block.
+      if (response.usage) {
+        setLastUsage({
+          promptTokens: response.usage.promptTokens,
+          completionTokens: response.usage.completionTokens,
+          cachedTokens: response.usage.cachedTokens,
+          cacheCreationTokens: response.usage.cacheCreationTokens,
+        });
+      }
 
       // Strip <todo> / <done> tags from Wade's reply before it's shown or
       // split into bubbles. The extracted notes / completions are fired off
@@ -2779,6 +2798,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
         lastWadeMemoriesXml={lastWadeMemoriesXml}
         lastWadeTodosXml={lastWadeTodosXml}
         lastWadeDiaryXml={lastWadeDiaryXml}
+        lastUsage={lastUsage}
       />
 
       {/* Memory live indicator — floats in when Wade's background memory
