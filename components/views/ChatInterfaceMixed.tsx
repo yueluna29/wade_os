@@ -819,6 +819,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     // freshly-opened chat.
     setLastWadeMemoriesXml('');
     setLastWadeTodosXml('');
+    setLastWadeDiaryXml('');
     lastSummaryCountRef.current = 0;
     // Drop the lazy-context cache too; the next send in the new session
     // forces a fresh memory / diary / todos fetch.
@@ -1004,6 +1005,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // Strings, not objects, because generateFromCard is XML-based downstream.
   const [lastWadeMemoriesXml, setLastWadeMemoriesXml] = useState<string>('');
   const [lastWadeTodosXml, setLastWadeTodosXml] = useState<string>('');
+  const [lastWadeDiaryXml, setLastWadeDiaryXml] = useState<string>('');
 
   // Memories just stored by the background evaluator. Handed to
   // MemoryLiveIndicator so Luna sees a toast "Wade remembered something" when
@@ -1528,6 +1530,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         // cached or fresh — so the panel stays honest.
         setLastWadeMemoriesXml(wadeMemoriesXml);
         setLastWadeTodosXml(wadeTodosXml);
+        setLastWadeDiaryXml(wadeDiaryXml);
       }
 
       const response = await generateFromCard({
@@ -2774,6 +2777,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
         getDefaultPersonaCard={getDefaultPersonaCard}
         lastWadeMemoriesXml={lastWadeMemoriesXml}
         lastWadeTodosXml={lastWadeTodosXml}
+        lastWadeDiaryXml={lastWadeDiaryXml}
       />
 
       {/* Memory live indicator — floats in when Wade's background memory

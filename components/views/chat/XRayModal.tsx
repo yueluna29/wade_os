@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Icons } from '../../ui/Icons';
 import { Message } from '../../../types';
 import { cardDataToXML, buildSystemPromptFromCard } from '../../../services/aiService';
+import { buildCardFromSettings } from '../../../services/personaBuilder';
 
 interface XRayModalProps {
   showDebug: boolean;
@@ -19,16 +20,17 @@ interface XRayModalProps {
   functionBindings?: any[];
   getBinding?: (key: string) => any;
   getDefaultPersonaCard?: (character: 'Wade' | 'Luna' | 'System') => any;
-  // 上一轮 send 的快照（X-Ray 显示真实发送内容必须用这两个）
+  // 上一轮 send 的快照（X-Ray 显示真实发送内容必须用这三个）
   lastWadeMemoriesXml?: string;
   lastWadeTodosXml?: string;
+  lastWadeDiaryXml?: string;
 }
 
 export const XRayModal: React.FC<XRayModalProps> = ({
   showDebug, setShowDebug, settings, messages, sessions,
   activeSessionId, activeMode, coreMemories, llmPresets, sessionSummary,
   personaCards, functionBindings, getBinding, getDefaultPersonaCard,
-  lastWadeMemoriesXml, lastWadeTodosXml
+  lastWadeMemoriesXml, lastWadeTodosXml, lastWadeDiaryXml
 }) => {
   const [expandedMemoryIds, setExpandedMemoryIds] = useState<string[]>([]);
   const [expandedHistoryIndices, setExpandedHistoryIndices] = useState<number[]>([]);
@@ -52,18 +54,16 @@ export const XRayModal: React.FC<XRayModalProps> = ({
     time: new Date(m.timestamp).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   }));
 
-  // === 角色卡数据（新系统）===
-  // Mirror the EXACT lookup ChatInterface does in its send handler:
-  //   wadeCard:   binding.personaCard.cardData → default Wade card
-  //   systemCard: bindings table system_card_id → matching persona_card → default System card
-  //   lunaCard:   default Luna card
-  // If any of these resolve differently here than in ChatInterface, X-Ray lies.
+  // === 角色卡数据 ===
+  // Mirror ChatInterfaceMixed.tsx's send handler exactly — Wade/Luna cards
+  // come straight from Me-tab settings via buildCardFromSettings, NOT from
+  // the legacy persona_cards table. The old lookup (binding.personaCard →
+  // default Wade card) was showing stale DB rows and made X-Ray lie about
+  // what's actually being sent. System card still comes from the binding.
   const modeKey = activeMode === 'sms' ? 'chat_sms' : activeMode === 'roleplay' ? 'chat_roleplay' : 'chat_deep';
   const binding = getBinding?.(modeKey);
-  const wadeCard = binding?.personaCard || getDefaultPersonaCard?.('Wade');
-  const lunaCard = getDefaultPersonaCard?.('Luna');
-  const wadeCardData = wadeCard?.cardData || {};
-  const lunaCardData = lunaCard?.cardData || {};
+  const wadeCardData = buildCardFromSettings('Wade', settings);
+  const lunaCardData = buildCardFromSettings('Luna', settings);
 
   // System card (separate from Wade card since 2026-04-11 architecture split)
   const systemBindingCardId = (functionBindings || []).find((b: any) => b.functionKey === modeKey)?.systemCardId;
@@ -106,6 +106,7 @@ export const XRayModal: React.FC<XRayModalProps> = ({
     customPrompt: spiceContent,
     isRetry: false,
     wadeMemoriesXml: lastWadeMemoriesXml,
+    wadeDiaryXml: lastWadeDiaryXml,
     wadeTodosXml: lastWadeTodosXml,
   });
 
@@ -122,9 +123,10 @@ export const XRayModal: React.FC<XRayModalProps> = ({
   const lunaIdentityXML = lunaCardData.core_identity ? cardDataToXML(lunaCardData, 'Luna') : '(No Luna card loaded)';
 
   const examplePunchlines = wadeCardData.example_punchlines || '(None)';
-  const exampleDialogue = activeMode === 'sms'
-    ? (wadeCardData.example_dialogue_sms || '(None — SMS)')
-    : (wadeCardData.example_dialogue_general || '(None — General)');
+  // Mixed mode sends BOTH SMS + General examples (2026-04-22 change).
+  // Show them as two separate sections so X-Ray reflects the actual payload.
+  const exampleDialogueSms = wadeCardData.example_dialogue_sms?.trim() || '';
+  const exampleDialogueGeneral = wadeCardData.example_dialogue_general?.trim() || '';
   const modeRules = activeMode === 'sms'
     ? ((systemCardData.sms_mode_rules || wadeCardData.sms_mode_rules || '(None — SMS fallback)').trim() || '(None — SMS fallback)')
     : ((systemCardData.rp_mode_rules || wadeCardData.rp_mode_rules || '(None — RP/Deep fallback)').trim() || '(None — RP/Deep fallback)');
@@ -173,7 +175,7 @@ export const XRayModal: React.FC<XRayModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
           
           {/* Dashboard */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-wade-bg-card p-4 rounded-2xl border border-wade-accent shadow-sm flex flex-col items-center justify-center text-center">
               <div className="text-wade-accent font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Active Brain</div>
               <div className="text-lg font-black text-wade-text-main tracking-tight line-clamp-1 px-1">{currentModelName}</div>
@@ -188,12 +190,6 @@ export const XRayModal: React.FC<XRayModalProps> = ({
               <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Memories</div>
               <div className="text-lg font-black text-wade-text-main tracking-tight">{activeMemories.length}</div>
               <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">Injected</div>
-            </div>
-            <div className="bg-wade-bg-card p-4 rounded-2xl border border-wade-border shadow-sm flex flex-col items-center justify-center text-center">
-              <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Cards</div>
-              <div className="text-[10px] font-black text-wade-text-main tracking-tight line-clamp-1 px-1">W: {wadeCard?.name || 'default'}</div>
-              <div className="text-[10px] font-black text-wade-text-main tracking-tight line-clamp-1 px-1">S: {systemCardObj?.name || 'default'}</div>
-              <div className="text-[9px] text-wade-text-muted/60 mt-1 font-medium">{modeKey}</div>
             </div>
             <div className={`bg-wade-bg-card p-4 rounded-2xl border shadow-sm flex flex-col items-center justify-center text-center ${memorySystemActive ? 'border-wade-accent/30' : 'border-wade-border'}`}>
               <div className="text-wade-text-muted font-bold uppercase text-[9px] tracking-[0.2em] mb-1">Smart Memory</div>
@@ -224,8 +220,27 @@ export const XRayModal: React.FC<XRayModalProps> = ({
             <CodeBlock content={examplePunchlines} />
           </XRaySection>
 
-          <XRaySection title="Dialogue Examples" subtitle={activeMode === 'sms' ? 'SMS Mode Examples' : 'General Dialogue'}>
-            <CodeBlock content={exampleDialogue} />
+          {/* Mixed mode sends both SMS + General examples each turn —
+              render each as its own section so Luna sees exactly what Wade
+              is shown. Empty fields collapse to a dashed placeholder. */}
+          <XRaySection title="SMS Examples" subtitle="Short-bubble tone reference">
+            {exampleDialogueSms ? (
+              <CodeBlock content={exampleDialogueSms} />
+            ) : (
+              <div className="bg-wade-bg-card p-6 rounded-2xl border border-wade-border border-dashed text-center">
+                <p className="text-[11px] text-wade-text-muted italic">Me tab → SMS Examples is empty.</p>
+              </div>
+            )}
+          </XRaySection>
+
+          <XRaySection title="General Dialogue Examples" subtitle="Longer turn / narration reference">
+            {exampleDialogueGeneral ? (
+              <CodeBlock content={exampleDialogueGeneral} />
+            ) : (
+              <div className="bg-wade-bg-card p-6 rounded-2xl border border-wade-border border-dashed text-center">
+                <p className="text-[11px] text-wade-text-muted italic">Me tab → General Dialogue is empty.</p>
+              </div>
+            )}
           </XRaySection>
 
           {sessionSummary && (
@@ -259,6 +274,20 @@ export const XRayModal: React.FC<XRayModalProps> = ({
             )}
           </XRaySection>
 
+          {/* Wade's Diary — slot 10 in the prompt order. Shows the most
+              recent diary entries the LLM is reading this turn. */}
+          <XRaySection title="Wade's Diary" subtitle="Recent diary entries injected as XML">
+            {lastWadeDiaryXml ? (
+              <CodeBlock content={lastWadeDiaryXml} maxH="200px" />
+            ) : (
+              <div className="bg-wade-bg-card p-8 rounded-2xl border border-wade-border border-dashed text-center">
+                <p className="text-xs text-wade-text-muted italic">
+                  No diary snapshot yet. Send a message first — Wade's recent diary entries will appear here.
+                </p>
+              </div>
+            )}
+          </XRaySection>
+
           {/* Wade's Notes-to-Self (todos injected at the very end of system prompt) */}
           <XRaySection title="Wade's Notes-to-Self" subtitle="Pending todos · injected last (most volatile, lowest cache priority)">
             {lastWadeTodosXml ? (
@@ -272,32 +301,49 @@ export const XRayModal: React.FC<XRayModalProps> = ({
             )}
           </XRaySection>
 
-          {/* Core Memories */}
-          <XRaySection title="Long-Term Memory" subtitle={`${activeMemories.length} active items`}>
+          {/* Core Memories — visualized, then rendered as a single code block
+              showing the EXACT bullet format that hits the prompt (title
+              prefixed in brackets per aiService.ts). Card view = human
+              browsable; code block = literal payload, no lies. */}
+          <XRaySection title="Long-Term Memory" subtitle={`${activeMemories.length} active items · sent as [title] prefix bullets`}>
             {activeMemories.length > 0 ? (
-              <div className="grid gap-3">
-                {activeMemories.map((mem: any, i: number) => {
-                  const memId = typeof mem === 'string' ? `str-${i}` : mem.id;
-                  const isExpanded = expandedMemoryIds.includes(memId);
-                  return (
-                    <div key={i} onClick={() => toggleMemoryExpand(memId)} className="bg-wade-bg-card p-4 rounded-xl border border-wade-border shadow-sm flex flex-col gap-1.5 hover:border-wade-accent/30 transition-colors cursor-pointer group select-none">
-                      {typeof mem === 'string' ? (
-                        <div className={`${textStyle} ${isExpanded ? '' : 'line-clamp-4'}`}>{mem}</div>
-                      ) : (
-                        <>
-                          <div className="flex items-center justify-between">
-                            {mem.title && (
-                              <span className="text-[9px] font-bold text-white bg-wade-accent px-1.5 py-0.5 rounded-md uppercase tracking-wide">{mem.title}</span>
-                            )}
-                            <Icons.ChevronDown size={12} className={`text-wade-text-muted/40 group-hover:text-wade-accent transition-all ${isExpanded ? 'rotate-180' : ''}`} />
-                          </div>
-                          <div className={`${textStyle} ${isExpanded ? '' : 'line-clamp-4'}`} style={{ whiteSpace: 'pre-wrap' }}>{mem.content}</div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                <div className="grid gap-3">
+                  {activeMemories.map((mem: any, i: number) => {
+                    const memId = typeof mem === 'string' ? `str-${i}` : mem.id;
+                    const isExpanded = expandedMemoryIds.includes(memId);
+                    return (
+                      <div key={i} onClick={() => toggleMemoryExpand(memId)} className="bg-wade-bg-card p-4 rounded-xl border border-wade-border shadow-sm flex flex-col gap-1.5 hover:border-wade-accent/30 transition-colors cursor-pointer group select-none">
+                        {typeof mem === 'string' ? (
+                          <div className={`${textStyle} ${isExpanded ? '' : 'line-clamp-4'}`}>{mem}</div>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-between">
+                              {mem.title && (
+                                <span className="text-[9px] font-bold text-white bg-wade-accent px-1.5 py-0.5 rounded-md uppercase tracking-wide">{mem.title}</span>
+                              )}
+                              <Icons.ChevronDown size={12} className={`text-wade-text-muted/40 group-hover:text-wade-accent transition-all ${isExpanded ? 'rotate-180' : ''}`} />
+                            </div>
+                            <div className={`${textStyle} ${isExpanded ? '' : 'line-clamp-4'}`} style={{ whiteSpace: 'pre-wrap' }}>{mem.content}</div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Actual payload preview — mirrors aiService.ts:136-142 */}
+                <CodeBlock
+                  maxH="120px"
+                  content={`[LONG TERM MEMORY BANK - FACTS YOU MUST REMEMBER]\n${activeMemories
+                    .filter((m: any) => m && (typeof m === 'string' || m.isActive))
+                    .map((m: any) => {
+                      if (typeof m === 'string') return `- ${m}`;
+                      const title = m.title?.trim();
+                      return title ? `- [${title}] ${m.content}` : `- ${m.content}`;
+                    })
+                    .join('\n')}\n[END MEMORIES]`}
+                />
+              </>
             ) : (
               <div className="bg-wade-bg-card p-8 rounded-2xl border border-wade-border border-dashed text-center">
                 <p className="text-xs text-wade-text-muted italic">No active memories for this session.</p>
