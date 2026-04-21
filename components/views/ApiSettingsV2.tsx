@@ -14,6 +14,7 @@ const PROVIDERS = [
   { value: 'OpenAI', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o' },
   { value: 'DeepSeek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },
   { value: 'OpenRouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', defaultModel: '' },
+  { value: 'SiliconFlow', label: 'SiliconFlow 硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', defaultModel: 'Qwen/Qwen3.6-35B-A3B' },
   { value: 'Custom', label: 'Custom', baseUrl: '', defaultModel: '' },
 ];
 
@@ -132,6 +133,7 @@ const ProviderIcon: React.FC<{ provider: string; size?: number; className?: stri
     case 'OpenAI': return <Icons.Cube size={size} className={className} />;
     case 'DeepSeek': return <Icons.Search size={size} className={className} />;
     case 'OpenRouter': return <Icons.Globe size={size} className={className} />;
+    case 'SiliconFlow': return <Icons.Brain size={size} className={className} />;
     default: return <Icons.Settings size={size} className={className} />;
   }
 };
