@@ -3,7 +3,7 @@ import { useStore } from '../../store';
 import { Button } from '../ui/Button';
 import { Icons } from '../ui/Icons';
 import { generateTTS, generateChatTitle, generateFromCard, generateImageDescription, summarizeConversation } from '../../services/aiService';
-import { uploadBase64ToImgBB } from '../../services/imgbb';
+import { uploadBase64ToDrive } from '../../services/gdrive';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
 import { ChatThemePanel } from './chat/ChatThemePanel';
@@ -872,24 +872,24 @@ export const ChatInterface: React.FC = () => {
     scrollToBottom();
     if (textareaRef.current) { textareaRef.current.style.height = '48px'; textareaRef.current.focus(); }
 
-    // === Fire-and-forget: upload image attachments to imgbb so they survive reloads ===
+    // === Fire-and-forget: upload image attachments to Google Drive so they survive reloads ===
     // Runs in parallel with triggerAIResponse — does not block Wade's reply.
     // The first vision call still uses the base64 already attached to the message.
     const messageIdForUpload = newMessage.id;
     const imagePatches: Promise<void>[] = [];
     sentAttachments.forEach((att, i) => {
       if (att.type !== 'image') return;
-      const p = uploadBase64ToImgBB(att.content).then(url => {
+      const p = uploadBase64ToDrive(att.content, 'chat_image').then(url => {
         if (!url) return;
         // Write the URL back onto the message so future history assembly + multi-device
         // sync can use the link instead of the (huge) base64 payload.
         return updateMessageAttachments(messageIdForUpload, [{ index: i, patch: { url } }]);
-      }).catch(err => console.error('[handleSend] imgbb upload failed for attachment', i, err));
+      }).catch(err => console.error('[handleSend] drive upload failed for attachment', i, err));
       imagePatches.push(p as Promise<void>);
     });
 
     // === Fire-and-forget: describer LLM generates a text description of each image ===
-    // Runs after imgbb upload finishes so we can prefer the URL over base64 (smaller payload).
+    // Runs after drive upload finishes so we can prefer the URL over base64 (smaller payload).
     const describerLlmId = settings.descriptionLlmId;
     const describerLlm = describerLlmId ? llmPresets.find(p => p.id === describerLlmId && p.isVision && p.apiKey) : null;
     if (describerLlm) {

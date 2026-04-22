@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../../store';
 import { FocusModalEditor } from '../../ui/FocusModalEditor';
-import { uploadToImgBB } from '../../../services/imgbb';
+import { uploadToDrive } from '../../../services/gdrive';
 import { Avatar } from './Avatar';
 import { PhoneOwner } from './mockContacts';
 import { Camera, ChevronRight, Check } from 'lucide-react';
@@ -79,7 +79,7 @@ export const MeTab: React.FC<MeTabProps> = ({ phoneOwner }) => {
     if (!file) return;
     setUploading(true);
     try {
-      const url = await uploadToImgBB(file);
+      const url = await uploadToDrive(file, 'avatar');
       if (url) updateSettings({ [`${prefix}Avatar`]: url });
     } finally {
       setUploading(false);

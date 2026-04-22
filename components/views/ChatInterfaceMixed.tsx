@@ -600,7 +600,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     messages: storeMessages, settings, llmPresets, sessions, activeSessionId, updateSession,
     getBinding, coreMemories, toggleCoreMemoryEnabled, profiles, profilesLoaded, messagesLoaded,
     createSession, updateSessionTitle, toggleSessionPin, deleteSession,
-    ttsPresets, updateMessageAudioCache, updateMessage, deleteMessage, toggleFavorite,
+    ttsPresets, updateMessageAudioCache, updateMessageVoiceDriveId, updateMessage, deleteMessage, toggleFavorite,
     saveVaultGroup,
     addMessage, personaCards, functionBindings, getDefaultPersonaCard, setTab,
   } = useStore();
@@ -1100,12 +1100,26 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
 
       const message = storeMessages.find((m) => m.id === messageId);
       let base64Audio: string | undefined;
+      // Resolution order (skipped entirely on forceRegenerate):
+      //   1) in-memory audioCache on the message (fastest)
+      //   2) IndexedDB ttsCache (survives reloads on same device)
+      //   3) Drive via voice_drive_id (cross-device — another device generated it)
+      //   4) fresh MiniMax TTS + upload to Drive + persist id + local caches
       if (!forceRegenerate && message?.audioCache) {
         base64Audio = message.audioCache;
       } else if (!forceRegenerate) {
         const { ttsCache } = await import('../../services/ttsCache');
         const cached = await ttsCache.get(messageId);
         if (cached) base64Audio = cached;
+      }
+      if (!base64Audio && !forceRegenerate && message?.voiceDriveId) {
+        const { fetchVoiceAudioFromDrive } = await import('../../services/gdrive');
+        const fromDrive = await fetchVoiceAudioFromDrive(message.voiceDriveId);
+        if (fromDrive) {
+          base64Audio = fromDrive;
+          // Populate both local caches so next play is instant.
+          updateMessageAudioCache(messageId, fromDrive);
+        }
       }
       if (!base64Audio) {
         const activeTts = settings.activeTtsId
@@ -1127,7 +1141,17 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           format: activeTts.format || 'mp3',
           channel: activeTts.channel || 1,
         });
-        if (base64Audio) updateMessageAudioCache(messageId, base64Audio);
+        if (base64Audio) {
+          updateMessageAudioCache(messageId, base64Audio);
+          // Fire-and-forget Drive upload so future devices can replay without
+          // regenerating. Failure here is silent — local playback still works.
+          const toUpload = base64Audio;
+          import('../../services/gdrive').then(({ uploadVoiceAudioToDrive }) => {
+            uploadVoiceAudioToDrive(toUpload, `msg-${messageId}.mp3`).then((driveId) => {
+              if (driveId) updateMessageVoiceDriveId(messageId, driveId);
+            }).catch((err) => console.error('[tts] drive upload failed:', err));
+          });
+        }
       }
       if (!base64Audio) throw new Error('Failed to generate audio');
 
@@ -2921,12 +2945,14 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       toSave = `[POV] ${editDraft.replace(/^\s+/, '')}`;
                     }
                     updateMessage(editingMessageId, toSave);
-                    // Voice transcript changed → invalidate the cached audio
-                    // so next play regenerates TTS from the new text instead
-                    // of replaying the old clip. Clear both the in-memory
-                    // audioCache and the IndexedDB entry.
+                    // Voice transcript changed → invalidate every cache so the
+                    // next play regenerates TTS from the new text. Clears the
+                    // in-memory audioCache, the IndexedDB entry, AND the Drive
+                    // file id (old Drive clip becomes orphaned but the DB row
+                    // stops pointing at stale audio).
                     if (wasVoice) {
                       updateMessageAudioCache(editingMessageId, '');
+                      updateMessageVoiceDriveId(editingMessageId, null);
                       import('../../services/ttsCache').then(({ ttsCache }) => {
                         ttsCache.delete(editingMessageId).catch(() => {});
                       });

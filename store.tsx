@@ -86,6 +86,7 @@ function mapMessageRow(row: any, mode: ChatMode): Message {
     replyAnchorId: row.reply_anchor_id || undefined,
     replyGroupId: row.reply_group_id || undefined,
     attachments: parsedAttachments,
+    voiceDriveId: row.voice_drive_id || undefined,
   };
 }
 
@@ -1075,8 +1076,24 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     await ttsCache.set(id, base64Audio);
   };
 
+  // Persist the Drive file id for a message's TTS audio. Separate from
+  // updateMessageAudioCache because the Drive id is a short identifier that
+  // SHOULD live on the DB row (cross-device replay), whereas base64 audio
+  // stays out of Supabase to keep rows lean.
+  const updateMessageVoiceDriveId = async (id: string, voiceDriveId: string | null) => {
+    const msg = messages.find(m => m.id === id);
+    if (!msg) return;
+    setMessages(prev => prev.map(m => m.id === id ? {
+      ...m,
+      voiceDriveId: voiceDriveId || undefined,
+    } : m));
+    if (msg.sessionId && msg.mode !== 'archive') {
+      safeDbUpdate(getTableName(msg.mode), id, { voice_drive_id: voiceDriveId });
+    }
+  };
+
   // Patches the attachments[] array on a message. Used to:
-  //   1) write back the imgbb url after async upload
+  //   1) write back the Drive proxy url after async upload
   //   2) write back the description after the describer model finishes
   // Accepts a per-index partial patch so callers don't have to reconstruct the whole array.
   // Uses functional setState so it's safe to call from async callbacks after other state has moved on.
@@ -1678,6 +1695,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       ttsPresets, addTtsPreset, updateTtsPreset, deleteTtsPreset,
       sessions, createSession, updateSession, updateSessionTitle, deleteSession, toggleSessionPin, activeSessionId, setActiveSessionId,
       messages, addMessage, updateMessage, deleteMessage, toggleFavorite, updateMessageAudioCache,
+      updateMessageVoiceDriveId,
       vaultGroups, saveVaultGroup, deleteVaultGroup,
       updateMessageAttachments,
       addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,

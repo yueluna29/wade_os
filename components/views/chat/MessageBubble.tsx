@@ -245,7 +245,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           />
         )}
         {imageAttachments.map((att, i) => {
-          // Prefer the imgbb URL once the async upload has landed — multi-device
+          // Prefer the Drive proxy URL once the async upload has landed — multi-device
           // access + avoids holding a 1MB base64 string in the DOM. Fall back to
           // the inline base64 while the upload is still pending.
           const src = att.url || (att.content ? `data:${att.mimeType};base64,${att.content}` : '');

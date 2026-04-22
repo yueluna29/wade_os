@@ -496,7 +496,7 @@ export const generateChatTitle = async (firstMessage: string, apiKeyOrPreset?: s
  * chat history in place of the actual image — so old messages can travel as
  * text, saving tokens and letting non-vision models still "see" the image.
  *
- * Accepts either a https URL (imgbb) or raw base64. Prefers URL when both are
+ * Accepts either a https URL (Drive proxy) or raw base64. Prefers URL when both are
  * provided — it's cheaper for the describer call itself.
  *
  * The context hint is optional but helpful: feeding the describer the text

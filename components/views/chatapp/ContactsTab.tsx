@@ -3,7 +3,7 @@ import { Plus, Search, Star, Target, Coffee, Sparkles, Camera, ChevronLeft } fro
 import { PhoneContact, PhoneOwner, ContactVibe, getContactsForPhone, saveCustomContact, upsertCustomContact } from './mockContacts';
 import { Avatar } from './Avatar';
 import { ContactCard } from './ContactCard';
-import { uploadToImgBB } from '../../../services/imgbb';
+import { uploadToDrive } from '../../../services/gdrive';
 import { useStore } from '../../../store';
 
 interface ContactsTabProps {
@@ -226,7 +226,7 @@ export const AddContactSheet: React.FC<{
     if (!file) return;
     setUploading(true);
     try {
-      const url = await uploadToImgBB(file);
+      const url = await uploadToDrive(file, 'avatar');
       if (url) setAvatarUrl(url);
     } finally {
       setUploading(false);

@@ -1,7 +1,7 @@
 import { supabase } from '../../services/supabase';
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store';
-import { uploadToImgBB } from '../../services/imgbb';
+import { uploadToDrive } from '../../services/gdrive';
 import { Icons } from '../ui/Icons';
 import { FocusModalEditor } from '../ui/FocusModalEditor';
 import { WadePersonaTab } from './persona/WadePersonaTab';
@@ -132,8 +132,8 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
     if (!file) return;
 
     try {
-      const imageUrl = await uploadToImgBB(file);
-      if (!imageUrl) throw new Error("ImgBB rejected our beautiful faces.");
+      const imageUrl = await uploadToDrive(file, 'avatar');
+      if (!imageUrl) throw new Error("Drive rejected our beautiful faces.");
 
       if (target === 'wade') {
         updateSettings({ wadeAvatar: imageUrl });
@@ -141,7 +141,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
         updateSettings({ lunaAvatar: imageUrl });
       }
 
-      const dbPayload = target === 'wade' 
+      const dbPayload = target === 'wade'
         ? { id: 1, wade_avatar_url: imageUrl }
         : { id: 1, luna_avatar_url: imageUrl };
 
@@ -151,7 +151,7 @@ export const PersonaTuning: React.FC<{ onBack?: () => void }> = ({ onBack }) => 
 
       if (error) {
          console.error("Damn it, Supabase refused to save the avatar:", error);
-         alert("ImgBB got it, but Supabase dropped the ball.");
+         alert("Drive got it, but Supabase dropped the ball.");
       } else {
          console.log(`Successfully slammed ${target}'s face into the database!`);
       }

@@ -54,8 +54,8 @@ const defaults: ChatStyleConfig = {
 };
 
 // Local-only cache of recently-used background image URLs. Keeps Luna from
-// re-uploading the same picture to ImgBB every time she toggles between
-// backgrounds — the chat bg URL table would otherwise fill up with dupes.
+// re-uploading the same picture every time she toggles between backgrounds —
+// the chat bg URL table would otherwise fill up with dupes.
 // Capped at 6 slots (3×2 grid), newest first, deduped.
 const BG_CACHE_KEY = 'wade_chat_bg_cache';
 const BG_CACHE_MAX = 8;
@@ -455,8 +455,8 @@ export const ChatThemePanel: React.FC<ChatThemePanelProps> = ({ isOpen, onClose,
                         const file = e.target.files?.[0];
                         if (!file) return;
                         try {
-                          const { uploadToImgBB } = await import('../../../services/imgbb');
-                          const url = await uploadToImgBB(file);
+                          const { uploadToDrive } = await import('../../../services/gdrive');
+                          const url = await uploadToDrive(file, 'chat_image');
                           if (url) {
                             update('chatBgImage', url);
                             pushToBgCache(url);

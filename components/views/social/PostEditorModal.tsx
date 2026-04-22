@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '../../../store';
 import { Icons } from '../../ui/Icons';
-import { uploadToImgBB } from '../../../services/imgbb';
+import { uploadToDrive } from '../../../services/gdrive';
 import { GoogleGenAI } from "@google/genai";
 
 export const PostEditorModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
@@ -167,7 +167,7 @@ export const PostEditorModal = ({ isOpen, onClose }: { isOpen: boolean, onClose:
           if (url.startsWith('blob:')) {
             const fileIndex = previewUrls.indexOf(url);
             if (fileIndex < selectedFiles.length) {
-              const uploadedUrl = await uploadToImgBB(selectedFiles[fileIndex]);
+              const uploadedUrl = await uploadToDrive(selectedFiles[fileIndex], 'social');
               if (uploadedUrl) uploadedUrls.push(uploadedUrl);
             }
           } else { uploadedUrls.push(url); }

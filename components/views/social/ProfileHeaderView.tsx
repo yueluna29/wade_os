@@ -229,8 +229,8 @@ export const ProfileHeaderView: React.FC<ProfileHeaderViewProps> = ({
                 const file = e.target.files?.[0];
                 if (!file) return;
                 try {
-                  const { uploadToImgBB } = await import('../../../services/imgbb');
-                  const url = await uploadToImgBB(file);
+                  const { uploadToDrive } = await import('../../../services/gdrive');
+                  const url = await uploadToDrive(file, 'social');
                   if (url && onUpdateCover) onUpdateCover(url);
                 } catch (err) {
                   console.error('Cover upload failed:', err);
