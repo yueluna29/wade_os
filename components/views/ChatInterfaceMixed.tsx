@@ -601,6 +601,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     getBinding, coreMemories, toggleCoreMemoryEnabled, profiles, profilesLoaded, messagesLoaded,
     createSession, updateSessionTitle, toggleSessionPin, deleteSession,
     ttsPresets, updateMessageAudioCache, updateMessageVoiceDriveId, updateMessage, deleteMessage, toggleFavorite,
+    updateMessageAttachments,
     saveVaultGroup,
     addMessage, personaCards, functionBindings, getDefaultPersonaCard, setTab,
   } = useStore();
@@ -1837,8 +1838,9 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     if (povMode) setPovMode(false);
 
     const sentAttachments = attachments.slice();
+    const newMessageId = Date.now().toString();
     addMessage({
-      id: Date.now().toString(),
+      id: newMessageId,
       sessionId: targetSessionId,
       role: senderRole,
       text: outgoingText,
@@ -1850,8 +1852,23 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         mimeType: a.mimeType,
         name: a.name,
       })),
-      image: sentAttachments.find((a) => a.type === 'image')?.content.split(',')[1],
     } as any);
+
+    // Fire-and-forget: upload each attachment to Drive so it survives reloads
+    // and Wade's vision model gets a proper URL instead of a giant base64
+    // payload. Patches attachments[i].url when the upload lands; the UI
+    // already prefers .url over the inline data: fallback, so the bubble
+    // seamlessly upgrades from local preview → cloud URL.
+    sentAttachments.forEach((att, i) => {
+      if (att.type !== 'image' && att.type !== 'file') return;
+      const category: 'chat_image' | 'chat_file' =
+        att.type === 'image' ? 'chat_image' : 'chat_file';
+      import('../../services/gdrive').then(({ uploadBase64ToDrive }) => {
+        uploadBase64ToDrive(att.content, category, att.name).then((url) => {
+          if (url) updateMessageAttachments(newMessageId, [{ index: i, patch: { url } }]);
+        }).catch((err) => console.error('[handleSend] drive upload failed for attachment', i, err));
+      });
+    });
     setInputText('');
     setAttachments([]);
     // Keep the textarea focused so the mobile keyboard doesn't collapse
