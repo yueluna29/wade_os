@@ -1059,15 +1059,14 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     setRegenHidden(null);
   }, [wadeStatus, regenHidden]);
 
-  // When Wade flips to typing, scroll the Footer's `...` indicator into view.
-  // It lives below the last data item so scrollToIndex('LAST') alone leaves
-  // it half-hidden — messagesEndRef.scrollIntoView reaches past the last
-  // bubble into the footer.
+  // When Wade flips to typing, nudge the bottom marker into view *instantly*
+  // so the `...` indicator doesn't kick off a smooth scroll that fights with
+  // Virtuoso's own followOutput. `behavior: 'auto'` = snap, no animation.
   useEffect(() => {
     if (wadeStatus !== 'typing') return;
     isAtBottomRef.current = true;
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
     });
   }, [wadeStatus]);
 
@@ -1844,7 +1843,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     // bubbles keep following too.
     isAtBottomRef.current = true;
     requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
     });
 
     if (isFirstMessage) {
@@ -2105,7 +2104,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
               }}
               onRegenerate={showTime ? () => { regenerateLastReply(); setSelectedMsgId(null); } : undefined}
               onEdit={() => {
-                setEditDraft(msg.text || '');
+                // Voice bubbles render with msg.text === '' — the transcript
+                // lives on msg.voice.transcript after buildDisplayFromStore
+                // strips the [VOICE] prefix. Prefill the draft from whichever
+                // field actually holds the editable content so the textarea
+                // isn't empty on voice messages.
+                setEditDraft(msg.voice?.transcript || msg.text || '');
                 setEditingMessageId(String(msg.id));
                 setSelectedMsgId(null);
               }}
@@ -2461,7 +2465,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           style={{ height: '100%' }}
           data={renderMessages}
           initialTopMostItemIndex={Math.max(0, renderMessages.length - 1)}
-          followOutput={(isAtBottom) => (isAtBottom ? 'smooth' : false)}
+          followOutput={(isAtBottom) => (isAtBottom ? 'auto' : false)}
           atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
           computeItemKey={(index, msg) => String(msg?.id ?? index)}
           components={{
@@ -2906,16 +2910,27 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                     // asterisks / prefix), and we re-wrap on save.
                     const original = storeMessages.find((m) => m.id === editingMessageId);
                     const raw = (original?.text || '').trim();
+                    const wasVoice = /^\[VOICE\]/i.test(raw);
                     let toSave = editDraft;
                     if (/^\*[\s\S]+\*$/.test(raw)) {
                       const inner = editDraft.replace(/^\s*\*+|\*+\s*$/g, '').trim();
                       toSave = inner ? `*${inner}*` : editDraft;
-                    } else if (/^\[VOICE\]/i.test(raw) && !/^\[VOICE\]/i.test(editDraft)) {
+                    } else if (wasVoice && !/^\[VOICE\]/i.test(editDraft)) {
                       toSave = `[VOICE] ${editDraft.replace(/^\s+/, '')}`;
                     } else if (/^\[POV\]/i.test(raw) && !/^\[POV\]/i.test(editDraft)) {
                       toSave = `[POV] ${editDraft.replace(/^\s+/, '')}`;
                     }
                     updateMessage(editingMessageId, toSave);
+                    // Voice transcript changed → invalidate the cached audio
+                    // so next play regenerates TTS from the new text instead
+                    // of replaying the old clip. Clear both the in-memory
+                    // audioCache and the IndexedDB entry.
+                    if (wasVoice) {
+                      updateMessageAudioCache(editingMessageId, '');
+                      import('../../services/ttsCache').then(({ ttsCache }) => {
+                        ttsCache.delete(editingMessageId).catch(() => {});
+                      });
+                    }
                   }
                   setEditingMessageId(null);
                 }}
