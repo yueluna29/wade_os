@@ -1964,8 +1964,10 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     setWadeStatus('typing');
     try {
       const baseUrl = (imageGenLlm.baseUrl || '').replace(/\/$/, '');
-      // modalities hint — providers like OpenRouter that route to image-gen
-      // backends need the explicit declaration; text-only providers ignore it.
+      // Matches the shape the existing social-post image-gen uses — plain
+      // chat/completions, no modalities field (OpenRouter's router rejects
+      // it on image models with 404 'no endpoints support output modalities').
+      // The model itself knows to return an image because of its ID.
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -1974,7 +1976,6 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         },
         body: JSON.stringify({
           model: imageGenLlm.model,
-          modalities: ['image', 'text'],
           messages: [
             {
               role: 'user',
