@@ -150,7 +150,7 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
     personaCards, addPersonaCard, updatePersonaCard, deletePersonaCard,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'llm' | 'tts' | 'system' | 'control'>('control');
+  const [activeTab, setActiveTab] = useState<'llm' | 'tts' | 'system' | 'control' | 'image'>('control');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -225,13 +225,18 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
     if (!formData.name || !formData.apiKey) return alert('Missing required fields, Muffin.');
     const cleanBaseUrl = formData.baseUrl.replace(/\/$/, '');
 
-    if (activeTab === 'llm') {
+    if (activeTab === 'llm' || activeTab === 'image') {
       const payload = {
         provider: formData.provider, name: formData.name, model: formData.model,
         apiKey: formData.apiKey, baseUrl: cleanBaseUrl, apiPath: '',
         temperature: formData.temperature, topP: formData.topP, topK: formData.topK,
         frequencyPenalty: formData.frequencyPenalty, presencePenalty: formData.presencePenalty,
-        isVision: formData.isVision, isImageGen: formData.isImageGen,
+        // Image tab forces isImageGen on so models added from that bucket
+        // actually belong there — saves Luna from having to remember the
+        // checkbox. Vision also defaults on since image-gen models almost
+        // always accept vision input too.
+        isVision: activeTab === 'image' ? true : formData.isVision,
+        isImageGen: activeTab === 'image' ? true : formData.isImageGen,
       };
       if (editingId) await updateLlmPreset(editingId, payload);
       else await addLlmPreset(payload as any);
@@ -418,6 +423,7 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
         <div className="p-1 rounded-full flex shadow-sm border border-wade-border bg-wade-bg-card mx-auto">
           {([
             { id: 'llm',     label: 'Text',   icon: <Icons.Brain size={13} /> },
+            { id: 'image',   label: 'Image',  icon: <Icons.Image size={13} /> },
             { id: 'tts',     label: 'Voice',  icon: <Icons.Voice size={13} /> },
             { id: 'system',  label: 'System', icon: <Icons.Journal size={13} /> },
             { id: 'control', label: 'Pipes',  icon: <Icons.Settings size={13} /> },
@@ -627,16 +633,36 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
           </div>
         )}
 
-        {/* ========== LLM / TTS LIST ========== */}
-        {(activeTab === 'llm' || activeTab === 'tts') && (
+        {/* ========== LLM / TTS / IMAGE LIST ==========
+            Image tab is a filtered view of llmPresets (isImageGen=true) —
+            same DB, same editor, just a separate bucket in the UI so the
+            Text tab isn't crowded with draw-only models. Text tab in turn
+            hides isImageGen entries so a preset shows in exactly one place. */}
+        {(activeTab === 'llm' || activeTab === 'tts' || activeTab === 'image') && (() => {
+          const visibleList = activeTab === 'tts'
+            ? ttsPresets
+            : activeTab === 'image'
+              ? llmPresets.filter((p: any) => p.isImageGen)
+              : llmPresets.filter((p: any) => !p.isImageGen);
+          const bucketLabel = activeTab === 'llm' ? 'Text Models' : activeTab === 'image' ? 'Image Models' : 'Voice Models';
+          const emptyNoun = activeTab === 'llm' ? 'brains' : activeTab === 'image' ? 'painters' : 'voices';
+          return (
           <div className="rounded-2xl border border-wade-border bg-wade-bg-card overflow-hidden shadow-sm animate-fade-in">
             <div className="px-4 py-3 flex items-center justify-between border-b border-wade-border/50">
               <span className="text-[10px] uppercase tracking-wider font-bold text-wade-text-muted">
-                {activeTab === 'llm' ? 'Text Models' : 'Voice Models'}
+                {bucketLabel}
               </span>
               {!isFormOpen && (
                 <button
-                  onClick={() => setIsFormOpen(true)}
+                  onClick={() => {
+                    // Opening the form from the Image tab should default
+                    // the new preset to isImageGen=true so the user doesn't
+                    // have to find and flip the checkbox manually.
+                    if (activeTab === 'image') {
+                      setFormData((prev) => ({ ...prev, isImageGen: true, isVision: true }));
+                    }
+                    setIsFormOpen(true);
+                  }}
                   className="text-[10px] font-bold flex items-center gap-1 hover:opacity-70 transition-opacity text-wade-accent"
                 >
                   <Icons.PlusThin size={12} /> Add New
@@ -646,14 +672,15 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
 
             <div className="p-2">
               <div className="space-y-1">
-                {(activeTab === 'llm' ? llmPresets : ttsPresets).length === 0 ? (
-                  <p className="text-center text-[11px] py-8 italic text-wade-text-muted">No {activeTab === 'llm' ? 'brains' : 'voices'} connected yet.</p>
-                ) : (activeTab === 'llm' ? llmPresets : ttsPresets).map((preset: any) => {
-                  const isActive = activeTab === 'llm' ? settings.activeLlmId === preset.id : settings.activeTtsId === preset.id;
+                {visibleList.length === 0 ? (
+                  <p className="text-center text-[11px] py-8 italic text-wade-text-muted">No {emptyNoun} connected yet.</p>
+                ) : visibleList.map((preset: any) => {
+                  const isLlmLike = activeTab !== 'tts';
+                  const isActive = isLlmLike ? settings.activeLlmId === preset.id : settings.activeTtsId === preset.id;
                   return (
                     <div
                       key={preset.id}
-                      onClick={() => activeTab === 'llm' ? activateLlm(preset.id) : activateTts(preset.id)}
+                      onClick={() => isLlmLike ? activateLlm(preset.id) : activateTts(preset.id)}
                       className="px-3 py-3 rounded-xl cursor-pointer transition-all flex justify-between items-center group border"
                       style={{
                         backgroundColor: isActive ? 'rgba(var(--wade-accent-rgb), 0.08)' : 'transparent',
@@ -665,7 +692,7 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                           className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'text-wade-accent' : 'bg-wade-bg-app text-wade-text-muted'}`}
                           style={isActive ? { backgroundColor: 'rgba(var(--wade-accent-rgb), 0.15)' } : undefined}
                         >
-                          {activeTab === 'llm' ? <ProviderIcon provider={preset.provider || 'Custom'} size={16} /> : <Icons.Voice size={16} />}
+                          {isLlmLike ? <ProviderIcon provider={preset.provider || 'Custom'} size={16} /> : <Icons.Voice size={16} />}
                         </div>
                         <div className="min-w-0">
                           <div className="font-bold text-xs truncate flex items-center gap-1.5 text-wade-text-main">
@@ -680,19 +707,19 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                             )}
                           </div>
                           <div className="text-[10px] truncate text-wade-text-muted">
-                            {activeTab === 'llm' ? (preset.model || 'Auto') : `${preset.model || 'Standard'} • x${preset.speed || 1.0}`}
+                            {isLlmLike ? (preset.model || 'Auto') : `${preset.model || 'Standard'} • x${preset.speed || 1.0}`}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleTest(preset, activeTab as 'llm' | 'tts'); }}
+                          onClick={(e) => { e.stopPropagation(); handleTest(preset, (isLlmLike ? 'llm' : 'tts') as 'llm' | 'tts'); }}
                           className="p-1.5 rounded-lg text-wade-text-muted hover:bg-black/5 transition-colors"
                           title="Test connection (ping)"
                         >
                           {testingId === preset.id ? <Icons.Loading /> : <Icons.Test size={14} />}
                         </button>
-                        {activeTab === 'llm' && !/embedding|embed/i.test(preset.model || '') && (
+                        {isLlmLike && !/embedding|embed/i.test(preset.model || '') && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleTestVision(preset); }}
                             className="p-1.5 rounded-lg text-wade-text-muted hover:bg-black/5 transition-colors"
@@ -702,13 +729,13 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                           </button>
                         )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleEdit(activeTab as 'llm' | 'tts', preset); }}
+                          onClick={(e) => { e.stopPropagation(); handleEdit((isLlmLike ? 'llm' : 'tts') as 'llm' | 'tts', preset); }}
                           className="p-1.5 rounded-lg text-wade-text-muted hover:bg-black/5 transition-colors"
                         >
                           <Icons.Edit size={14} />
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(preset.id, activeTab as 'llm' | 'tts'); }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteClick(preset.id, (isLlmLike ? 'llm' : 'tts') as 'llm' | 'tts'); }}
                           className={`p-1.5 rounded-lg transition-colors ${deleteConfirmId === preset.id ? 'text-red-500' : 'text-wade-text-muted'}`}
                         >
                           {deleteConfirmId === preset.id ? <Icons.Check size={14} /> : <Icons.Trash size={14} />}
@@ -720,10 +747,11 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
-        {/* ========== LLM / TTS ADD/EDIT FORM MODAL ========== */}
-        {isFormOpen && (activeTab === 'llm' || activeTab === 'tts') && (
+        {/* ========== LLM / TTS / IMAGE ADD/EDIT FORM MODAL ========== */}
+        {isFormOpen && (activeTab === 'llm' || activeTab === 'tts' || activeTab === 'image') && (
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in"
             style={{ backgroundColor: 'rgba(var(--wade-text-main-rgb, 90 74 66), 0.4)', backdropFilter: 'blur(4px)' }}
