@@ -192,7 +192,7 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
     }
   };
 
-  const handleEdit = (type: 'llm' | 'tts', item: any) => {
+  const handleEdit = (type: 'llm' | 'tts' | 'image', item: any) => {
     setFormData({
       provider: item.provider || 'Custom',
       name: item.name,
@@ -217,7 +217,10 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
       channel: item.channel || 1,
     });
     setEditingId(item.id);
-    setActiveTab(type);
+    // Only switch tabs when the caller passes a different one on purpose.
+    // Editing inside the Image/Text tab should stay put — otherwise the
+    // list you were looking at gets yanked out from under you.
+    if (activeTab !== type) setActiveTab(type);
     setIsFormOpen(true);
   };
 
@@ -729,7 +732,7 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                           </button>
                         )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleEdit((isLlmLike ? 'llm' : 'tts') as 'llm' | 'tts', preset); }}
+                          onClick={(e) => { e.stopPropagation(); handleEdit(activeTab === 'image' ? 'image' : (isLlmLike ? 'llm' : 'tts'), preset); }}
                           className="p-1.5 rounded-lg text-wade-text-muted hover:bg-black/5 transition-colors"
                         >
                           <Icons.Edit size={14} />
