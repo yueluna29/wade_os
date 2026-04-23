@@ -717,6 +717,21 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // "WadeOS System" slot) or explicit `showcase` contact id. Everything else
   // goes through the real-data path; an empty real thread shows blank, not mock.
   const isShowcase = contact.id === 'showcase' || contact.id === 'system';
+  // Hide POV narration bubbles — Luna's toggle from Control Center. Declared
+  // here (early) because renderMessages reads it as a dependency; the toggle
+  // itself lives in a tile further down so the value persists across
+  // re-renders without a prop threading hop.
+  const [hidePovNarration, setHidePovNarration] = useState<boolean>(() => {
+    try { return localStorage.getItem('wadeOS_hidePovNarration') === '1'; }
+    catch { return false; }
+  });
+  const toggleHidePovNarration = () => {
+    setHidePovNarration((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('wadeOS_hidePovNarration', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
   const renderMessages: Message[] = useMemo(() => {
     if (isShowcase) return MOCK_MESSAGES;
     if (!resolvedSessionId) return [];
@@ -796,8 +811,16 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       }
       filtered.push(toPush);
     }
+    // Luna's "Hide POV" toggle — drop narration bubbles from the rendered
+    // list (they still live in storeMessages + DB, just hidden from the
+    // current view). Hidden rows also shouldn't anchor time dividers in
+    // the WeChat-style grouping, which is fine because buildDisplayFromStore
+    // already classified narrators as type='narration'.
+    if (hidePovNarration) {
+      return filtered.filter((m) => m.type !== 'narration');
+    }
     return filtered;
-  }, [isShowcase, storeMessages, resolvedSessionId, keepaliveLogs, activeGroupByAnchor, regenHidden]);
+  }, [isShowcase, storeMessages, resolvedSessionId, keepaliveLogs, activeGroupByAnchor, regenHidden, hidePovNarration]);
 
   // Clear the regen-hide once a fresh reply group actually shows up, OR when
   // the user navigates away mid-stream. Without this, a failed regen would
@@ -1049,24 +1072,6 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // pattern as POV so the UX feels consistent.
   const [paintMode, setPaintMode] = useState(false);
   const [isPainting, setIsPainting] = useState(false);
-  // POV button visibility — Luna's personal preference, persisted locally.
-  // When POV mode is off AND the button is hidden, there's no way to flip
-  // POV on from the input bar, so the Control Center menu carries the
-  // toggle (Find/Tune/Hood tile) to bring the button back when needed.
-  const [hidePovButton, setHidePovButton] = useState<boolean>(() => {
-    try { return localStorage.getItem('wadeOS_hidePovButton') === '1'; }
-    catch { return false; }
-  });
-  const toggleHidePovButton = () => {
-    setHidePovButton((prev) => {
-      const next = !prev;
-      try { localStorage.setItem('wadeOS_hidePovButton', next ? '1' : '0'); } catch {}
-      // If we're hiding while POV mode is active, turn POV mode off so Luna
-      // doesn't get stuck with the italic placeholder and no way to cancel.
-      if (next) setPovMode(false);
-      return next;
-    });
-  };
   const [showSearch, setShowSearch] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2677,9 +2682,13 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               { icon: <Icons.Branch size={18} />, label: 'Fresh Start', action: freshStart },
               {
                 icon: <Drama size={18} />,
-                label: hidePovButton ? 'Show POV' : 'Hide POV',
-                sublabel: hidePovButton ? 'Hidden' : 'Visible',
-                action: () => { toggleHidePovButton(); closeMenu(); },
+                // Toggles whether POV narration bubbles render in the chat
+                // — the *action*/[POV] wrapped segments, not the input
+                // button. Useful when Luna wants to read the convo as
+                // dialogue only without the narrator voice.
+                label: hidePovNarration ? 'Show POV' : 'Hide POV',
+                sublabel: hidePovNarration ? 'Hidden' : 'Visible',
+                action: () => { toggleHidePovNarration(); closeMenu(); },
               },
             ],
           },
@@ -2976,6 +2985,20 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                       {[
                         { icon: <Icons.Image />, label: 'Photo', action: () => { imageInputRef.current?.click(); setShowUploadMenu(false); } },
                         { icon: <Icons.File />, label: 'File', action: () => { fileInputRef.current?.click(); setShowUploadMenu(false); } },
+                        {
+                          icon: <Paintbrush size={16} strokeWidth={1.75} />,
+                          // Enter paint mode: next send routes to Image Gen
+                          // instead of the chat model. Closing the upload
+                          // menu + focusing the input so Luna types straight
+                          // into paint mode without a second tap.
+                          label: paintMode ? 'Paint ✓' : 'Paint',
+                          action: () => {
+                            setPaintMode((v) => !v);
+                            setPovMode(false);
+                            setShowUploadMenu(false);
+                            setTimeout(() => textareaRef.current?.focus(), 50);
+                          },
+                        },
                       ].map((t, i) => (
                         <button
                           key={i}
@@ -3001,48 +3024,23 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                   would be cleaner on desktop but it silently blocks the
                   synthetic click on iOS Safari, which is what broke the
                   toggle on Luna's phone. */}
-              {!hidePovButton && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPovMode((v) => !v);
-                    if (!povMode) setPaintMode(false);
-                    textareaRef.current?.focus();
-                  }}
-                  aria-pressed={povMode}
-                  aria-label={povMode ? 'Cancel POV mode' : 'Send next message as POV narration'}
-                  title={povMode ? 'Next send: POV (click to cancel)' : 'Send as POV narration'}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border transition-colors shadow-sm ${
-                    povMode
-                      ? 'bg-wade-accent text-white border-wade-accent'
-                      : 'bg-wade-bg-card border-wade-border text-wade-text-muted hover:bg-wade-accent hover:text-white'
-                  }`}
-                >
-                  <Drama className="w-4 h-4" strokeWidth={1.75} />
-                </button>
-              )}
-
-              {/* Paint mode — flip this on, type what you want Wade to draw,
-                  hit send. The text routes to the image_gen bound model
-                  (ApiSettings → FunctionBindings → Image Gen), the result
-                  becomes Wade's next bubble. Auto-exits after one send. */}
               <button
                 type="button"
                 onClick={() => {
-                  setPaintMode((v) => !v);
-                  if (!paintMode) setPovMode(false);
+                  setPovMode((v) => !v);
+                  if (!povMode) setPaintMode(false);
                   textareaRef.current?.focus();
                 }}
-                aria-pressed={paintMode}
-                aria-label={paintMode ? 'Cancel paint mode' : 'Send next message as a paint prompt'}
-                title={paintMode ? 'Next send: paint (click to cancel)' : 'Ask Wade to paint'}
+                aria-pressed={povMode}
+                aria-label={povMode ? 'Cancel POV mode' : 'Send next message as POV narration'}
+                title={povMode ? 'Next send: POV (click to cancel)' : 'Send as POV narration'}
                 className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border transition-colors shadow-sm ${
-                  paintMode
+                  povMode
                     ? 'bg-wade-accent text-white border-wade-accent'
                     : 'bg-wade-bg-card border-wade-border text-wade-text-muted hover:bg-wade-accent hover:text-white'
                 }`}
               >
-                <Paintbrush className="w-4 h-4" strokeWidth={1.75} />
+                <Drama className="w-4 h-4" strokeWidth={1.75} />
               </button>
 
               {/* Text Input */}
