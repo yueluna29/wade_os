@@ -492,13 +492,16 @@ function buildDisplayFromStore(
     prevWasKeepalive = isKeepalive;
     prevKeepaliveId = isKeepalive ? kid : null;
 
-    // First image: prefer explicit image field, fall back to first image attachment
-    const firstImage =
-      m.image ||
-      m.attachments?.find((a) => a.type === 'image')?.url ||
-      (m.attachments?.find((a) => a.type === 'image')?.content
-        ? `data:${m.attachments.find((a) => a.type === 'image')!.mimeType};base64,${m.attachments.find((a) => a.type === 'image')!.content}`
-        : undefined);
+    // First image: prefer inline base64 when we have it (always reliable —
+    // lives in memory, no network hop, no CORS weirdness), fall back to the
+    // Drive proxy URL for rows where content was stripped or never synced
+    // from this device. Legacy `m.image` (raw base64 top-level) gets a data:
+    // wrapper in case old rows still carry it.
+    const imgAtt = m.attachments?.find((a) => a.type === 'image');
+    const firstImage = imgAtt?.content
+      ? `data:${imgAtt.mimeType};base64,${imgAtt.content}`
+      : imgAtt?.url
+        || (m.image ? `data:image/png;base64,${m.image}` : undefined);
 
     // Attach the Digest (mood + actions) to the FIRST message of each wake batch.
     let summary: KeepaliveLog | undefined;
