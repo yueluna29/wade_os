@@ -111,6 +111,40 @@ export const uploadVoiceAudioToDrive = async (
 };
 
 /**
+ * Take whatever an image-gen API handed us (a data: URL or a regular HTTPS
+ * URL pointing at the provider's short-lived CDN) and re-host it on our
+ * Drive so the post it ends up in doesn't break when the provider URL
+ * expires. Returns the Drive proxy URL, or null when the fetch/upload
+ * fails — callers should fall back to the original URL in that case.
+ */
+export const uploadUrlToDrive = async (
+  url: string,
+  category: DriveCategory,
+  filename: string,
+): Promise<string | null> => {
+  try {
+    // data: URL shortcut — skip the fetch and strip/peel the base64 directly
+    // so we don't round-trip through a blob.
+    if (url.startsWith('data:')) {
+      return await uploadBase64ToDrive(url, category, filename);
+    }
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error('[gdrive] uploadUrlToDrive fetch failed:', res.status, url);
+      return null;
+    }
+    const mime = res.headers.get('Content-Type') || 'image/png';
+    const buf = await res.arrayBuffer();
+    const blob = new Blob([buf], { type: mime });
+    const result = await postUpload(blob, filename, category);
+    return result ? driveUrlFromId(result.id) : null;
+  } catch (e) {
+    console.error('[gdrive] uploadUrlToDrive error:', e);
+    return null;
+  }
+};
+
+/**
  * Fetch a voice mp3 from Drive and return it as base64 (no data: prefix),
  * matching the format MiniMax returns and ttsCache stores. Used when local
  * caches miss but the message has a voice_drive_id from another device.

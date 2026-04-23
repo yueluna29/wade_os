@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '../../../store';
 import { Icons } from '../../ui/Icons';
-import { uploadToDrive } from '../../../services/gdrive';
+import { uploadToDrive, uploadUrlToDrive } from '../../../services/gdrive';
 import { GoogleGenAI } from "@google/genai";
 
 export const PostEditorModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
@@ -162,18 +162,41 @@ export const PostEditorModal = ({ isOpen, onClose }: { isOpen: boolean, onClose:
     setIsUploading(true);
     try {
       let uploadedUrls: string[] = [];
+      // Shared filename stamp so every upload from this post lands with a
+      // timestamp matching the post itself — easier to browse in Drive.
+      const stamp = (() => {
+        const d = new Date();
+        const p = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+      })();
       if (tab === 'Luna') {
-        for (const url of previewUrls) {
+        for (let idx = 0; idx < previewUrls.length; idx++) {
+          const url = previewUrls[idx];
           if (url.startsWith('blob:')) {
             const fileIndex = previewUrls.indexOf(url);
             if (fileIndex < selectedFiles.length) {
-              const uploadedUrl = await uploadToDrive(selectedFiles[fileIndex], 'social');
+              const file = selectedFiles[fileIndex];
+              const ext = (file.name.split('.').pop() || file.type.split('/')[1] || 'jpg').toLowerCase();
+              // Rename File before upload so Drive stores it pretty.
+              const prettyFile = new File([file], `luna-social-${stamp}-${idx}.${ext}`, { type: file.type });
+              const uploadedUrl = await uploadToDrive(prettyFile, 'social');
               if (uploadedUrl) uploadedUrls.push(uploadedUrl);
             }
           } else { uploadedUrls.push(url); }
         }
       }
-      if (tab === 'Wade' && wadeGeneratedImageUrl) { uploadedUrls.push(wadeGeneratedImageUrl); }
+      if (tab === 'Wade' && wadeGeneratedImageUrl) {
+        // Re-host Wade's generated image on Drive so the post doesn't rot
+        // when the provider's CDN URL expires. Falls back to the raw URL
+        // if the rehost fails (CORS, etc.) — better broken-some-day than
+        // missing now.
+        const driveUrl = await uploadUrlToDrive(
+          wadeGeneratedImageUrl,
+          'social',
+          `wade-social-${stamp}.png`,
+        );
+        uploadedUrls.push(driveUrl || wadeGeneratedImageUrl);
+      }
 
       let postTimestamp = Date.now();
       if (tab === 'Wade' && selectedMsgIds.size > 0) {
