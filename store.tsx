@@ -672,7 +672,25 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                 prev.map((m) => {
                   if (m.id !== updated.id) return m;
                   const merged: Message = { ...m, ...updated };
-                  if (!updated.attachments && m.attachments) merged.attachments = m.attachments;
+                  if (!updated.attachments && m.attachments) {
+                    // Full column was truncated — keep local entirely.
+                    merged.attachments = m.attachments;
+                  } else if (updated.attachments && m.attachments) {
+                    // Column arrived; merge per attachment index, preferring
+                    // the incoming fields EXCEPT for `content`: after Drive
+                    // upload we strip content='' in the DB on purpose, and
+                    // the realtime echo of that strip would otherwise blank
+                    // the base64 we still hold locally for vision/display.
+                    merged.attachments = updated.attachments.map((newAtt: any, i: number) => {
+                      const oldAtt = m.attachments?.[i];
+                      if (!oldAtt) return newAtt;
+                      return {
+                        ...oldAtt,
+                        ...newAtt,
+                        content: newAtt.content || oldAtt.content,
+                      };
+                    });
+                  }
                   return merged;
                 }),
               );
