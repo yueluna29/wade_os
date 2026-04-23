@@ -1150,7 +1150,10 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     }));
 
     if (updatedAttachments && sessionId && mode && mode !== 'archive') {
-      safeDbUpdate(getTableName(mode), id, { attachments: updatedAttachments });
+      // Await so callers that chain a content-strip after the URL patch land
+      // in order (the strip races with this write otherwise and the full-
+      // content row wins, stomping the strip).
+      await safeDbUpdate(getTableName(mode), id, { attachments: updatedAttachments });
     }
   };
 

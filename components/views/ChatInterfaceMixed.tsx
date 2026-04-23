@@ -1921,34 +1921,29 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     // payload. Patches attachments[i].url when the upload lands; the UI
     // already prefers .url over the inline data: fallback, so the bubble
     // seamlessly upgrades from local preview → cloud URL.
-    // Track how many uploads are still in flight; once the last one lands we
-    // strip the inline base64 out of the DB row so persisted attachments stay
-    // tiny. Memory keeps content (current-session vision + display fallback).
-    const uploadableCount = sentAttachments.filter(
-      (a) => a.type === 'image' || a.type === 'file',
-    ).length;
-    let uploadsDone = 0;
-    sentAttachments.forEach((att, i) => {
-      if (att.type !== 'image' && att.type !== 'file') return;
-      const category: 'chat_image' | 'chat_file' =
-        att.type === 'image' ? 'chat_image' : 'chat_file';
-      import('../../services/gdrive').then(({ uploadBase64ToDrive }) => {
-        uploadBase64ToDrive(att.content, category, att.name)
-          .then((url) => {
-            if (url) updateMessageAttachments(newMessageId, [{ index: i, patch: { url } }]);
-          })
-          .catch((err) => console.error('[handleSend] drive upload failed for attachment', i, err))
-          .finally(() => {
-            uploadsDone += 1;
-            if (uploadsDone === uploadableCount) {
-              // Slight delay so the updateMessageAttachments DB write lands
-              // first — otherwise the two writes race and we might strip
-              // before the url patch persists.
-              setTimeout(() => stripAttachmentContentInDb(newMessageId), 500);
-            }
-          });
-      });
-    });
+    // Fire Drive uploads in parallel, await them all, THEN strip content in
+    // the DB. Awaiting is load-bearing: the URL patch and the content strip
+    // both write the attachments column, and if they race the full-content
+    // row can clobber the slim strip (leaving DB at 3MB forever).
+    (async () => {
+      const { uploadBase64ToDrive } = await import('../../services/gdrive');
+      const uploads = sentAttachments
+        .map((att, i) => ({ att, i }))
+        .filter(({ att }) => att.type === 'image' || att.type === 'file')
+        .map(async ({ att, i }) => {
+          const category: 'chat_image' | 'chat_file' =
+            att.type === 'image' ? 'chat_image' : 'chat_file';
+          try {
+            const url = await uploadBase64ToDrive(att.content, category, att.name);
+            if (url) await updateMessageAttachments(newMessageId, [{ index: i, patch: { url } }]);
+          } catch (err) {
+            console.error('[handleSend] drive upload failed for attachment', i, err);
+          }
+        });
+      if (uploads.length === 0) return;
+      await Promise.all(uploads);
+      await stripAttachmentContentInDb(newMessageId);
+    })();
     setInputText('');
     setAttachments([]);
     // Keep the textarea focused so the mobile keyboard doesn't collapse

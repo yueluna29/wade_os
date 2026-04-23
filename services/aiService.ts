@@ -309,19 +309,21 @@ export const generateFromCard = async (config: {
     }
  
     const result = await chat.sendMessage({ message: finalPrompt });
-    const rawText = result.text || "";
-    // Surface empty/blocked responses so a silent "…" fallback downstream
-    // is traceable to the real cause (safety filter, empty candidate,
-    // finishReason=MAX_TOKENS, etc.) instead of looking like a normal reply.
+    let rawText = result.text || "";
+    // Empty replies are usually safety filter or payload issues — return a
+    // diagnostic string instead of silently falling through to "…" so the
+    // next bubble tells Luna what actually happened.
     if (!rawText.trim()) {
       const cand = (result as any).candidates?.[0];
-      console.warn('[aiService/Gemini] empty response', {
+      const diag = {
         finishReason: cand?.finishReason,
-        safetyRatings: cand?.safetyRatings,
+        safetyRatings: cand?.safetyRatings?.filter((r: any) => r.blocked || r.probability !== 'NEGLIGIBLE'),
         promptFeedback: (result as any).promptFeedback,
         historyLen: history.length,
         imageMsgs: history.filter((h) => h.parts?.some((p: any) => 'inlineData' in p)).length,
-      });
+      };
+      console.warn('[aiService/Gemini] empty response', diag);
+      rawText = `[debug] Gemini returned empty. finish=${diag.finishReason || '?'} imgs=${diag.imageMsgs} safety=${JSON.stringify(diag.safetyRatings || [])}`;
     }
 
     return parseThinking(rawText);
