@@ -1446,13 +1446,72 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         return m.replyGroupId === activeGroupFor(m.replyAnchorId);
       });
 
-      const history = sessionMessages
-        .slice(-(settings.contextLimit || 50))
-        .map((m) => ({
-          role: m.role,
-          parts: [{ text: m.text || '...' }],
-        }))
-        .filter((h) => h.parts.some((p) => 'text' in p && p.text && p.text !== '(no text)'));
+      // Trim to the context window first so the image-bearing walk only
+      // touches the tail slice, then mark the most recent image message so
+      // older ones can swap their bytes for the describer caption to stay
+      // cheap. Mirrors the legacy ChatInterface history assembly — this
+      // branch previously only sent `{text}`, which silently dropped every
+      // image Luna ever sent (Wade had never actually "seen" anything).
+      const trimmedMsgs = sessionMessages.slice(-(settings.contextLimit || 50));
+      let latestImageMsgIdx = -1;
+      for (let i = trimmedMsgs.length - 1; i >= 0; i--) {
+        const m = trimmedMsgs[i];
+        if ((m.attachments && m.attachments.some((a) => a.type === 'image')) || m.image) {
+          latestImageMsgIdx = i;
+          break;
+        }
+      }
+
+      const history = trimmedMsgs
+        .map((m, msgIdx) => {
+          const parts: any[] = [];
+          const isLatestImageMsg = msgIdx === latestImageMsgIdx;
+          let content = m.text || '';
+
+          const descriptionCaptions: string[] = [];
+          if (m.attachments && m.attachments.length > 0) {
+            m.attachments.forEach((att) => {
+              if (att.type !== 'image') return;
+              if (!isLatestImageMsg && att.description) {
+                descriptionCaptions.push(`[图片：${att.description}]`);
+              }
+            });
+          }
+          if (descriptionCaptions.length > 0) {
+            content = [content, ...descriptionCaptions].filter(Boolean).join('\n\n');
+          }
+
+          if (content) parts.push({ text: content });
+
+          if (m.attachments && m.attachments.length > 0) {
+            m.attachments.forEach((att) => {
+              if (att.type === 'file') {
+                if (att.content) parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
+                return;
+              }
+              // Image: attach real bytes when this is the latest image OR the
+              // describer hasn't landed a caption yet. Otherwise the caption
+              // (appended to `content` above) stands in for the image.
+              if ((isLatestImageMsg || !att.description) && att.content) {
+                parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
+              }
+            });
+          } else if (m.image) {
+            parts.push({ inlineData: { mimeType: 'image/png', data: m.image } });
+          }
+
+          if (parts.length === 0) parts.push({ text: '(no text)' });
+          return { role: m.role, parts };
+        })
+        // Keep messages that carry real text OR any inlineData payload. The
+        // old filter required text, which dropped image-only sends entirely.
+        .filter((h) =>
+          h.parts.some(
+            (p) =>
+              ('text' in p && p.text && p.text !== '(no text)') ||
+              'inlineData' in p,
+          ),
+        );
 
       const effectiveLlmId = currentSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
       const activeLlm = effectiveLlmId ? llmPresets.find((p) => p.id === effectiveLlmId) : null;
