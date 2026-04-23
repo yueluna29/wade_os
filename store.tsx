@@ -662,7 +662,20 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
           (payload) => {
             try {
               const updated = mapMessageRow(payload.new, mode);
-              setMessages((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
+              // Preserve local fields when realtime hands back a thinner row.
+              // Big JSONB columns (notably attachments with inline base64)
+              // can exceed Supabase realtime's payload cap and come through
+              // as undefined — a naive {...m, ...updated} spread would then
+              // WIPE the local attachments the user just sent. Only overwrite
+              // when the incoming field actually carries data.
+              setMessages((prev) =>
+                prev.map((m) => {
+                  if (m.id !== updated.id) return m;
+                  const merged: Message = { ...m, ...updated };
+                  if (!updated.attachments && m.attachments) merged.attachments = m.attachments;
+                  return merged;
+                }),
+              );
             } catch (e) {
               console.error(`[realtime ${table}] update map failed`, e);
             }
