@@ -426,7 +426,27 @@ export const generateFromCard = async (config: {
       if (imageUrl) return { text: imageUrl, thinking: undefined, usage };
     }
 
-    const parsed = parseThinking(message?.content || "");
+    // Empty reply? Surface the likely cause instead of letting the chat
+    // UI's '…' fallback swallow it silently. Most common case for Luna:
+    // a text-only model (like qwen3.6-plus) receiving an image part and
+    // returning no content — the provider logs tell us exactly what the
+    // model couldn't handle.
+    let rawContent = message?.content || "";
+    if (!rawContent || (typeof rawContent === 'string' && !rawContent.trim())) {
+      const finishReason = data.choices?.[0]?.finish_reason;
+      const hasImages = history.some((h) => h.parts?.some((p: any) => 'inlineData' in p));
+      console.warn('[aiService/OpenAI-compat] empty response', {
+        model: llmPreset.model,
+        finishReason,
+        hasImages,
+        isVision: llmPreset.isVision,
+        error: data.error,
+        choice: data.choices?.[0],
+      });
+      rawContent = `[debug] ${llmPreset.model} returned empty. finish=${finishReason || '?'} hasImages=${hasImages} isVision=${!!llmPreset.isVision}${data.error ? ' err=' + JSON.stringify(data.error).slice(0,200) : ''}`;
+    }
+
+    const parsed = parseThinking(rawContent);
     return { ...parsed, usage };
   }
 };
