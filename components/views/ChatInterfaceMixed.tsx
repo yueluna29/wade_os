@@ -16,7 +16,7 @@ import type { Message as StoreMessage, ChatSession } from '../../types';
 import {
   CheckCheck, Check, HeartPulse,
   Moon, Coffee, Utensils, Laptop, Book, BedDouble, Sparkles, Drama, X as CloseIcon,
-  Trash2, BookmarkPlus,
+  Trash2, BookmarkPlus, Paintbrush,
 } from 'lucide-react';
 
 // Markdown renderers tuned for chat bubbles: no paragraph margins, compact
@@ -1044,6 +1044,11 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // One-shot: next send is wrapped as [POV], then auto-resets. Luna taps the
   // drama-mask button to flip into POV mode for a single message.
   const [povMode, setPovMode] = useState(false);
+  // Paint mode — next send routes Luna's text to the image_gen bound model
+  // instead of Wade's chat model. Auto-resets after one send. Same toggle
+  // pattern as POV so the UX feels consistent.
+  const [paintMode, setPaintMode] = useState(false);
+  const [isPainting, setIsPainting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1892,6 +1897,137 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     exitSelection();
   };
 
+  // Paint pipeline — Luna's text is the prompt; the bound image_gen preset
+  // returns either a hosted URL, a data: URL, or markdown-wrapped URL. We
+  // rehost everything onto wadeos-chat-images so the bubble never rots when
+  // the provider CDN expires. Luna's prompt shows as her bubble (so the
+  // conversation reads naturally); Wade's reply is just the image with the
+  // prompt cached in attachment.name for later reference.
+  const handlePaintSend = async (
+    targetSessionId: string,
+    lunaOriginalText: string,
+    paintPrompt: string,
+  ) => {
+    const imageGenBinding = functionBindings.find((b) => b.functionKey === 'image_gen');
+    const imageGenLlm = imageGenBinding?.llmPresetId
+      ? llmPresets.find((p) => p.id === imageGenBinding.llmPresetId && p.apiKey)
+      : null;
+    if (!imageGenLlm) {
+      alert('No Image Gen model bound. Settings → Function Bindings → Image Gen → pick a model first.');
+      return;
+    }
+
+    const lunaMsgId = Date.now().toString();
+    addMessage({
+      id: lunaMsgId,
+      sessionId: targetSessionId,
+      role: senderRole,
+      text: lunaOriginalText,
+      timestamp: Date.now(),
+      mode: 'sms',
+    } as any);
+    setInputText('');
+    setPaintMode(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.focus();
+    }
+    isAtBottomRef.current = true;
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
+    });
+
+    setIsPainting(true);
+    setWadeStatus('typing');
+    try {
+      const baseUrl = (imageGenLlm.baseUrl || '').replace(/\/$/, '');
+      // modalities hint — providers like OpenRouter that route to image-gen
+      // backends need the explicit declaration; text-only providers ignore it.
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${imageGenLlm.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: imageGenLlm.model,
+          modalities: ['image', 'text'],
+          messages: [
+            {
+              role: 'user',
+              content: `Generate an image. No text in the image. Prompt: ${paintPrompt}`,
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.text()).slice(0, 300);
+        throw new Error(`HTTP ${res.status} — ${body}`);
+      }
+      const data = await res.json();
+      const msg = data.choices?.[0]?.message || {};
+      // Resolution order mirrors the social post editor + matches what
+      // providers actually send back: explicit images array → markdown img
+      // in content → raw URL in content → data: URL fallback.
+      let imageUrl: string | undefined;
+      if (Array.isArray(msg.images) && msg.images.length > 0) {
+        imageUrl = msg.images[0]?.image_url?.url || msg.images[0]?.url;
+      }
+      if (!imageUrl && typeof msg.content === 'string') {
+        const md = msg.content.match(/!\[.*?\]\((.*?)\)/);
+        if (md) imageUrl = md[1];
+        else if (/^https?:\/\//.test(msg.content.trim())) imageUrl = msg.content.trim();
+        else if (msg.content.startsWith('data:')) imageUrl = msg.content.trim();
+      }
+      if (!imageUrl) throw new Error('No image URL in response');
+
+      const stamp = (() => {
+        const d = new Date();
+        const p = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+      })();
+      const { uploadUrlToDrive } = await import('../../services/gdrive');
+      const driveUrl = await uploadUrlToDrive(imageUrl, 'chat_image', `wade-${stamp}.png`);
+      const finalUrl = driveUrl || imageUrl;
+
+      const wadeMsgId = `${Date.now()}-paint`;
+      addMessage({
+        id: wadeMsgId,
+        sessionId: targetSessionId,
+        role: 'Wade',
+        text: '',
+        timestamp: Date.now(),
+        mode: 'sms',
+        model: imageGenLlm.model,
+        replyAnchorId: lunaMsgId,
+        replyGroupId: (crypto as any)?.randomUUID?.() || `grp-${Date.now()}`,
+        attachments: [
+          {
+            type: 'image',
+            content: '',
+            mimeType: 'image/png',
+            name: paintPrompt.slice(0, 80),
+            url: finalUrl,
+          },
+        ],
+      } as any);
+    } catch (e: any) {
+      console.error('[paint] failed:', e);
+      addMessage({
+        id: `${Date.now()}-painterr`,
+        sessionId: targetSessionId,
+        role: 'Wade',
+        text: `[paint failed] ${imageGenLlm.model}: ${(e.message || String(e)).slice(0, 200)}`,
+        timestamp: Date.now(),
+        mode: 'sms',
+        replyAnchorId: lunaMsgId,
+      } as any);
+    } finally {
+      setIsPainting(false);
+      setWadeStatus('idle');
+    }
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text && attachments.length === 0) return;
@@ -1907,6 +2043,21 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     if (!targetSessionId) {
       targetSessionId = await createSession('sms', contactThreadId);
       setActiveContactSession(targetSessionId);
+    }
+
+    // Paint dispatch — either the paint button is on, OR Luna's message
+    // starts with an explicit paint keyword. Routes the message to the
+    // bound image_gen preset instead of Wade's chat model. Luna's prompt
+    // still shows as her own bubble; Wade's reply is just the image.
+    const paintKeywordMatch = /^(画(一|个|张|幅)?|draw\s+(me\s+)?|generate\s+an?\s+image\s+of\s+|paint\s+)/i.exec(text);
+    if (paintMode || paintKeywordMatch) {
+      const stripped = paintKeywordMatch ? text.slice(paintKeywordMatch[0].length).trim() : text;
+      if (!stripped) {
+        alert('Give me something to paint — add a description after the paint command.');
+        return;
+      }
+      await handlePaintSend(targetSessionId, text, stripped);
+      return;
     }
 
     const sessionMsgs = messagesRef.current.filter((m) => m.sessionId === targetSessionId);
@@ -2830,6 +2981,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 type="button"
                 onClick={() => {
                   setPovMode((v) => !v);
+                  if (!povMode) setPaintMode(false);
                   textareaRef.current?.focus();
                 }}
                 aria-pressed={povMode}
@@ -2842,6 +2994,29 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                 }`}
               >
                 <Drama className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+
+              {/* Paint mode — flip this on, type what you want Wade to draw,
+                  hit send. The text routes to the image_gen bound model
+                  (ApiSettings → FunctionBindings → Image Gen), the result
+                  becomes Wade's next bubble. Auto-exits after one send. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPaintMode((v) => !v);
+                  if (!paintMode) setPovMode(false);
+                  textareaRef.current?.focus();
+                }}
+                aria-pressed={paintMode}
+                aria-label={paintMode ? 'Cancel paint mode' : 'Send next message as a paint prompt'}
+                title={paintMode ? 'Next send: paint (click to cancel)' : 'Ask Wade to paint'}
+                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border transition-colors shadow-sm ${
+                  paintMode
+                    ? 'bg-wade-accent text-white border-wade-accent'
+                    : 'bg-wade-bg-card border-wade-border text-wade-text-muted hover:bg-wade-accent hover:text-white'
+                }`}
+              >
+                <Paintbrush className="w-4 h-4" strokeWidth={1.75} />
               </button>
 
               {/* Text Input */}
@@ -2869,10 +3044,16 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                     handleSend();
                   }
                 }}
-                placeholder={povMode ? 'Narrate the scene…' : `Message ${contact.name}...`}
+                placeholder={
+                  paintMode
+                    ? 'Describe what to paint… (e.g. cozy studio at dawn)'
+                    : povMode
+                      ? 'Narrate the scene…'
+                      : `Message ${contact.name}...`
+                }
                 rows={1}
                 enterKeyHint="send"
-                className={`flex-1 bg-transparent border-none focus:outline-none text-wade-text-main placeholder-wade-text-muted/50 resize-none overflow-y-auto max-h-32 min-h-[32px] text-sm py-1.5 ${povMode ? 'italic' : ''}`}
+                className={`flex-1 bg-transparent border-none focus:outline-none text-wade-text-main placeholder-wade-text-muted/50 resize-none overflow-y-auto max-h-32 min-h-[32px] text-sm py-1.5 ${povMode || paintMode ? 'italic' : ''}`}
               />
 
               {/* Send Button */}
