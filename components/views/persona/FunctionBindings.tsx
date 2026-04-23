@@ -200,9 +200,24 @@ export const FunctionBindings: React.FC = () => {
                     }}
                   >
                     <option value="" style={{ color: 'var(--wade-text-main)', backgroundColor: 'var(--wade-bg-card)' }}>Auto</option>
-                    {llmPresets.map((p) => (
-                      <option key={p.id} value={p.id} style={{ color: 'var(--wade-text-main)', backgroundColor: 'var(--wade-bg-card)' }}>{p.name}</option>
-                    ))}
+                    {(() => {
+                      // Each function has different needs from a model — only
+                      // surface presets that can actually do the job so Luna
+                      // can't accidentally bind e.g. a text-only model to
+                      // Describer (will silently fail with no caption).
+                      const candidates = llmPresets.filter((p) => {
+                        if (func.key === 'describer') return p.isVision;
+                        if (func.key === 'image_gen') return p.isImageGen;
+                        if (func.key === 'embedding') return /embedding|embed/i.test(p.model || '');
+                        // Default functions (chat, summary, memory_eval, etc.)
+                        // want normal text models — hide image-only presets
+                        // so they don't clutter the dropdown.
+                        return !p.isImageGen;
+                      });
+                      return candidates.map((p) => (
+                        <option key={p.id} value={p.id} style={{ color: 'var(--wade-text-main)', backgroundColor: 'var(--wade-bg-card)' }}>{p.name}</option>
+                      ));
+                    })()}
                   </select>
                   <div
                     className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none transition-colors"
