@@ -7,7 +7,7 @@ import { Icons } from '../ui/Icons';
 import { useStore } from '../../store';
 import { supabase } from '../../services/supabase';
 import { generateMinimaxTTS } from '../../services/minimaxService';
-import { generateFromCard, generateChatTitle, summarizeConversation } from '../../services/aiService';
+import { generateFromCard, generateChatTitle, summarizeConversation, generateImageDescription } from '../../services/aiService';
 import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, WadeMemory } from '../../services/memoryService';
 import { getPendingTodos, formatTodosForChatPrompt, getRecentDiaries, formatDiariesForPrompt, extractTodoTags, writeExtractedFromChat } from '../../services/todoService';
 import { buildCardFromSettings } from '../../services/personaBuilder';
@@ -1449,6 +1449,16 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         return m.replyGroupId === activeGroupFor(m.replyAnchorId);
       });
 
+      // Resolve the active LLM early so the history assembly can branch on
+      // `isVision`: a text-only main model (like qwen3.6-plus) chokes on
+      // inlineData image parts and returns empty. For those we swap every
+      // image — including the latest — for its describer caption, so Wade
+      // reads "[图片：…]" as text and can still react. Vision-capable
+      // models keep the existing latest-gets-bytes-older-gets-caption logic.
+      const earlyEffectiveLlmId = currentSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
+      const earlyActiveLlm = earlyEffectiveLlmId ? llmPresets.find((p) => p.id === earlyEffectiveLlmId) : null;
+      const modelCanSeeImages = !!earlyActiveLlm?.isVision;
+
       // Trim to the context window first so the image-bearing walk only
       // touches the tail slice, then mark the most recent image message so
       // older ones can swap their bytes for the describer caption to stay
@@ -1475,8 +1485,17 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           if (m.attachments && m.attachments.length > 0) {
             m.attachments.forEach((att) => {
               if (att.type !== 'image') return;
-              if (!isLatestImageMsg && att.description) {
+              // Text-only main model → collapse EVERY image (including the
+              // latest) into its describer caption. Vision-capable model →
+              // only older images go to caption; latest keeps real bytes.
+              const useCaption = !modelCanSeeImages || !isLatestImageMsg;
+              if (useCaption && att.description) {
                 descriptionCaptions.push(`[图片：${att.description}]`);
+              } else if (useCaption && !att.description) {
+                // Describer hasn't landed yet and the main model can't see
+                // images — note that an image exists so Wade at least knows
+                // something was sent instead of silently losing the turn.
+                descriptionCaptions.push('[图片：（还在识别中）]');
               }
             });
           }
@@ -1492,14 +1511,15 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
                 if (att.content) parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
                 return;
               }
-              // Image: attach real bytes when this is the latest image OR the
-              // describer hasn't landed a caption yet. Otherwise the caption
-              // (appended to `content` above) stands in for the image.
+              // Only attach image bytes when the active model can actually
+              // see them AND this is the latest image (or the describer
+              // hasn't landed so we fall back to bytes-for-vision).
+              if (!modelCanSeeImages) return;
               if ((isLatestImageMsg || !att.description) && att.content) {
                 parts.push({ inlineData: { mimeType: att.mimeType, data: att.content } });
               }
             });
-          } else if (m.image) {
+          } else if (m.image && modelCanSeeImages) {
             parts.push({ inlineData: { mimeType: 'image/png', data: m.image } });
           }
 
@@ -1921,10 +1941,18 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     // payload. Patches attachments[i].url when the upload lands; the UI
     // already prefers .url over the inline data: fallback, so the bubble
     // seamlessly upgrades from local preview → cloud URL.
-    // Fire Drive uploads in parallel, await them all, THEN strip content in
-    // the DB. Awaiting is load-bearing: the URL patch and the content strip
-    // both write the attachments column, and if they race the full-content
-    // row can clobber the slim strip (leaving DB at 3MB forever).
+    // Fire Drive uploads in parallel, await them all, THEN run the describer
+    // (fire-and-forget), THEN strip content in the DB. Sequencing is load-
+    // bearing: describer needs att.content in memory, strip only touches
+    // DB so memory content survives for it. The URL patch and the content
+    // strip both write the attachments column — if they race, the full-
+    // content row can clobber the slim strip (leaving DB at 3MB forever).
+    const nowFileStamp = (() => {
+      const d = new Date();
+      const p = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+    })();
+    const outgoingSnapshot = outgoingText;
     (async () => {
       const { uploadBase64ToDrive } = await import('../../services/gdrive');
       const uploads = sentAttachments
@@ -1933,8 +1961,16 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         .map(async ({ att, i }) => {
           const category: 'chat_image' | 'chat_file' =
             att.type === 'image' ? 'chat_image' : 'chat_file';
+          // Build a human-readable filename so Drive doesn't fill up with
+          // iPhone UUIDs and auto-screenshot names. Shape:
+          //   luna-<YYYYMMDD_HHMMSS>-<msgid-last-4>.<ext>
+          // Kept short enough to still fit sanely in Drive's UI; keeps the
+          // original extension when the upload knows it.
+          const ext = (att.name?.split('.').pop() || (att.mimeType.split('/')[1] || 'bin')).toLowerCase();
+          const shortId = String(newMessageId).slice(-4);
+          const prettyName = `luna-${nowFileStamp}-${shortId}.${ext}`;
           try {
-            const url = await uploadBase64ToDrive(att.content, category, att.name);
+            const url = await uploadBase64ToDrive(att.content, category, prettyName);
             if (url) await updateMessageAttachments(newMessageId, [{ index: i, patch: { url } }]);
           } catch (err) {
             console.error('[handleSend] drive upload failed for attachment', i, err);
@@ -1942,6 +1978,37 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         });
       if (uploads.length === 0) return;
       await Promise.all(uploads);
+
+      // Describer (fire-and-forget) — binds via FunctionBindings (settingsKey
+      // dual-writes to settings.descriptionLlmId so both paths work). Caption
+      // lands as att.description and the history assembly uses it as the
+      // text-only-main-model fallback for EVERY image (including the latest).
+      const describerLlmId = settings.descriptionLlmId;
+      const describerLlm = describerLlmId
+        ? llmPresets.find((p) => p.id === describerLlmId && p.isVision && p.apiKey)
+        : null;
+      if (describerLlm) {
+        (async () => {
+          const latest = messagesRef.current.find((m) => m.id === newMessageId);
+          if (!latest?.attachments) return;
+          const patches: { index: number; patch: { description: string } }[] = [];
+          await Promise.all(latest.attachments.map(async (att, i) => {
+            if (att.type !== 'image' || att.description) return;
+            try {
+              const desc = await generateImageDescription(
+                { url: att.url, base64: att.content, mimeType: att.mimeType },
+                describerLlm,
+                outgoingSnapshot || undefined,
+              );
+              if (desc) patches.push({ index: i, patch: { description: desc } });
+            } catch (e) {
+              console.error('[handleSend] describer failed for att', i, e);
+            }
+          }));
+          if (patches.length > 0) await updateMessageAttachments(newMessageId, patches);
+        })().catch((err) => console.error('[handleSend] describer pipeline failed:', err));
+      }
+
       await stripAttachmentContentInDb(newMessageId);
     })();
     setInputText('');

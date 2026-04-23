@@ -23,6 +23,8 @@ const SYSTEM_FUNCTIONS: {
   { key: 'memory_eval',         label: 'Memory Eval',         icon: Icons.Brain,    desc: 'Extracts emotional context',    settingsKey: 'memoryEvalLlmId',                                  noSysCard: true },
   { key: 'embedding',           label: 'Vector Embedding',    icon: Icons.Sparkle,  desc: 'Text-to-Numbers matrix',        settingsKey: 'embeddingLlmId',  badge: 'Must be Gemini', noSysCard: true },
   { key: 'journal_translation', label: 'Journal Translation', icon: Icons.Globe,    desc: 'Translates diary entries',                                                                       noSysCard: true },
+  { key: 'describer',           label: 'Image Describer',     icon: Icons.Eye,      desc: 'Captions images Luna sends',    settingsKey: 'descriptionLlmId', badge: 'Must be Vision', noSysCard: true },
+  { key: 'image_gen',           label: 'Image Gen',           icon: Icons.Image,    desc: 'Generates images on demand',                                     badge: 'Must do imageGen', noSysCard: true },
 ];
 
 // Narrow type so the settingsKey field is typed safely; only fields that
@@ -32,6 +34,7 @@ type SettingsMirror = {
   summaryLlmId?: string;
   memoryEvalLlmId?: string;
   embeddingLlmId?: string;
+  descriptionLlmId?: string;
 };
 
 const SYSTEM_KEYS = new Set(SYSTEM_FUNCTIONS.map(f => f.key));
