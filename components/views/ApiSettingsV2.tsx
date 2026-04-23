@@ -264,6 +264,79 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
     }
   };
 
+  // Tiny 1x1 red PNG — small enough to slip under every provider's
+  // request-size limit, unambiguous enough that any real vision model
+  // will answer "red" (or 红 / 红色 / crimson / 等). Text-only models
+  // either return empty, apologize, or make something up.
+  const TEST_VISION_IMAGE_B64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+  const TEST_VISION_PROMPT =
+    'You will receive one image. Reply with a SINGLE word: the dominant color of the image. No punctuation, no sentence. Just the color.';
+
+  const handleTestVision = async (item: any) => {
+    setTestingId(item.id);
+    try {
+      let reply = '';
+      if (item.provider === 'Gemini' || (item.baseUrl && item.baseUrl.includes('googleapis'))) {
+        const ai = new GoogleGenAI({ apiKey: item.apiKey });
+        const res: any = await ai.models.generateContent({
+          model: item.model || 'gemini-3-flash-preview',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: TEST_VISION_PROMPT },
+                { inlineData: { mimeType: 'image/png', data: TEST_VISION_IMAGE_B64 } },
+              ],
+            },
+          ],
+        });
+        reply = (res?.text || '').trim();
+      } else {
+        const baseUrl = (item.baseUrl || '').replace(/\/$/, '');
+        const r = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${item.apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: item.model,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: TEST_VISION_PROMPT },
+                  { type: 'image_url', image_url: { url: `data:image/png;base64,${TEST_VISION_IMAGE_B64}` } },
+                ],
+              },
+            ],
+            max_tokens: 30,
+          }),
+        });
+        if (!r.ok) {
+          const body = (await r.text()).slice(0, 300);
+          throw new Error(`HTTP ${r.status} — ${body}`);
+        }
+        const data = await r.json();
+        reply = (data.choices?.[0]?.message?.content || '').trim();
+      }
+
+      if (!reply) {
+        alert(`Vision test — ${item.name || item.model}\n\nModel returned empty.\nIt probably can't see images. Leave isVision OFF.`);
+        return;
+      }
+      const normalized = reply.toLowerCase().replace(/[^a-z一-鿿]+/g, '');
+      // Accept "red" in English or any of the common Chinese / variant forms.
+      const isCorrect = /red|red color|crimson|scarlet/.test(normalized) || /红|红色|赤/.test(reply);
+      const verdict = isCorrect
+        ? '✅ VISION CAPABLE — it saw red.'
+        : '⚠️ Replied but answer looks wrong. Probably text-only faking it.';
+      alert(`Vision test — ${item.name || item.model}\n\n${verdict}\n\nReply: "${reply}"`);
+    } catch (e: any) {
+      alert(`Vision test failed — ${item.name || item.model}\n\n${e.message || e}`);
+    } finally {
+      setTestingId(null);
+    }
+  };
+
   const handleTest = async (item: any, type: 'llm' | 'tts') => {
     setTestingId(item.id);
     try {
@@ -615,9 +688,19 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleTest(preset, activeTab as 'llm' | 'tts'); }}
                           className="p-1.5 rounded-lg text-wade-text-muted hover:bg-black/5 transition-colors"
+                          title="Test connection (ping)"
                         >
                           {testingId === preset.id ? <Icons.Loading /> : <Icons.Test size={14} />}
                         </button>
+                        {activeTab === 'llm' && !/embedding|embed/i.test(preset.model || '') && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleTestVision(preset); }}
+                            className="p-1.5 rounded-lg text-wade-text-muted hover:bg-black/5 transition-colors"
+                            title="Test vision (send a red pixel)"
+                          >
+                            <Icons.Eye size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => { e.stopPropagation(); handleEdit(activeTab as 'llm' | 'tts', preset); }}
                           className="p-1.5 rounded-lg text-wade-text-muted hover:bg-black/5 transition-colors"
