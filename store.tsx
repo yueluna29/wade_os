@@ -1136,6 +1136,23 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Post-Drive-upload cleanup: wipe the inline base64 out of the DB row so
+  // the attachments column goes from ~3MB per image back to ~1KB of metadata.
+  // Memory keeps content intact (current-session vision + display fall back
+  // to it if the Drive URL misbehaves), only the persisted row slims down.
+  // The URL is the source of truth for future reloads / cross-device plays.
+  const stripAttachmentContentInDb = async (id: string) => {
+    const msg = messages.find((m) => m.id === id);
+    if (!msg || !msg.attachments || !msg.sessionId || msg.mode === 'archive') return;
+    // Only strip attachments whose Drive URL has landed — we never want to
+    // leave a row with neither content nor url (message would look empty on
+    // reload). Rebuild a new array with content nulled out for those rows.
+    const slim = msg.attachments.map((att) =>
+      att.url ? { ...att, content: '' } : att,
+    );
+    await safeDbUpdate(getTableName(msg.mode), id, { attachments: slim });
+  };
+
   const addVariantToMessage = (id: string, newText: string, thinking?: string, model?: string) => {
     const msg = messages.find(m => m.id === id);
     if (!msg) return;
@@ -1710,7 +1727,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       messages, addMessage, updateMessage, deleteMessage, toggleFavorite, updateMessageAudioCache,
       updateMessageVoiceDriveId,
       vaultGroups, saveVaultGroup, deleteVaultGroup,
-      updateMessageAttachments,
+      updateMessageAttachments, stripAttachmentContentInDb,
       addVariantToMessage, selectMessageVariant, setRegenerating, rewindConversation, forkSession,
       socialPosts, addPost, updatePost, deletePost, memos, addMemo,
       capsules, addCapsule, updateCapsule, deleteCapsule, refetchCapsules, loadCapsuleAudio,

@@ -421,6 +421,7 @@ export interface GlobalState {
     id: string,
     patches: { index: number; patch: Partial<NonNullable<Message['attachments']>[number]> }[]
   ) => Promise<void>;
+  stripAttachmentContentInDb: (id: string) => Promise<void>;
 
   // Updated for Thinking Process
   addVariantToMessage: (id: string, newText: string, thinking?: string, model?: string) => void; 

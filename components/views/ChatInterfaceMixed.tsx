@@ -604,7 +604,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     getBinding, coreMemories, toggleCoreMemoryEnabled, profiles, profilesLoaded, messagesLoaded,
     createSession, updateSessionTitle, toggleSessionPin, deleteSession,
     ttsPresets, updateMessageAudioCache, updateMessageVoiceDriveId, updateMessage, deleteMessage, toggleFavorite,
-    updateMessageAttachments,
+    updateMessageAttachments, stripAttachmentContentInDb,
     saveVaultGroup,
     addMessage, personaCards, functionBindings, getDefaultPersonaCard, setTab,
   } = useStore();
@@ -1921,14 +1921,32 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     // payload. Patches attachments[i].url when the upload lands; the UI
     // already prefers .url over the inline data: fallback, so the bubble
     // seamlessly upgrades from local preview → cloud URL.
+    // Track how many uploads are still in flight; once the last one lands we
+    // strip the inline base64 out of the DB row so persisted attachments stay
+    // tiny. Memory keeps content (current-session vision + display fallback).
+    const uploadableCount = sentAttachments.filter(
+      (a) => a.type === 'image' || a.type === 'file',
+    ).length;
+    let uploadsDone = 0;
     sentAttachments.forEach((att, i) => {
       if (att.type !== 'image' && att.type !== 'file') return;
       const category: 'chat_image' | 'chat_file' =
         att.type === 'image' ? 'chat_image' : 'chat_file';
       import('../../services/gdrive').then(({ uploadBase64ToDrive }) => {
-        uploadBase64ToDrive(att.content, category, att.name).then((url) => {
-          if (url) updateMessageAttachments(newMessageId, [{ index: i, patch: { url } }]);
-        }).catch((err) => console.error('[handleSend] drive upload failed for attachment', i, err));
+        uploadBase64ToDrive(att.content, category, att.name)
+          .then((url) => {
+            if (url) updateMessageAttachments(newMessageId, [{ index: i, patch: { url } }]);
+          })
+          .catch((err) => console.error('[handleSend] drive upload failed for attachment', i, err))
+          .finally(() => {
+            uploadsDone += 1;
+            if (uploadsDone === uploadableCount) {
+              // Slight delay so the updateMessageAttachments DB write lands
+              // first — otherwise the two writes race and we might strip
+              // before the url patch persists.
+              setTimeout(() => stripAttachmentContentInDb(newMessageId), 500);
+            }
+          });
       });
     });
     setInputText('');
