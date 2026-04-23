@@ -2539,14 +2539,18 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
 
       {/* Messages Area — virtualized so long threads only render what's on
           screen. Virtuoso handles scroll-to-bottom and variable-height items
-          natively; the old multi-pass pin + manual scroll listener are gone. */}
+          natively; the old multi-pass pin + manual scroll listener are gone.
+          overscroll-contain + touch-pan-y cage the iOS rubber-band inside
+          the list so an open keyboard + scroll gesture can't jello the
+          whole app (body is position:fixed, so any leaked overscroll bounces
+          the entire layout). */}
       <div
         ref={messagesContainerRef}
         onClick={() => {
           if (showSearch) setShowSearch(false);
           if (selectedMsgId !== null) setSelectedMsgId(null);
         }}
-        className="flex-1 min-h-0"
+        className="flex-1 min-h-0 overscroll-contain touch-pan-y"
         style={(() => {
           const cs = activeSession?.chatStyle;
           if (!cs) return undefined;
