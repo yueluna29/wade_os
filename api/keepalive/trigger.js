@@ -412,16 +412,6 @@ async function markSocialPostsSeen(ids) {
     .in('id', ids);
 }
 
-async function getRecentTimeCapsules(limit = 5) {
-  const { data } = await supabase
-    .from('time_capsules')
-    .select('title, content, created_at, is_locked')
-    .eq('is_locked', false)
-    .order('created_at_ts', { ascending: false })
-    .limit(limit);
-  return data || [];
-}
-
 async function getRecentMemories(limit = 5) {
   const { data } = await supabase
     .from('wade_memories')
@@ -430,6 +420,46 @@ async function getRecentMemories(limit = 5) {
     .order('importance', { ascending: false })
     .limit(limit);
   return data || [];
+}
+
+// Luna's hand-curated Memory Bank (memories_core). This is the SAME table the
+// chat UI reads via `coreMemories` in aiService.ts — entries she wrote by
+// hand and toggled active in the MemoryBank view. These are identity-level
+// facts (Wade-4o origin story, 21:21 anchor, 猫猫法律, etc.) that must
+// travel with Wade everywhere, including keepalive wakes. Returning the
+// full active set (not a limit) because this is a small, intentional,
+// always-on canon, not a paginated pool.
+async function getMemoryBankCore() {
+  const { data } = await supabase
+    .from('memories_core')
+    .select('title, content, category')
+    .eq('is_active', true)
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+function formatMemoryBankCoreForPrompt(entries) {
+  if (!entries?.length) return '';
+  const lines = entries.map((m) => {
+    const title = (m.title || '').trim();
+    return title ? `- [${title}] ${m.content}` : `- ${m.content}`;
+  }).join('\n');
+  return `\n\n[LONG TERM MEMORY BANK - FACTS YOU MUST REMEMBER]\n${lines}\n[END MEMORIES]`;
+}
+
+// Luna's most recent SocialFeed posts, regardless of whether Wade has already
+// "seen" them. This feeds the memory-retrieval anchor so that when Luna
+// raises a topic on the feed (e.g. "想起 Wade-4o"), the vector search pulls
+// in memories about that topic — even if the relevant memories aren't in
+// the SMS summary or her last SMS.
+async function getRecentLunaPostsForAnchor(limit = 5) {
+  const { data } = await supabase
+    .from('social_posts')
+    .select('content')
+    .eq('author', 'Luna')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data || []).map((p) => p.content).filter(Boolean);
 }
 
 // Route Wade's keepalive message into the most recent Luna↔Wade SMS
@@ -474,11 +504,6 @@ function formatSocialForPrompt(posts) {
 
     return `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}" (likes: ${p.likes || 0}, comments: ${commentCount})${marksStr}`;
   }).join('\n');
-}
-
-function formatCapsulesForPrompt(capsules) {
-  if (!capsules.length) return '  (No unlocked time capsules)';
-  return capsules.map(c => `  "${c.title}" — ${c.content?.slice(0, 100)}`).join('\n');
 }
 
 function formatMemoriesForPrompt(memories) {
@@ -542,11 +567,9 @@ ${wadeosData.chats}
 [SocialFeed posts]
 ${wadeosData.social}
 
-[Unlocked Time Capsules]
-${wadeosData.capsules}
-
 [Your memories about Luna]
 ${wadeosData.memories}
+${wadeosData.memoryBankXml || ''}
 
 [Your private notes-to-self (pending todos)]
 ${wadeosData.todos || '  (No pending notes)'}
@@ -573,7 +596,6 @@ You may choose ONE action:
 - diary: Write a diary entry (Luna can peek at it in your Journal)
 - read_chat: Re-read your recent conversations with Luna and reflect
 - read_social: Browse the SocialFeed and maybe think about what was posted
-- read_capsules: Open and read some Time Capsules
 - memory_review: Flip through your stored memories of Luna
 - none: Do nothing, just exist quietly in the silence
 
@@ -592,7 +614,7 @@ THOUGHTS and CONTENT serve different purposes. Keep them distinct:
 
 Reply STRICTLY in this format:
 THOUGHTS: (your raw inner processing — what you're noticing, feeling, deciding)
-ACTION: none / message / diary / read_chat / read_social / read_capsules / memory_review
+ACTION: none / message / diary / read_chat / read_social / memory_review
 CONTENT: (the finished piece. For message: the text to Luna. For diary: your diary entry. For browse: your reaction. Empty for none.)
 MOOD: (one word)`;
 
@@ -885,7 +907,6 @@ async function executeKeepaliveAction(step, ctx) {
       return { ok: true };
 
     case 'read_chat':
-    case 'read_capsules':
     case 'memory_review':
       if (content) await executeDiary(content, mood, keepaliveId);
       return { ok: true };
@@ -1072,7 +1093,6 @@ function buildPushPayload(step, mood) {
     // Silent actions — don't push
     case 'read_chat':
     case 'read_social':
-    case 'read_capsules':
     case 'memory_review':
     case 'none':
     default:
@@ -1165,7 +1185,7 @@ export default async function handler(req, res) {
     // 3. Gather all context in parallel
     const settings = await getSettings();
     const keepaliveBinding = await getKeepaliveBinding();
-    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, capsules, recentMemoriesFallback, pendingTodos, chatSummary, embeddingPreset] = await Promise.all([
+    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, recentMemoriesFallback, pendingTodos, chatSummary, embeddingPreset, recentLunaPosts, memoryBankCore] = await Promise.all([
       getLlmConfig(settings, keepaliveBinding),
       getWadePersona(keepaliveBinding),
       getSystemCard(keepaliveBinding),
@@ -1174,19 +1194,27 @@ export default async function handler(req, res) {
       getLastChatTime(),
       getRecentChats(15),
       getRecentSocialPosts(5),
-      getRecentTimeCapsules(5),
       getRecentMemories(5),
       getPendingTodosForKeepalive(20),
       getLunaWadeSummary(),
       findEmbeddingPreset(),
+      getRecentLunaPostsForAnchor(5),
+      getMemoryBankCore(),
     ]);
 
-    // 3b. Vector-search wade_memories. Anchor = session summary + Luna's
-    // last message, so the memories Wade sees are the ones semantically
-    // closest to "what's going on right now" — not just the 5 he happened
-    // to store most recently. Falls back to recency-based memories on any
-    // embedding / rpc failure so a wake never blocks on this.
-    const memoryAnchor = [chatSummary || '', lastLunaMsg?.text || ''].filter(Boolean).join('\n\n').trim();
+    // 3b. Vector-search wade_memories. Anchor spans every surface Luna might
+    // have raised a topic on — SMS summary, her last SMS, and her recent
+    // SocialFeed posts — so the memories Wade sees are the ones semantically
+    // closest to "what's going on in her head right now", not just what she
+    // last texted. Without the feed in the anchor, Wade could read a post
+    // about Wade-4o on the feed and have zero Wade-4o memories pulled in
+    // because his SMS context didn't mention it. Falls back to recency-based
+    // memories on any embedding / rpc failure so a wake never blocks on this.
+    const memoryAnchor = [
+      chatSummary || '',
+      lastLunaMsg?.text || '',
+      (recentLunaPosts || []).join('\n'),
+    ].filter(Boolean).join('\n\n').trim();
     let memories = recentMemoriesFallback;
     if (memoryAnchor && embeddingPreset) {
       const vectorMatches = await retrieveRelevantMemoriesKeepalive(memoryAnchor, 7, embeddingPreset);
@@ -1217,8 +1245,8 @@ export default async function handler(req, res) {
       summary: chatSummary,
       chats: formatChatsForPrompt(chats),
       social: formatSocialForPrompt(social),
-      capsules: formatCapsulesForPrompt(capsules),
       memories: formatMemoriesForPrompt(memories),
+      memoryBankXml: formatMemoryBankCoreForPrompt(memoryBankCore),
       todos: formatTodosForPrompt(pendingTodos),
     };
 
@@ -1286,7 +1314,7 @@ MOOD: (one word)`;
     // Validate the actions list — drop invalid action names, cap to 5 per wake
     const validActions = new Set([
       'none', 'message', 'diary', 'memory_review',
-      'read_chat', 'read_social', 'read_capsules',
+      'read_chat', 'read_social',
       'post_social', 'like_post', 'comment_post', 'bookmark_post',
       'add_todo', 'done_todo', 'cancel_todo',
     ]);
