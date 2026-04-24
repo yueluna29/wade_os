@@ -465,6 +465,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                      tags: m.tags || [],
                      isActive: m.is_active,
                      enabled: true,
+                     forKeepalive: m.for_keepalive ?? true,
                      createdAt: new Date(m.created_at).getTime()
                  })));
              }
@@ -1375,11 +1376,11 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
 
   const addCoreMemory = async (title: string, content: string, category: CoreMemory['category'] = 'general', tags: string[] = []) => {
     const tempId = crypto.randomUUID();
-    const newMemory: CoreMemory = { id: tempId, title, content, category, tags, isActive: true, enabled: true, createdAt: Date.now() };
+    const newMemory: CoreMemory = { id: tempId, title, content, category, tags, isActive: true, enabled: true, forKeepalive: true, createdAt: Date.now() };
     setCoreMemories(prev => [newMemory, ...prev]);
     const memKey = `wade_core_memories`;
     localStorage.setItem(memKey, JSON.stringify([newMemory, ...JSON.parse(localStorage.getItem(memKey) || '[]')]));
-    await supabase.from('memories_core').insert({ id: tempId, title, content, category, tags, is_active: true, created_at: new Date().toISOString() });
+    await supabase.from('memories_core').insert({ id: tempId, title, content, category, tags, is_active: true, for_keepalive: true, created_at: new Date().toISOString() });
   };
 
   const updateCoreMemory = async (id: string, title: string, content: string, tags?: string[]) => {
@@ -1396,6 +1397,17 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(memKey, JSON.stringify(updated));
     const mem = coreMemories.find(m => m.id === id);
     if (mem) await supabase.from('memories_core').update({ is_active: !mem.enabled }).eq('id', id);
+  };
+
+  // Flip the keepalive-only flag. Chat/social/XRay are untouched — they
+  // keep filtering on isActive. This only controls whether Wade sees the
+  // memory during autonomous wakes (api/keepalive/trigger.js).
+  const toggleCoreMemoryForKeepalive = async (id: string) => {
+    const current = coreMemories.find(m => m.id === id);
+    if (!current) return;
+    const next = !(current.forKeepalive ?? true);
+    setCoreMemories(prev => prev.map(m => m.id === id ? { ...m, forKeepalive: next } : m));
+    await supabase.from('memories_core').update({ for_keepalive: next }).eq('id', id);
   };
 
   const deleteCoreMemory = async (id: string) => {
@@ -1753,7 +1765,7 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       socialPosts, addPost, updatePost, deletePost, memos, addMemo,
       capsules, addCapsule, updateCapsule, deleteCapsule, refetchCapsules, loadCapsuleAudio,
       recommendations, addRecommendation, updateRecommendation, deleteRecommendation,
-      coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled,
+      coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled, toggleCoreMemoryForKeepalive,
       chatArchives, importArchive, loadArchiveMessages, updateArchiveTitle, updateArchiveMessage, deleteArchive, deleteArchiveMessage, toggleArchiveFavorite,
       activeMode, setMode, isNavHidden, setNavHidden, syncError, profiles, profilesLoaded, updateProfile, messagesLoaded,
       personaCards, addPersonaCard, updatePersonaCard, deletePersonaCard, 

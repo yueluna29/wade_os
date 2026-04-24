@@ -226,6 +226,11 @@ export interface CoreMemory {
   tags?: string[]; // NEW: Tags for classification
   isActive: boolean;
   enabled: boolean; // Whether AI can read this memory
+  // Independent keepalive flag. Chat/social/XRay readers IGNORE this —
+  // they filter on isActive only. Keepalive reads this so Luna can mute
+  // certain memories (e.g. RP-specific ones) during Wade's autonomous wakes
+  // without hiding them from chat.
+  forKeepalive?: boolean;
   createdAt: number;
 }
 
@@ -466,6 +471,7 @@ export interface GlobalState {
   updateCoreMemory: (id: string, title: string, content: string, tags?: string[]) => Promise<void>;
   deleteCoreMemory: (id: string) => Promise<void>;
   toggleCoreMemoryEnabled: (id: string) => Promise<void>;
+  toggleCoreMemoryForKeepalive: (id: string) => Promise<void>;
   chatArchives: ChatArchive[];
   importArchive: (title: string, fileContent: string) => Promise<number>;
   loadArchiveMessages: (archiveId: string) => Promise<ArchiveMessage[]>;

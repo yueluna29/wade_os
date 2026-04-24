@@ -430,10 +430,14 @@ async function getRecentMemories(limit = 5) {
 // full active set (not a limit) because this is a small, intentional,
 // always-on canon, not a paginated pool.
 async function getMemoryBankCore() {
+  // for_keepalive is the independent keepalive mute. Chat/social readers
+  // don't look at this column — they filter on is_active only — so flipping
+  // for_keepalive never changes what Wade sees in a live conversation.
   const { data } = await supabase
     .from('memories_core')
     .select('title, content, category')
     .eq('is_active', true)
+    .eq('for_keepalive', true)
     .order('created_at', { ascending: true });
   return data || [];
 }

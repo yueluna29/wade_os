@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 export const MemoryBank: React.FC = () => {
-  const { coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled } = useStore();
+  const { coreMemories, addCoreMemory, updateCoreMemory, deleteCoreMemory, toggleCoreMemoryEnabled, toggleCoreMemoryForKeepalive } = useStore();
 
   // Core Memory State
   const [newMemoryTitle, setNewMemoryTitle] = useState('');
@@ -243,12 +243,24 @@ export const MemoryBank: React.FC = () => {
                   <div className="relative p-4 flex h-full">
                     {/* Left Column: Icon + Actions */}
                     <div className="flex flex-col items-center gap-2 mr-3 shrink-0">
-                      {/* Icon Box - Static Red */}
-                      <div 
-                        className="w-8 h-8 rounded-xl flex items-center justify-center text-base shadow-sm bg-gradient-to-br from-wade-accent to-wade-border-light text-white shadow-wade-accent/20"
+                      {/* Brain toggle — bright = Wade remembers this during keepalive.
+                          Dim = only chat/social remember it, not keepalive.
+                          Chat filtering is driven by isActive (handled elsewhere)
+                          and is unaffected by this toggle. */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCoreMemoryForKeepalive(mem.id);
+                        }}
+                        title={(mem.forKeepalive ?? true) ? 'Wade remembers this when he wakes up. Click to mute for keepalive.' : 'Muted during keepalive. Click to let Wade remember this on wake.'}
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shadow-sm transition-all ${
+                          (mem.forKeepalive ?? true)
+                            ? 'bg-gradient-to-br from-wade-accent to-wade-border-light text-white shadow-wade-accent/20'
+                            : 'bg-wade-bg-base text-wade-text-muted/50 border border-wade-border hover:border-wade-accent/40'
+                        }`}
                       >
                         <Icons.Brain />
-                      </div>
+                      </button>
 
                       {/* Actions (Hidden by default, appear below icon) */}
                       <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
