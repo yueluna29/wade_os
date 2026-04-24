@@ -1017,7 +1017,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const [confirmingBatchDelete, setConfirmingBatchDelete] = useState(false);
   const batchDeleteTimerRef = useRef<number | null>(null);
   // True between Luna's send and Wade starting to reply — i.e. during the
-  // 20s SMS debounce window. Separate from `wadeStatus` because the typing
+  // 10s SMS debounce window. Separate from `wadeStatus` because the typing
   // indicator should NOT show while we're just holding off the AI call;
   // Wade only "types" once the call actually fires. Drives the stop button
   // so Luna can cancel a pending reply before Wade ever gets called.
@@ -1231,7 +1231,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // would miss the message we just sent.
   const messagesRef = useRef<StoreMessage[]>(storeMessages);
   useEffect(() => { messagesRef.current = storeMessages; }, [storeMessages]);
-  // SMS debounce: each Luna send (re)starts a 20s timer. Wade only replies
+  // SMS debounce: each Luna send (re)starts a 10s timer. Wade only replies
   // once Luna has been silent for the full window — so she can send, delete,
   // correct typos, fire off follow-ups, without triggering multiple AI calls.
   const smsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1406,7 +1406,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     // Cancel an in-flight reply: flip the abort flag (so when the LLM call
     // returns we just drop the response) and clear all pending bubble
     // setTimeouts (so mid-stagger stops show nothing new). Also kill the
-    // 20s debounce in case Luna hit stop before Wade even started typing
+    // 10s debounce in case Luna hit stop before Wade even started typing
     // — this is the "反悔" path: she sent, then changed her mind.
     if (abortRef.current) {
       abortRef.current.aborted = true;
@@ -2059,7 +2059,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     // real session under them, which the UI has no way to surface. Block it.
     if (isShowcase) return;
     // Block only while the AI call is actively in flight / staggering out
-    // bubbles. During the 20s debounce window the button stays active so Luna
+    // bubbles. During the 10s debounce window the button stays active so Luna
     // can fire off follow-ups, corrections, deletes.
     if (wadeStatus === 'typing') return;
 
@@ -2215,7 +2215,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       }
     }
 
-    // Each Luna send resets the 20s window. Wade only fires when Luna has
+    // Each Luna send resets the 10s window. Wade only fires when Luna has
     // been silent for the full duration — so typos + follow-ups + deletes
     // don't each spawn their own AI call.
     if (smsDebounceRef.current) clearTimeout(smsDebounceRef.current);
@@ -2226,7 +2226,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       setPendingReply(false);
       setWadeStatus('typing');
       triggerAIResponse(sessionIdForReply);
-    }, 20000);
+    }, 10000);
   };
 
   // Per-item renderer passed into Virtuoso. All the closures this needs
@@ -3085,7 +3085,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
               {/* Button role resolves by context:
                   - AI actively replying → always Stop (send is blocked anyway)
                   - Pending + empty input → Stop (反悔 path — cancel before Wade fires)
-                  - Pending + Luna still typing → Send (adds another bubble, resets 20s)
+                  - Pending + Luna still typing → Send (adds another bubble, resets 10s)
                   - Idle → Send (disabled unless input non-empty). */}
               {(wadeStatus === 'typing' || (pendingReply && !inputText.trim())) ? (
                 <button
