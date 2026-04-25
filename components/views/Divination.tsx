@@ -106,7 +106,7 @@ export const Divination: React.FC = () => {
 
           <div className="mt-8 flex flex-row gap-4 md:gap-8 items-stretch">
             <div className="w-[40%] max-w-[160px] md:max-w-[240px] lg:max-w-[280px] shrink-0 relative">
-              <div className="rounded-xl md:rounded-2xl overflow-hidden shadow-md border-2 md:border-4 border-wade-bg-app relative z-10 h-full">
+              <div className="rounded-xl md:rounded-2xl overflow-hidden shadow-md ring-2 md:ring-4 ring-wade-bg-app relative z-10 h-full">
                 <img src={todayCardImage} alt="The High Priestess" className="w-full h-full object-cover" />
               </div>
             </div>
