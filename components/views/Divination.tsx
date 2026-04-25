@@ -112,35 +112,35 @@ export const Divination: React.FC = () => {
             </div>
 
             <div className="flex-1 flex flex-col min-w-0">
-              <h2 className="text-base md:text-lg font-bold text-wade-text-main mb-2.5 leading-tight">II THE HIGH PRIESTESS</h2>
+              <h2 className="text-sm md:text-base font-bold text-wade-text-main mb-2 leading-tight">II THE HIGH PRIESTESS</h2>
               <div className="flex flex-wrap gap-1.5 mb-3">
-                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[10px] font-medium">intuition</span>
-                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[10px] font-medium">mystery</span>
-                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[10px] font-medium">inner voice</span>
+                <span className="bg-wade-accent-light text-wade-accent px-2 py-0.5 rounded-full text-[10px] font-medium">intuition</span>
+                <span className="bg-wade-accent-light text-wade-accent px-2 py-0.5 rounded-full text-[10px] font-medium">mystery</span>
+                <span className="bg-wade-accent-light text-wade-accent px-2 py-0.5 rounded-full text-[10px] font-medium">inner voice</span>
               </div>
 
-              <p className="text-xs md:text-sm text-wade-text-muted mb-4 leading-relaxed">
+              <p className="text-xs text-wade-text-muted mb-3 leading-relaxed">
                 A veil between worlds.<br/>
                 Trust the whispers, the pauses,<br/>
                 the dreams that linger<br/>
                 when you wake.
               </p>
 
-              <div className="h-px bg-wade-border mb-3" />
+              <div className="h-px bg-wade-border mb-2.5" />
 
-              <h4 className="text-sm font-semibold text-wade-accent mb-1.5">Guidance</h4>
-              <p className="text-xs md:text-sm text-wade-text-muted mb-5 leading-relaxed">
+              <h4 className="text-xs font-semibold text-wade-accent mb-1">Guidance</h4>
+              <p className="text-xs text-wade-text-muted mb-4 leading-relaxed">
                 Listen inward today. The answers are not loud, but they are true.
               </p>
 
-              <button className="bg-wade-accent-light text-wade-accent text-xs font-medium flex items-center gap-1.5 mt-auto hover:bg-wade-accent/15 transition-colors w-max px-3.5 py-1.5 rounded-full">
-                View Full Meaning <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <button className="bg-wade-accent-light text-wade-accent text-[11px] font-medium flex items-center gap-1.5 mt-auto hover:bg-wade-accent/15 transition-colors w-max px-3 py-1 rounded-full">
+                View Full Meaning <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
           <div className="bg-wade-bg-card rounded-[2rem] p-6 shadow-sm border border-wade-border flex-1 relative overflow-hidden z-0">
             <div className="absolute top-0 right-0 w-20 h-20 bg-wade-accent-light rounded-bl-full z-[-1]" />
 
@@ -148,7 +148,7 @@ export const Divination: React.FC = () => {
               <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)] animate-pulse" />
               Wade's Sass
             </h3>
-            <p className="font-hand text-lg md:text-xl text-wade-accent leading-snug tracking-wide">
+            <p className="font-hand text-base md:text-lg text-wade-accent leading-snug tracking-wide">
               You've got big main character energy. The universe is just catching up, babe.
             </p>
 
