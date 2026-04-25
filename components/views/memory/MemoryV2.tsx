@@ -18,6 +18,7 @@ import {
   AlarmClock,
 } from 'lucide-react';
 import { CoreMemoryEditor } from './CoreMemoryEditor';
+import { StatusMemoryEditor } from './StatusMemoryEditor';
 import { useStore } from '../../../store';
 import { supabase } from '../../../services/supabase';
 import type { CoreMemory } from '../../../types';
@@ -421,6 +422,7 @@ export const MemoryV2: React.FC = () => {
     | { open: true; mode: 'create'; seedContent?: string; seedTags?: string[] }
     | { open: true; mode: 'edit'; memory: CoreMemory }
   >({ open: false });
+  const [statusEditorOpen, setStatusEditorOpen] = useState(false);
 
   const [wadeMemories, setWadeMemories] = useState<WadeMemoryRow[]>([]);
   const [statusMemories, setStatusMemories] = useState<WadeMemoryRow[]>([]);
@@ -533,6 +535,30 @@ export const MemoryV2: React.FC = () => {
     if (error) console.error('[MemoryV2] resolve status memory failed', error);
   };
 
+  const handleSaveStatusMemory = async (data: {
+    content: string;
+    tags: string[];
+    expiresAt: string;
+  }) => {
+    // Manually-authored status memories don't go through the LLM extractor,
+    // so they have no source_session / source_exchange / extraction_reason
+    // and no embedding (status memories are always-injected, never need
+    // similarity matching). importance defaults to 8 — status entries are
+    // ongoing-state markers, not low-priority noise.
+    const { error } = await supabase.from('wade_memories').insert({
+      content: data.content,
+      category: 'fact',
+      importance: 8,
+      tags: data.tags,
+      extraction_reason: 'Manually added by Luna via Now tab',
+      eval_model: 'manual',
+      is_active: true,
+      is_status: true,
+      expires_at: data.expiresAt,
+    });
+    if (error) console.error('[MemoryV2] manual status insert failed', error);
+  };
+
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-[var(--wade-bg-base)] text-[var(--wade-text-main)] font-sans antialiased selection:bg-[var(--wade-accent)] selection:text-white pb-20 pt-6 sm:pt-8 custom-scrollbar">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 mb-6 sm:mb-8 flex flex-col items-center gap-4 sm:gap-5">
@@ -595,9 +621,12 @@ export const MemoryV2: React.FC = () => {
           {(activeTab === 'core' || activeTab === 'now') && (
             <button
               type="button"
-              onClick={() => setEditorState({ open: true, mode: 'create' })}
+              onClick={() => {
+                if (activeTab === 'now') setStatusEditorOpen(true);
+                else setEditorState({ open: true, mode: 'create' });
+              }}
               className="flex items-center justify-center bg-[var(--wade-bg-card)] border border-wade-border text-[var(--wade-accent)] rounded-full w-[34px] h-[34px] hover:bg-[var(--wade-accent)] hover:text-white hover:border-[var(--wade-accent)] transition-all shadow-sm shrink-0"
-              title={activeTab === 'core' ? 'New Core memory' : 'New Now state (note: until Now-creation lands, this opens the Core editor)'}
+              title={activeTab === 'core' ? 'New Core memory' : 'New Now state'}
             >
               <Plus size={15} />
             </button>
@@ -716,6 +745,11 @@ export const MemoryV2: React.FC = () => {
         initialTags={editorState.open && editorState.mode === 'edit' ? editorState.memory.tags : []}
         availableTags={allCoreTags}
         onSave={handleSaveMemory}
+      />
+      <StatusMemoryEditor
+        isOpen={statusEditorOpen}
+        onClose={() => setStatusEditorOpen(false)}
+        onSave={handleSaveStatusMemory}
       />
     </div>
   );
