@@ -3,8 +3,8 @@ import { Moon, Star, Wine, Swords, Drama } from 'lucide-react';
 import { driveUrlFromId } from '../../services/gdrive';
 
 export const Divination: React.FC = () => {
-  const [heroImage, setHeroImage] = useState(driveUrlFromId('1tsqZOqiWcwRKXCWnArPunfsFarZdak4U'));
-  const [todayCardImage, setTodayCardImage] = useState(driveUrlFromId('1kRONPb_9VLbEBbz_B-ITRn3ILPDNrABe'));
+  const [heroImage, setHeroImage] = useState(driveUrlFromId('1kRXHtMVq3CYAt1OLA0kL7IjuDY2RM87e'));
+  const [todayCardImage, setTodayCardImage] = useState(driveUrlFromId('1o7sNOxz6Fw7gVcchgq_pgFshQ0_i5N9z'));
 
   const recentReadings = [
     { name: 'The Star',       date: 'Apr 25, 2026', quote: 'Hope is a quiet revolution.',           Icon: Star },
