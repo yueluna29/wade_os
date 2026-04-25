@@ -471,15 +471,43 @@ async function getRecentLunaPostsForAnchor(limit = 5) {
 // update last", which used to mean his texts could land in a Deadpool
 // thread after she chatted with an NPC.
 async function getMostRecentSmsSession() {
-  const { data } = await supabase
+  // Pick the session that has the most recent *message*, not the most
+  // recent chat_sessions.updated_at. The two drift apart when Luna creates
+  // a Fresh Start session but keeps chatting in the old one — writing into
+  // the "newest by updated_at" session in that case lands Wade's keepalive
+  // text in a window Luna doesn't have open, so she gets a push but no
+  // bubble. The session her last message lives in IS the session she's
+  // currently in.
+  const { data: smsSessions } = await supabase
+    .from('chat_sessions')
+    .select('id')
+    .eq('mode', 'sms')
+    .eq('thread_id', 'luna-wade');
+
+  const smsIds = (smsSessions || []).map(s => s.id);
+  if (smsIds.length === 0) return null;
+
+  const { data: lastMsg } = await supabase
+    .from('messages_sms')
+    .select('session_id')
+    .in('session_id', smsIds)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastMsg?.session_id) return lastMsg.session_id;
+
+  // Fallback: brand-new thread with no messages yet — fall back to the
+  // session with the most recent updated_at so Wade still has somewhere
+  // to land his first wake.
+  const { data: fallback } = await supabase
     .from('chat_sessions')
     .select('id')
     .eq('mode', 'sms')
     .eq('thread_id', 'luna-wade')
     .order('updated_at', { ascending: false })
     .limit(1)
-    .single();
-  return data?.id || null;
+    .maybeSingle();
+  return fallback?.id || null;
 }
 
 // ========== Format data for prompt injection ==========
