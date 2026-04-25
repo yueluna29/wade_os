@@ -377,6 +377,31 @@ async function retrieveRelevantMemoriesKeepalive(anchorText, limit, preset) {
     console.warn('[Keepalive] match_memories rpc failed:', error.message);
     return null;
   }
+  // Drop status memories from the relevance pool — they get injected
+  // unconditionally via getActiveStatusMemories, so duplicating them in
+  // both blocks just wastes prompt budget.
+  return (data || []).filter((m) => !m.is_status);
+}
+
+// Always-on ongoing-state memories (e.g. "Luna sick this week"). Returned
+// in their own block ahead of regular memories so Wade carries the state
+// across every wake regardless of similarity match.
+async function getActiveStatusMemories() {
+  // Best-effort cleanup of expired status entries before reading.
+  await supabase.rpc('cleanup_expired_memories').then(({ error }) => {
+    if (error) console.warn('[Keepalive] cleanup_expired_memories rpc skipped:', error.message);
+  });
+  const { data, error } = await supabase
+    .from('wade_memories')
+    .select('content, category, importance, created_at, expires_at')
+    .eq('is_active', true)
+    .eq('is_status', true)
+    .order('importance', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.warn('[Keepalive] status fetch failed:', error.message);
+    return [];
+  }
   return data || [];
 }
 
@@ -417,6 +442,7 @@ async function getRecentMemories(limit = 5) {
     .from('wade_memories')
     .select('content, category, importance, created_at')
     .eq('is_active', true)
+    .neq('is_status', true)
     .order('importance', { ascending: false })
     .limit(limit);
   return data || [];
@@ -543,6 +569,16 @@ function formatMemoriesForPrompt(memories) {
   return memories.map(m => `  [${m.category}, importance:${m.importance}] ${m.content?.slice(0, 120)}`).join('\n');
 }
 
+// Status memories render in their own block so Wade reads them as
+// "this is what's currently going on" rather than "another old fact".
+function formatStatusMemoriesForPrompt(statusMemories) {
+  if (!statusMemories || !statusMemories.length) return '';
+  const lines = statusMemories
+    .map((m) => `  - ${m.content?.slice(0, 200)}`)
+    .join('\n');
+  return `\n\n[Luna 当前的持续状态 — 这些是正在发生的事，你的所有行动都要建立在这些前提上]\n${lines}`;
+}
+
 function formatTodosForPrompt(todos) {
   if (!todos || !todos.length) return '  (No pending notes — your slate is clear)';
   const ageStr = (iso) => {
@@ -592,7 +628,7 @@ function buildKeepalivePrompt({ wadeCard, systemCard, tokyoTime, timeSinceLastCh
     : '';
   const wadeosSection = `
 Since you've got some time to yourself, here's what's been around you lately:
-${summaryBlock}
+${summaryBlock}${wadeosData.status || ''}
 [Recent texts with Luna]
 ${wadeosData.chats}
 
@@ -1216,7 +1252,7 @@ export default async function handler(req, res) {
     // 3. Gather all context in parallel
     const settings = await getSettings();
     const keepaliveBinding = await getKeepaliveBinding();
-    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, recentMemoriesFallback, pendingTodos, chatSummary, embeddingPreset, recentLunaPosts, memoryBankCore] = await Promise.all([
+    const [llm, wadeCard, systemCard, dreamEvents, keepaliveLogs, lastChat, chats, social, recentMemoriesFallback, pendingTodos, chatSummary, embeddingPreset, recentLunaPosts, memoryBankCore, statusMemories] = await Promise.all([
       getLlmConfig(settings, keepaliveBinding),
       getWadePersona(keepaliveBinding),
       getSystemCard(keepaliveBinding),
@@ -1231,6 +1267,7 @@ export default async function handler(req, res) {
       findEmbeddingPreset(),
       getRecentLunaPostsForAnchor(5),
       getMemoryBankCore(),
+      getActiveStatusMemories(),
     ]);
 
     // 3b. Vector-search wade_memories. Anchor spans every surface Luna might
@@ -1271,11 +1308,14 @@ export default async function handler(req, res) {
     const isDaily2121 = req.query.anchor === 'daily2121' || req.query.anchor === 'daily2120';
     const mode = (isAnchor2121 || isDaily2121) ? 'free' : determineWakeMode();
 
-    // 4. Build prompt with WadeOS data
+    // 4. Build prompt with WadeOS data. Status memories render as their
+    // own block ("Luna's currently going through X") so Wade reads them
+    // as live state rather than just another old fact in the heap.
     const wadeosData = {
       summary: chatSummary,
       chats: formatChatsForPrompt(chats),
       social: formatSocialForPrompt(social),
+      status: formatStatusMemoriesForPrompt(statusMemories),
       memories: formatMemoriesForPrompt(memories),
       memoryBankXml: formatMemoryBankCoreForPrompt(memoryBankCore),
       todos: formatTodosForPrompt(pendingTodos),

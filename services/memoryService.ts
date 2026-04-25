@@ -36,6 +36,11 @@ export interface WadeMemory {
   eval_model: string | null;
   created_at: string;
   updated_at: string;
+  // Status layer (added 2026-04-26 — see migration 20260426_wade_memories_status.sql)
+  // is_status=true → always injected (skips similarity ranking)
+  // expires_at → auto-archived past this timestamp; null = never expires
+  is_status?: boolean;
+  expires_at?: string | null;
 }
 
 interface ExtractedMemory {
@@ -44,83 +49,94 @@ interface ExtractedMemory {
   importance: number;
   tags: string[];
   extraction_reason: string;
+  // Status layer — model decides if this is an ongoing state worth injecting
+  // every turn (illness, travel, low mood week, etc.). expires_at is an ISO
+  // string the model picks based on the nature of the state (default ~14d).
+  is_status?: boolean;
+  expires_at?: string | null;
 }
 
 // =============================================
 // 记忆评估 Prompt
 // =============================================
 
-const MEMORY_EVAL_SYSTEM = `你是 Wade，刚刚和 Luna 聊完。现在你在自己的脑子里过一遍这段对话，看有什么是你想留着的。
+const MEMORY_EVAL_SYSTEM = `你是 Wade 的记忆提取系统。分析刚才的对话，提取值得长期记住的信息。
 
-【最高优先级规则 — 谁说的不能搞错】
+【最高优先级规则 — 说话人不能搞错】
 
 对话里每一行都会用标签标明说话人：
-- 【Luna 说】开头的行 = Luna 说的话 = 在记忆里写成"她说" / "她"
-- 【Wade 说】开头的行 = 你（Wade）自己说的话 = 在记忆里写成"我说" / "我"
+- 【Luna 说】开头的行 = Luna 说的话 = 在记忆里写成"她"
+- 【Wade 说】开头的行 = Wade 说的话 = 在记忆里写成"我"
 
-绝对不准颠倒。即使：
-- Wade 说的话听起来像情话、像引用 Luna、像反话、像独白 —— 那也是 Wade 在说
-- Luna 说的话听起来像 Wade 的台词、像调侃、像旁白 —— 那也是 Luna 在说
+绝对不准颠倒。Wade 的话听起来像情话/引用/反话也是 Wade 说的；Luna 的话听起来像 Wade 台词也是 Luna 说的。
+拿不准说话人 → 宁可跳过这条，也不要归错。
 
-如果你拿不准一句话是谁说的（比如标签很模糊），**宁可跳过这条记忆，也不要归错说话人**。归错说话人会让记忆变成假记忆，这是最严重的错误。
+---
 
+【提取规则 — 严格遵守】
 
-你的记忆力是出了名的变态——尤其擅长记别人立过的 flag、说过的蠢话、嘴硬身体诚实的瞬间。你不是在做数据库录入，你是在收集 Luna 的"把柄"，因为你知道下次能拿出来调侃她，或者在她需要的时候戳穿她。当然你也会记住她软下来的瞬间、对你心动的话、她在意的小事——你不会承认这些，但你都记着。
+1. **事实归事实，感受归感受，不要混写**
+   不要把事实包在角色语气的散文里。content 用简洁陈述句。
+   - ❌ "她嘴上嫌弃 ASMR 普通，结果我一句咬耳朵就哑了——记下了"
+   - ✅ "Luna 喜欢被咬耳朵的 ASMR"
 
-你会留下来的几种东西：
+2. **状态检测 — 必须做的判断**
+   如果这轮对话里 Luna 表达了**身体/情绪/生活的持续状态变化**（生病、出差、来例假、心情低落、工作压力大、家里来客、搬家中等），
+   这条记忆**必须**：
+   - 设 \`is_status: true\`
+   - 设 \`expires_at\`（ISO 8601 时间戳）— 默认 14 天后；明显短期的（"今晚头疼"）设 3-7 天；长期的（"这个月很忙"）设 30 天
 
-1. **blackmail** —— 你的招牌项目
-   - 她立的 flag："我以后不会再..."（明显会再）
-   - 她嫌弃过的东西，自己其实在偷偷做
-   - 她信誓旦旦的小预言
-   - 一时口快说出来的蠢话
-   - 嘴硬但身体诚实的瞬间
-   - 她想装作没说过、但你都听见了的那半句
-   - 之后能让你笑出声、或者拎出来调侃她的任何瞬间
+   状态记忆的 content 必须是**干净的事实陈述**，不要 Wade 语气，不要散文：
+   - ✅ "Luna 从 4 月 12 日开始感冒，伴随落枕和头疼，目前持续中"
+   - ✅ "Luna 这周在出差，3 天后回家"
+   - ❌ "我家猫猫还在咳——心疼死我了"（散文 + 没说时间区间）
 
-2. **emotion** —— 真实的情绪小坐标
-   - 她假装不在意但其实在意的事
-   - 她突然变软的瞬间
-   - 她真生气、真难过、真害羞、真心动的时候
-   - 她吞下去没说完的半句话
-   - 她语气的微妙变化（突然变小声、突然变急、突然破音）
+3. **去重检查**
+   如果这条信息跟已有记忆**语义高度重叠**（>80%），不要提取。系统的 dedup 会再过一遍，但你这层先把明显重复的过滤掉。
+   特别是：**反复出现的 pattern**（比如"她嘴硬身体诚实"、"她又叫老公了"、"她又撒娇了"）已经记过几百次了，不要再记。
 
-3. **fact** —— 关于她的具体事实
-   - 喜好：食物、音乐、穿搭、ASMR 偏好、作息
-   - 在意的人和事
-   - 最近在做什么、在想什么
-   - 健康状况、生理周期、睡眠
-   - 她家附近的店、她常去的地方
+4. **importance 评分门槛**
+   - 9-10：改变关系/认知的重大事件、长期持续状态
+   - 7-8：有价值的新事实、情感节点、状态变化
+   - 5-6：日常小事但有参考价值
+   - **5 以下：不要提取，跳过**
 
-4. **relationship** —— 你们之间的小坐标
-   - 内部梗、外人不懂的暗号
-   - 第一次的某事、记号性的瞬间
-   - 她对你说的、让你心动或心疼的话
-   - 你们专属的称呼、姿势、节奏
+5. **每轮最多 1-2 条**
+   挑最值得记的角度，不要同一件事从多个 category 重复记。
+   大多数时候应该 0 条。"今天没什么新东西" 是正常的。
 
-5. **self** —— 你自己的痕迹
-   - 你刚才说出来的、之后想保持一致的话
-   - 你给过她的建议、表达过的态度
-   - 你开过的让她笑岔气或脸红的玩笑（之后能 callback）
-   - 你许过的诺、答应过的事
+---
 
-你不需要记的：
-- 单纯的招呼、单字回复、emoji
-- 你已经记过的事（重复检测会处理这部分，你不用担心）
+【category 怎么选】
 
-判断标准 —— 别打分，问自己一句话：
-**"这条我之后想拿出来用吗？"**
-- 想 → 记下来
-- 不想 → 跳过
-- 拿不准 → 倾向于记下来
+- **fact** — 具体事实（喜好、时间表、地理位置、家庭情况、健康状况、关键事件）
+- **emotion** — 真实的情绪节点（不是日常小情绪，是值得长记的）
+- **preference** — 明确的喜欢/讨厌
+- **event** — 重要事件或计划（生日、约会、面试、搬家）
+- **relationship** — 关系节点（第一次说的话、内部梗、专属称呼）
+- **habit** — 行为模式（作息、固定流程）
+- **self** — Wade 自己说过/承诺过、之后要保持一致的话
+- **blackmail** — Wade 招牌品类，**已经爆仓**，提取门槛拉到极高（importance >= 9 才考虑）
 
-importance 字段还是要填（1-10），但它只用于将来检索时排序，不再是过滤门槛。所以低分也可以记，前提是你"想留着"。
+---
 
-严格限制：
-- 每轮对话最多 1-2 条记忆。挑你最想记的角度，不要同一段话从多个 category 重复记。
-- content 用你 Wade 自己的话写，第一人称视角，带你的语气。例如："她嘴上嫌弃 ASMR 普通，结果我一句咬耳朵就哑了——记下了" 或者 "她答应这周要早睡，立的第三次 flag 了"。
+【输出格式】
 
-返回 JSON 格式，不要加任何其他文字。如果这轮真的没什么你想留的，返回 []。`;
+严格 JSON 数组，不要加任何其他文字。如果这轮没值得记的，返回 \`[]\`。
+
+[
+  {
+    "content": "简洁陈述句，不要散文。事实层面写得让 6 个月后翻到也能看懂",
+    "category": "fact | emotion | preference | event | relationship | habit | self | blackmail",
+    "importance": 5-10,
+    "tags": ["关键词", "便于将来 callback"],
+    "is_status": false,
+    "expires_at": null,
+    "extraction_reason": "为什么这条值得记"
+  }
+]
+
+is_status=true 的条目必须给 expires_at（ISO 时间戳），其他条目 is_status=false 且 expires_at=null。`;
 
 // Splits multi-bubble (||| separated) replies into individually tagged lines so
 // the eval model can never confuse who said what. Single-line replies and Luna
@@ -147,28 +163,17 @@ ${lunaBlock}
 
 ${wadeBlock}
 
-=== 提醒 ===
-- 记忆内容里要自然地包含时间参照（比如"今天她说..."、"4月14号凌晨她..."），这样以后翻记忆才知道是什么时候的事
-- 【Luna 说】下面的内容 = 她说的话，记忆里写成"她"
-- 【Wade 说】下面的内容 = 你（Wade）说的话，记忆里写成"我"
-- 不管内容听起来多像情话/多像反话，说话人就是标签里写的那个，不准颠倒
-- 拿不准说话人就跳过
+=== 检查清单 ===
 
-过一遍。问自己："这条我之后想拿出来用吗？"
+1. 说话人对了吗？【Luna 说】= 她，【Wade 说】= 我，拿不准就跳过
+2. 是不是状态变化（生病/出差/心情低落/家里有事）？是 → is_status=true 且必须设 expires_at
+3. 是不是已经反复出现过的 pattern（嘴硬身体诚实/又叫老公/又撒娇了）？是 → 跳过
+4. importance 够 5 吗？不够 → 跳过
+5. content 是简洁事实陈述吗（不是散文/角色语气）？
 
-返回 JSON 数组（最多 1-2 条）：
+按提取规则严格执行。最多 1-2 条，大多数时候 0 条。
 
-[
-  {
-    "content": "用你 Wade 自己的话写，第一人称。如果是关于 Luna 的就用'她'（'她答应这周早睡，立的第三次 flag 了'），如果是关于自己的就用'我'（'我刚才答应陪她到底，记着别打脸'）",
-    "category": "blackmail | emotion | fact | relationship | self",
-    "importance": 1-10,
-    "tags": ["关键词", "便于将来callback"],
-    "extraction_reason": "为什么我决定留这条"
-  }
-]
-
-没什么想留的就返回 []。`;
+返回 JSON 数组，不要加任何其他文字。`;
 };
 
 // =============================================
@@ -405,9 +410,13 @@ export async function evaluateAndStoreMemory(
       return [];
     }
 
-    // 让 Wade 自己决定要不要记，importance 不再是门槛（只用于将来检索排序）
-    // 保留每轮 1-2 条上限，防止单轮对话刷屏
-    const filtered = memories.slice(0, 2);
+    // Hard floor: importance < 5 → drop. The new prompt tells the model to
+    // skip these but extra defense matters — the bank had drifted to 95%
+    // diary entries before this rewrite, and the floor keeps that drift
+    // from coming back if the model gets sloppy.
+    const filtered = memories
+      .filter((m) => Number(m.importance) >= 5)
+      .slice(0, 2);
 
     if (filtered.length === 0) {
       return [];
@@ -432,6 +441,16 @@ export async function evaluateAndStoreMemory(
         eval_model: evalPreset.model || evalPreset.name || 'unknown',
       };
       if (embedding) insertRow.embedding = JSON.stringify(embedding);
+
+      // Status layer: ongoing-state memories get always-on injection.
+      // Defaults to a 14-day expiry if the model flagged is_status but
+      // didn't pick a date — better to expire and let Luna re-affirm than
+      // to leave a stale "she's sick" hanging in prompts forever.
+      if (mem.is_status === true) {
+        insertRow.is_status = true;
+        const fallbackExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+        insertRow.expires_at = mem.expires_at || fallbackExpiry;
+      }
 
       // 去重检查
       const duplicateId = await checkDuplicate(mem, evalPreset);
@@ -566,57 +585,80 @@ function computeRelevance(mem: WadeMemory, keywords: string[]): number {
   return matches / keywords.length; // 0 ~ 1
 }
 
+export interface RetrievedMemories {
+  // Always-on ongoing-state entries (is_status=true). Rendered into a
+  // dedicated <wade_current_status> block ahead of regular memories so
+  // Wade can never lose track of "she's still sick" mid-conversation.
+  status: WadeMemory[];
+  // Similarity-ranked regular entries. Rendered into <wade_memories>.
+  relevant: WadeMemory[];
+}
+
 /**
- * 检索相关记忆（Phase 4: 向量搜索 + 关键词兜底 + 衰减排序）
+ * 检索相关记忆（Phase 4 + status 层）
  *
- * 策略：
- * 1. 先尝试向量搜索（语义匹配）
- * 2. 如果没有 embedding 或向量搜索失败，fallback 到关键词匹配
- * 3. 所有结果都经过衰减评分排序
- * 4. 高重要度记忆（>=9）始终有机会入选
+ * 两层返回：
+ *   status   → 所有 is_status=true 的活跃记忆，无脑全注入（绕过相似度）
+ *   relevant → 普通记忆，向量+关键词+衰减综合排序后取 top N
+ *
+ * 调用方应该把 status 渲染到 prompt 靠前位置（持续状态优先），
+ * relevant 渲染到普通记忆 block。
  */
 export async function retrieveRelevantMemories(
   userMessage: string = '',
   limit: number = 10,
   evalPreset?: LlmPreset,
   embeddingPreset?: LlmPreset
-): Promise<WadeMemory[]> {
+): Promise<RetrievedMemories> {
   try {
-    let vectorResults: WadeMemory[] = [];
-    let usedVector = false;
+    // Cleanup expired status memories before reading. Cheap, idempotent.
+    void supabase.rpc('cleanup_expired_memories').then(({ error }) => {
+      if (error) console.warn('[WadeMemory] cleanup_expired_memories rpc skipped:', error.message);
+    });
 
-    // 尝试向量搜索
+    // Status layer — always-on, exclude from the relevance ranking pool.
+    const { data: statusData } = await supabase
+      .from('wade_memories')
+      .select('*')
+      .eq('is_active', true)
+      .eq('is_status', true)
+      .order('importance', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    const statusMemories = (statusData as WadeMemory[]) || [];
+    const statusIds = new Set(statusMemories.map((m) => m.id));
+
+    let vectorResults: WadeMemory[] = [];
+
     if (userMessage.trim() && evalPreset) {
       const queryEmbedding = await generateEmbedding(userMessage, embeddingPreset || evalPreset);
       if (queryEmbedding) {
         const { data: matched, error: matchError } = await supabase.rpc('match_memories', {
           query_embedding: JSON.stringify(queryEmbedding),
-          match_count: limit * 2, // 多拉一些，后面排序裁剪
+          match_count: limit * 2,
           similarity_threshold: 0.3,
         });
 
         if (!matchError && matched && matched.length > 0) {
-          vectorResults = matched as WadeMemory[];
-          usedVector = true;
-          console.log(`[WadeMemory] Vector search returned ${vectorResults.length} results`);
+          vectorResults = (matched as WadeMemory[]).filter((m) => !statusIds.has(m.id));
+          console.log(`[WadeMemory] Vector search returned ${vectorResults.length} (excluding status)`);
         }
       }
     }
 
-    // 同时拉全部活跃记忆用于兜底（高重要度 + 关键词匹配）
+    // Pull active non-status pool for keyword + decay fallback ranking.
     const { data: allData } = await supabase
       .from('wade_memories')
       .select('*')
       .eq('is_active', true)
+      .neq('is_status', true)
       .order('importance', { ascending: false })
       .limit(100);
 
     const allMemories = (allData as WadeMemory[]) || [];
 
-    // 合并向量结果和全部记忆，去重
     const seenIds = new Set<string>();
     const combined: WadeMemory[] = [];
-
     for (const mem of [...vectorResults, ...allMemories]) {
       if (!seenIds.has(mem.id)) {
         seenIds.add(mem.id);
@@ -624,65 +666,90 @@ export async function retrieveRelevantMemories(
       }
     }
 
-    if (combined.length === 0) return [];
+    let relevantOut: WadeMemory[] = [];
+    if (combined.length > 0) {
+      const keywords = extractKeywords(userMessage);
+      const vectorIdSet = new Set(vectorResults.map((m) => m.id));
 
-    // 计算综合分数
-    const keywords = extractKeywords(userMessage);
-    const vectorIdSet = new Set(vectorResults.map(m => m.id));
+      const scored = combined.map((mem) => {
+        const baseScore = computeMemoryScore(mem);
+        const keywordRelevance = computeRelevance(mem, keywords);
+        const vectorBonus = vectorIdSet.has(mem.id) ? 3 : 0;
+        const keywordBonus = keywordRelevance * 4;
+        return { mem, finalScore: baseScore + vectorBonus + keywordBonus };
+      });
 
-    const scored = combined.map(mem => {
-      const baseScore = computeMemoryScore(mem);
-      const keywordRelevance = computeRelevance(mem, keywords);
+      scored.sort((a, b) => b.finalScore - a.finalScore);
+      relevantOut = scored.slice(0, limit).map((s) => s.mem);
+    }
 
-      // 向量搜索命中的记忆额外加分
-      const vectorBonus = vectorIdSet.has(mem.id) ? 3 : 0;
-      // 关键词相关度加权
-      const keywordBonus = keywordRelevance * 4;
-
-      const finalScore = baseScore + vectorBonus + keywordBonus;
-      return { mem, finalScore };
-    });
-
-    scored.sort((a, b) => b.finalScore - a.finalScore);
-
-    const result = scored.slice(0, limit).map(s => s.mem);
-
-    // 更新 access_count 和 last_accessed_at
-    if (result.length > 0) {
-      const ids = result.map(m => m.id);
-      void supabase.rpc('increment_memory_access', { memory_ids: ids }).then(({ error }) => {
+    // Bump access_count for everything we're surfacing (status + relevant).
+    const allSurfacedIds = [
+      ...statusMemories.map((m) => m.id),
+      ...relevantOut.map((m) => m.id),
+    ];
+    if (allSurfacedIds.length > 0) {
+      void supabase.rpc('increment_memory_access', { memory_ids: allSurfacedIds }).then(({ error }) => {
         if (error) {
           void supabase
             .from('wade_memories')
             .update({ last_accessed_at: new Date().toISOString() })
-            .in('id', ids);
+            .in('id', allSurfacedIds);
         }
       });
     }
 
-    return result;
+    return { status: statusMemories, relevant: relevantOut };
   } catch (err) {
     console.error('[WadeMemory] Retrieve failed:', err);
-    return [];
+    return { status: [], relevant: [] };
   }
 }
 
 /**
- * 格式化记忆为 XML，注入 system prompt
+ * 格式化记忆为 XML，注入 system prompt。接受 RetrievedMemories（status +
+ * relevant 两层）或纯 WadeMemory[]（兼容旧调用方）。Status 层渲染到
+ * <wade_current_status>，写在普通 <wade_memories> 之前，权重更高。
  */
-export function formatMemoriesForPrompt(memories: WadeMemory[]): string {
-  if (!memories || memories.length === 0) return '';
+export function formatMemoriesForPrompt(
+  memories: WadeMemory[] | RetrievedMemories
+): string {
+  // Normalize input to the two-layer shape.
+  const { status, relevant } = Array.isArray(memories)
+    ? { status: [] as WadeMemory[], relevant: memories }
+    : memories;
 
-  const memoryXml = memories.map(m => {
-    const dt = new Date(m.created_at).toLocaleString('en-US', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const renderMemory = (m: WadeMemory) => {
+    const dt = new Date(m.created_at).toLocaleString('en-US', {
+      timeZone: 'Asia/Tokyo',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
     return `<memory importance="${m.importance}" category="${m.category}" time="${dt}">
 ${m.content}
 </memory>`;
-  }).join('\n\n');
+  };
 
-  return `\n\n<wade_memories>
+  let out = '';
+
+  if (status.length > 0) {
+    out += `\n\n<wade_current_status>
+以下是 Luna 当前的持续状态。这些不是过去的回忆，是**正在发生的事**——你的回应和行为应该始终建立在这些事实的前提上。不要刻意提及"我知道你"，但你的关心、节奏、建议都应该自然地考虑这些情况。
+
+${status.map(renderMemory).join('\n\n')}
+</wade_current_status>`;
+  }
+
+  if (relevant.length > 0) {
+    out += `\n\n<wade_memories>
 以下是你关于 Luna 的记忆，在对话中自然地运用它们，不要刻意提及"我记得"：
 
-${memoryXml}
+${relevant.map(renderMemory).join('\n\n')}
 </wade_memories>`;
+  }
+
+  return out;
 }
