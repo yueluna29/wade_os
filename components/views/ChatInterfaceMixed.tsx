@@ -524,7 +524,16 @@ function buildDisplayFromStore(
     // them, the sender should use `|||` (handled by splitSmsBubbles before
     // storage, so each stored message is already a single typed chunk).
     const rawText = m.text || '';
-    const trimmed = rawText.trim();
+    // Strip a leading "21:21。 " / "[09:30]" timestamp the model sometimes
+    // prepends despite being told not to (mostly keepalive bubbles, where
+    // `||| [VOICE]` chunking happens server-side). [VOICE] / [POV] only
+    // render correctly when the marker sits at position 0 — a timestamp
+    // ahead of it pushes the marker off and the whole bubble collapses to
+    // plain text. Only applied to Wade's bubbles; Luna may write `21:21`
+    // intentionally (it's the sacred number).
+    const timestampPrefix = /^[\[\(【〔]?\s*\d{1,2}[:：]\d{2}\s*[\]\)】〕]?\s*[。．\.,，:：\-—~～\s]*/u;
+    const cleanedText = m.role === 'Wade' ? rawText.replace(timestampPrefix, '') : rawText;
+    const trimmed = cleanedText.trim();
     const isVoice = m.role === 'Wade' && /^\[VOICE\]/i.test(trimmed);
     const voiceTranscript = isVoice ? trimmed.replace(/^\[VOICE\]\s*/i, '').trim() : '';
     const hasPovMarker = !isVoice && /^\[POV\]/i.test(trimmed);
@@ -536,7 +545,7 @@ function buildDisplayFromStore(
       && trimmed.startsWith('*') && trimmed.endsWith('*') && trimmed.length > 2;
     const isPov = hasPovMarker || asteriskNarration;
 
-    let displayText = rawText;
+    let displayText = cleanedText;
     if (isVoice) {
       displayText = '';
     } else if (hasPovMarker) {
@@ -1390,16 +1399,26 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       `^(?:\\*\\*)?(?:${nameCandidates.join('|')})(?:\\*\\*)?\\s*[:：]\\s*`,
       'i',
     );
-    return merged.map((p) => {
-      // Preserve the [VOICE] / [POV] marker when stripping so `[VOICE] Wade: hi`
-      // becomes `[VOICE] hi` instead of accidentally losing the marker.
-      const markerMatch = p.match(/^(\[(?:VOICE|POV)\]\s*)/i);
-      if (markerMatch) {
-        const rest = p.slice(markerMatch[0].length).replace(namePattern, '');
-        return markerMatch[0] + rest;
-      }
-      return p.replace(namePattern, '');
-    });
+    // Strip a leading "21:21。 " / "[09:30]" / "(7:42)" timestamp the model
+    // sometimes prepends despite the prompt saying not to. Critical because
+    // [VOICE] / [POV] only render correctly when they sit at position 0 —
+    // a timestamp ahead of them turns the whole bubble into plain text.
+    const timestampPrefix = /^[\[\(【〔]?\s*\d{1,2}[:：]\d{2}\s*[\]\)】〕]?\s*[。．\.,，:：\-—~～\s]*/u;
+    return merged
+      .map((p) => {
+        const stripped = p.replace(timestampPrefix, '');
+        // Bubble was nothing but a timestamp — drop it entirely below.
+        if (!stripped.trim()) return '';
+        // Preserve the [VOICE] / [POV] marker when stripping so `[VOICE] Wade: hi`
+        // becomes `[VOICE] hi` instead of accidentally losing the marker.
+        const markerMatch = stripped.match(/^(\[(?:VOICE|POV)\]\s*)/i);
+        if (markerMatch) {
+          const rest = stripped.slice(markerMatch[0].length).replace(namePattern, '');
+          return markerMatch[0] + rest;
+        }
+        return stripped.replace(namePattern, '');
+      })
+      .filter(Boolean);
   };
 
   const stopReply = () => {

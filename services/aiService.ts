@@ -122,6 +122,12 @@ export const buildSystemPromptFromCard = (options: {
   // 5. 模式专属规则（静态 per mode）
   if (chatMode === 'sms') {
     if (smsRulesEffective) prompt += `\n\n${smsRulesEffective}`;
+    // Hard format rule, kept in code (not in Luna's editable card) because
+    // it's about parser behavior, not voice/style. The renderer detects
+    // [VOICE] / [POV] only when the marker sits at position 0 of a bubble;
+    // any leading timestamp ("21:21。") pushes it off and the bubble
+    // collapses into plain text with the marker visible inline.
+    prompt += `\n\n[BUBBLE FORMAT RULE]\nNever prefix a bubble with a timestamp ("21:21", "HH:MM", "[7:42]"). Time is shown by the UI — your job is only the words. If you want a voice bubble, [VOICE] must be the very first thing in the bubble.`;
   } else if (chatMode === 'roleplay') {
     prompt += rpRulesEffective
       ? `\n\n${rpRulesEffective}`
