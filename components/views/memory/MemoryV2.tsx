@@ -392,6 +392,19 @@ export const MemoryV2: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'core' | 'wade' | 'now'>('wade');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<WadeMemoryCategory | 'all'>('all');
+  // Wade tab paginates client-side — 548+ rows render fine in React but
+  // produce a wall-of-cards Luna can't skim. PAGE_SIZE feels right for
+  // mobile two-column grid (≈ one screenful at typical card height).
+  const PAGE_SIZE = 30;
+  const [wadePageLimit, setWadePageLimit] = useState(PAGE_SIZE);
+
+  // Reset visible count whenever the filter narrows the list — otherwise
+  // switching from "all 540" + page 5 to a 3-result search keeps the
+  // useless "Show more" button around. Bumps back to PAGE_SIZE on every
+  // filter change.
+  useEffect(() => {
+    setWadePageLimit(PAGE_SIZE);
+  }, [categoryFilter, searchQuery, activeTab]);
   const [editorState, setEditorState] = useState<
     | { open: false }
     | { open: true; mode: 'create'; seedContent?: string; seedTags?: string[] }
@@ -631,17 +644,33 @@ export const MemoryV2: React.FC = () => {
               Loading...
             </p>
           ) : filteredWade.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:gap-5 animate-fade-in items-stretch">
-              {filteredWade.map((mem) => (
-                <div key={mem.id} className="h-full">
-                  <WadeMemoryCard
-                    memory={mem}
-                    onPin={handlePinWadeToCore}
-                    onDelete={handleDeleteWadeMemory}
-                  />
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:gap-5 animate-fade-in items-stretch">
+                {filteredWade.slice(0, wadePageLimit).map((mem) => (
+                  <div key={mem.id} className="h-full">
+                    <WadeMemoryCard
+                      memory={mem}
+                      onPin={handlePinWadeToCore}
+                      onDelete={handleDeleteWadeMemory}
+                    />
+                  </div>
+                ))}
+              </div>
+              {filteredWade.length > wadePageLimit && (
+                <div className="flex flex-col items-center gap-1 mt-5 sm:mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setWadePageLimit((n) => n + PAGE_SIZE)}
+                    className="px-4 py-2 rounded-full text-[11px] font-bold tracking-wider uppercase bg-[var(--wade-bg-card)] border border-wade-border text-[var(--wade-accent)] hover:bg-[var(--wade-accent)] hover:text-white hover:border-[var(--wade-accent)] transition-all shadow-sm"
+                  >
+                    Show {Math.min(PAGE_SIZE, filteredWade.length - wadePageLimit)} more
+                  </button>
+                  <span className="text-[9px] text-[var(--wade-text-muted)]/60 tracking-wider uppercase">
+                    {wadePageLimit} of {filteredWade.length}
+                  </span>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           ) : (
             <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-12 animate-fade-in">
               No memories in this slice yet.
