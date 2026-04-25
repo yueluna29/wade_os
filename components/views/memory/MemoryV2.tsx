@@ -507,7 +507,7 @@ export const MemoryV2: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--wade-bg-base)] text-[var(--wade-text-main)] font-sans antialiased selection:bg-[var(--wade-accent)] selection:text-white pb-20 pt-6 sm:pt-8 overflow-x-hidden">
+    <div className="h-full overflow-y-auto overflow-x-hidden bg-[var(--wade-bg-base)] text-[var(--wade-text-main)] font-sans antialiased selection:bg-[var(--wade-accent)] selection:text-white pb-20 pt-6 sm:pt-8 custom-scrollbar">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 mb-6 sm:mb-8 flex flex-col items-center gap-4 sm:gap-5">
         <div className="text-center space-y-1">
           <h1
