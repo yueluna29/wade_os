@@ -104,22 +104,22 @@ export const Divination: React.FC = () => {
             </span>
           </div>
 
-          <div className="mt-8 flex flex-row gap-4 md:gap-8">
+          <div className="mt-8 flex flex-row gap-4 md:gap-8 items-stretch">
             <div className="w-[40%] max-w-[160px] md:max-w-[280px] lg:max-w-[360px] shrink-0 relative">
-              <div className="rounded-xl md:rounded-2xl overflow-hidden shadow-md border-2 md:border-4 border-wade-bg-app relative z-10">
-                <img src={todayCardImage} alt="The High Priestess" className="w-full h-auto object-cover" />
+              <div className="rounded-xl md:rounded-2xl overflow-hidden shadow-md border-2 md:border-4 border-wade-bg-app relative z-10 h-full">
+                <img src={todayCardImage} alt="The High Priestess" className="w-full h-full object-cover" />
               </div>
             </div>
 
             <div className="flex-1 flex flex-col min-w-0">
               <h2 className="text-lg md:text-xl font-bold text-wade-text-main mb-3 leading-tight">II THE HIGH PRIESTESS</h2>
-              <div className="flex flex-wrap gap-2 mb-4">
-                <span className="bg-wade-accent-light text-wade-accent px-3 py-1 rounded-full text-xs font-medium">intuition</span>
-                <span className="bg-wade-accent-light text-wade-accent px-3 py-1 rounded-full text-xs font-medium">mystery</span>
-                <span className="bg-wade-accent-light text-wade-accent px-3 py-1 rounded-full text-xs font-medium">inner voice</span>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[11px] font-medium">intuition</span>
+                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[11px] font-medium">mystery</span>
+                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[11px] font-medium">inner voice</span>
               </div>
 
-              <p className="text-sm md:text-base text-wade-text-main mb-5 leading-relaxed">
+              <p className="text-sm text-wade-text-muted mb-5 leading-relaxed">
                 A veil between worlds.<br/>
                 Trust the whispers, the pauses,<br/>
                 the dreams that linger<br/>
@@ -129,11 +129,11 @@ export const Divination: React.FC = () => {
               <div className="h-px bg-wade-border mb-4" />
 
               <h4 className="text-base font-semibold text-wade-accent mb-2">Guidance</h4>
-              <p className="text-sm md:text-base text-wade-text-muted mb-6 leading-relaxed">
+              <p className="text-sm text-wade-text-muted mb-6 leading-relaxed">
                 Listen inward today. The answers are not loud, but they are true.
               </p>
 
-              <button className="border border-wade-accent text-wade-accent text-sm font-medium flex items-center gap-1.5 mt-auto hover:bg-wade-accent-light transition-colors w-max px-4 py-1.5 rounded-full">
+              <button className="bg-wade-accent-light text-wade-accent text-sm font-medium flex items-center gap-1.5 mt-auto hover:bg-wade-accent/15 transition-colors w-max px-4 py-1.5 rounded-full">
                 View Full Meaning <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
