@@ -94,7 +94,7 @@ export const Divination: React.FC = () => {
         ))}
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 items-start">
 
         <div className="lg:col-span-2 bg-wade-bg-card rounded-[2rem] p-5 md:p-6 shadow-sm border border-wade-border relative">
           <div className="absolute top-5 left-5 md:top-6 md:left-6">
@@ -105,7 +105,7 @@ export const Divination: React.FC = () => {
           </div>
 
           <div className="mt-8 flex flex-row gap-4 md:gap-8 items-stretch">
-            <div className="w-[40%] max-w-[160px] md:max-w-[280px] lg:max-w-[360px] shrink-0 relative">
+            <div className="w-[40%] max-w-[160px] md:max-w-[240px] lg:max-w-[280px] shrink-0 relative">
               <div className="rounded-xl md:rounded-2xl overflow-hidden shadow-md border-2 md:border-4 border-wade-bg-app relative z-10 h-full">
                 <img src={todayCardImage} alt="The High Priestess" className="w-full h-full object-cover" />
               </div>
@@ -140,7 +140,7 @@ export const Divination: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:gap-6">
           <div className="bg-wade-bg-card rounded-[2rem] p-6 shadow-sm border border-wade-border flex-1 relative overflow-hidden z-0">
             <div className="absolute top-0 right-0 w-20 h-20 bg-wade-accent-light rounded-bl-full z-[-1]" />
 
@@ -148,7 +148,7 @@ export const Divination: React.FC = () => {
               <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)] animate-pulse" />
               Wade's Sass
             </h3>
-            <p className="font-hand text-2xl text-wade-accent leading-snug tracking-wide">
+            <p className="font-hand text-lg md:text-xl text-wade-accent leading-snug tracking-wide">
               You've got big main character energy. The universe is just catching up, babe.
             </p>
 
