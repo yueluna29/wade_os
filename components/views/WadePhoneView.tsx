@@ -6,9 +6,11 @@ const apps = [
   { icon: Icons.Chat,     label: 'CHAT',    tab: 'wade-chat-list' },
   { icon: Icons.User,     label: 'PERSONA', tab: 'wade-persona' },
   { icon: Icons.Journal,  label: 'JOURNAL', tab: 'journal' },
-  { icon: Icons.Brain,    label: 'BRAIN',   tab: 'memory' },
-  { icon: Icons.Infinity, label: 'RECALL',  tab: 'wade-memory' },
-  { icon: Icons.Sparkles, label: 'NEURAL',  tab: 'memory-v2' },
+  // BRAIN now points at the unified Memory V2 (Core / Wade / Now in one
+  // view). Old `memory` and `wade-memory` routes still resolve in App.tsx
+  // — we just hide the entries here so Luna can restore them if she ever
+  // wants the legacy MemoryBank / MemoryDashboard pages back.
+  { icon: Icons.Brain,    label: 'BRAIN',   tab: 'memory-v2' },
   { icon: Icons.Pin,      label: 'NOTES',   tab: 'wade-todos' },
   { icon: Icons.Target,   label: 'BOUNTY',  tab: '', disabled: true },
   { icon: Icons.Skin,     label: 'THEME',   tab: 'theme-lab' },
