@@ -111,7 +111,6 @@ const CoreMemoryCard: React.FC<{
   memory: CoreMemory;
   onDelete: (id: string) => void;
 }> = ({ memory, onDelete }) => {
-  const [enabled, setEnabled] = useState(memory.enabled);
   const [keepalive, setKeepalive] = useState(memory.useForKeepalive);
   const [isExpanded, setIsExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -199,40 +198,22 @@ const CoreMemoryCard: React.FC<{
             ))}
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4">
-            <button
-              type="button"
-              onClick={() => setEnabled(!enabled)}
-              className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase transition-colors ${
-                enabled
-                  ? 'text-[var(--wade-accent)]'
-                  : 'text-[var(--wade-text-muted)] opacity-50'
-              }`}
-            >
-              {enabled ? (
-                <ToggleRight size={16} className="sm:w-[18px] sm:h-[18px]" />
-              ) : (
-                <ToggleLeft size={16} className="sm:w-[18px] sm:h-[18px]" />
-              )}
-              <span>Active</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setKeepalive(!keepalive)}
-              className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase transition-colors ${
-                keepalive
-                  ? 'text-[var(--wade-accent)]'
-                  : 'text-[var(--wade-text-muted)] opacity-50'
-              }`}
-            >
-              {keepalive ? (
-                <ToggleRight size={16} className="sm:w-[18px] sm:h-[18px]" />
-              ) : (
-                <ToggleLeft size={16} className="sm:w-[18px] sm:h-[18px]" />
-              )}
-              <span>Loop</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setKeepalive(!keepalive)}
+            className={`flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase transition-colors ${
+              keepalive
+                ? 'text-[var(--wade-accent)]'
+                : 'text-[var(--wade-text-muted)] opacity-50'
+            }`}
+          >
+            {keepalive ? (
+              <ToggleRight size={16} className="sm:w-[18px] sm:h-[18px]" />
+            ) : (
+              <ToggleLeft size={16} className="sm:w-[18px] sm:h-[18px]" />
+            )}
+            <span>Keepalive</span>
+          </button>
         </div>
       )}
     </div>
