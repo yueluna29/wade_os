@@ -14,7 +14,7 @@ export const Divination: React.FC = () => {
   ];
 
   return (
-    <div className="h-full overflow-y-auto bg-wade-bg-app px-4 md:px-8 pt-6 pb-24 font-sans relative">
+    <div className="h-full overflow-y-auto bg-wade-bg-app px-4 md:px-8 pt-6 pb-24 relative">
 
       <header className="mb-6 flex justify-between items-start">
         <div>
