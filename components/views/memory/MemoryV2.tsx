@@ -56,20 +56,18 @@ const WADE_CATEGORIES: { id: WadeMemoryCategory | 'all'; label: string }[] = [
   { id: 'blackmail', label: 'Blackmail' },
 ];
 
-// Relative-time formatter that doesn't depend on Intl.RelativeTimeFormat to
-// keep the Memory Bank cards consistent with the rest of the app's terse,
-// English copy. "today / 3d ago / 2w ago / 6mo ago" — past only.
-function formatRelative(iso: string): string {
-  const ts = new Date(iso).getTime();
-  if (!isFinite(ts)) return '';
-  const diffMs = Date.now() - ts;
-  const days = Math.floor(diffMs / 86400000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
+// Absolute-date formatter — Luna asked for concrete dates instead of
+// "3d ago" because relative copy gets ambiguous when scrolling old
+// memories. Format: "Apr 12" within the same year, "Apr 12 '25"
+// otherwise. Tokyo timezone since that's where Luna lives.
+function formatAbsolute(iso: string): string {
+  const d = new Date(iso);
+  if (!isFinite(d.getTime())) return '';
+  const tokyo = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const sameYear = tokyo.getFullYear() === new Date().getFullYear();
+  const month = tokyo.toLocaleString('en-US', { month: 'short' });
+  const day = tokyo.getDate();
+  return sameYear ? `${month} ${day}` : `${month} ${day} '${String(tokyo.getFullYear()).slice(2)}`;
 }
 
 // Days until a future timestamp, never negative; status memories with
@@ -109,39 +107,41 @@ const CoreMemoryCard: React.FC<{
             }`}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={() => onEdit(memory)}
-              className="text-[var(--wade-accent)]/60 hover:text-[var(--wade-accent)] hover:scale-110 transition-all"
-            >
-              <Edit3 size={14} className="sm:w-[15px] sm:h-[15px]" />
-            </button>
             {confirmDelete ? (
-              <div className="flex items-center gap-1.5 bg-red-50 text-red-400 rounded-full px-2 py-0.5 text-[10px] sm:text-[11px] font-medium border border-red-100">
-                Delete?
+              <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase shrink-0">
+                <span className="text-red-400">Delete?</span>
                 <button
                   type="button"
                   onClick={() => onDelete(memory.id)}
-                  className="font-bold hover:text-red-600"
+                  className="text-red-400 hover:opacity-70 transition-opacity"
                 >
                   Yes
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(false)}
-                  className="hover:text-red-600"
+                  className="text-[var(--wade-text-muted)] hover:opacity-70 transition-opacity"
                 >
                   No
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="text-[var(--wade-accent)]/60 hover:text-red-400 hover:scale-110 transition-all"
-              >
-                <Trash2 size={14} className="sm:w-[15px] sm:h-[15px]" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="text-[var(--wade-accent)]/60 hover:text-red-400 hover:scale-110 transition-all"
+                >
+                  <Trash2 size={14} className="sm:w-[15px] sm:h-[15px]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEdit(memory)}
+                  className="text-[var(--wade-accent)]/60 hover:text-[var(--wade-accent)] hover:scale-110 transition-all"
+                >
+                  <Edit3 size={14} className="sm:w-[15px] sm:h-[15px]" />
+                </button>
+              </>
             )}
           </div>
           <ChevronDown
@@ -294,12 +294,15 @@ const WadeMemoryCard: React.FC<{
       </p>
 
       <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-        <span className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 bg-[var(--wade-bg-app)] border border-[var(--wade-border-light)] rounded-full text-[9px] sm:text-[11px] font-medium text-[var(--wade-text-muted)] min-w-0 sm:min-w-[60px]">
+        <span
+          className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 bg-[var(--wade-bg-app)] border border-[var(--wade-border-light)] rounded-full text-[9px] sm:text-[11px] font-medium text-[var(--wade-text-muted)]"
+          title="Times Wade has pulled this memory into a chat or wake"
+        >
           <Activity size={10} className="text-[var(--wade-accent)]/70 sm:w-[12px] sm:h-[12px]" />
-          {memory.access_count}x
+          {memory.access_count} {memory.access_count === 1 ? 'recall' : 'recalls'}
         </span>
         <span className="flex items-center gap-1 sm:gap-1.5 text-[9px] sm:text-[11px] font-medium text-[var(--wade-text-muted)]/70">
-          <Clock size={10} className="sm:w-[12px] sm:h-[12px]" /> {formatRelative(memory.created_at)}
+          <Clock size={10} className="sm:w-[12px] sm:h-[12px]" /> {formatAbsolute(memory.created_at)}
         </span>
       </div>
     </div>
