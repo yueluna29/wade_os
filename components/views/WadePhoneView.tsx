@@ -8,6 +8,7 @@ const apps = [
   { icon: Icons.Journal,  label: 'JOURNAL', tab: 'journal' },
   { icon: Icons.Brain,    label: 'BRAIN',   tab: 'memory' },
   { icon: Icons.Infinity, label: 'RECALL',  tab: 'wade-memory' },
+  { icon: Icons.Sparkles, label: 'NEURAL',  tab: 'memory-v2' },
   { icon: Icons.Pin,      label: 'NOTES',   tab: 'wade-todos' },
   { icon: Icons.Target,   label: 'BOUNTY',  tab: '', disabled: true },
   { icon: Icons.Skin,     label: 'THEME',   tab: 'theme-lab' },
