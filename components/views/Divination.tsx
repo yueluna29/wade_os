@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Moon, Star, Wine, Swords, Drama } from 'lucide-react';
 import { driveUrlFromId } from '../../services/gdrive';
 
 export const Divination: React.FC = () => {
-  const [heroImage, setHeroImage] = useState(driveUrlFromId('1kRXHtMVq3CYAt1OLA0kL7IjuDY2RM87e'));
-  const [todayCardImage, setTodayCardImage] = useState(driveUrlFromId('1o7sNOxz6Fw7gVcchgq_pgFshQ0_i5N9z'));
+  const heroImage = driveUrlFromId('1kRXHtMVq3CYAt1OLA0kL7IjuDY2RM87e');
+  const todayCardImage = driveUrlFromId('1o7sNOxz6Fw7gVcchgq_pgFshQ0_i5N9z');
 
   const recentReadings = [
     { name: 'The Star',       date: 'Apr 25, 2026', quote: 'Hope is a quiet revolution.',           Icon: Star },
@@ -31,19 +31,11 @@ export const Divination: React.FC = () => {
         </button>
       </header>
 
-      <section className="relative rounded-[2rem] overflow-hidden bg-wade-accent-light mb-6 shadow-sm border border-wade-border/50 group min-h-[220px] md:min-h-[280px] flex items-center">
+      <section className="relative rounded-[2rem] overflow-hidden bg-wade-accent-light mb-6 shadow-sm border border-wade-border/50 min-h-[220px] md:min-h-[280px] flex items-center">
         <div className="absolute inset-0 z-0">
           <img src={heroImage} className="w-full h-full object-cover" alt="Mystic Background" />
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-wade-bg-app/15 to-wade-bg-app/55" />
         </div>
-
-        <button
-          className="absolute top-4 right-4 bg-white/70 backdrop-blur-md p-2.5 rounded-full text-wade-accent opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-white shadow-md"
-          title="Change Banner Image"
-          onClick={() => alert('鱼鱼，在这里接上上传图片的逻辑！')}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </button>
 
         <div className="relative z-10 p-6 flex w-full justify-end">
           <div className="flex flex-col items-center text-center max-w-xs md:mr-10 [text-shadow:0_2px_8px_rgba(0,0,0,0.35)]">
@@ -113,16 +105,10 @@ export const Divination: React.FC = () => {
           </div>
 
           <div className="mt-8 flex flex-row gap-4 md:gap-8">
-            <div className="w-[35%] max-w-[140px] md:max-w-[220px] lg:max-w-[280px] shrink-0 relative group">
+            <div className="w-[40%] max-w-[160px] md:max-w-[280px] lg:max-w-[360px] shrink-0 relative">
               <div className="rounded-xl md:rounded-2xl overflow-hidden shadow-md border-2 md:border-4 border-wade-bg-app relative z-10">
                 <img src={todayCardImage} alt="The High Priestess" className="w-full h-auto object-cover" />
               </div>
-              <button
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/80 backdrop-blur p-2 md:p-3 rounded-full text-wade-accent opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg"
-                onClick={() => alert('鱼鱼，在这里替换塔罗牌图片的逻辑！')}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              </button>
             </div>
 
             <div className="flex-1 flex flex-col justify-center min-w-0">
