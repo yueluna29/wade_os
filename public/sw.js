@@ -1,9 +1,13 @@
 // WadeOS service worker
-// Purpose: PWA install + Web Push notifications.
-// Intentionally NOT a caching/offline worker — we want fresh assets every time
-// so Luna's edits show up without "update available" dances.
+// Purpose: PWA install + Web Push notifications + Drive image caching.
+// Asset caching is OFF intentionally — we want fresh JS/CSS so Luna's edits
+// show up without "update available" dances. The only thing the SW caches
+// is Drive proxy responses (avatars, chat images, social images), because
+// those URLs are immutable (Drive file id changes when content changes)
+// and reloading them on every page nav was the visible "flicker" Luna saw.
 
-const SW_VERSION = 'wade-sw-v1';
+const SW_VERSION = 'wade-sw-v2';
+const DRIVE_CACHE = 'wade-drive-v1';
 
 self.addEventListener('install', (event) => {
   // Activate immediately on first install / update
@@ -11,7 +15,45 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    // Drop any old drive caches from previous SW versions.
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((k) => k.startsWith('wade-drive-') && k !== DRIVE_CACHE)
+        .map((k) => caches.delete(k)),
+    );
+    await self.clients.claim();
+  })());
+});
+
+// === Drive image cache ===
+// Cache-first for /functions/v1/get-file?id=… — these are image/audio bytes
+// streamed from Drive. The id is content-addressed (Drive issues a new id
+// when you re-upload), so a cache hit is always correct. Network-fallback
+// keeps it safe if the cache is empty / a request misses.
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (!url.pathname.endsWith('/functions/v1/get-file')) return;
+  if (!url.searchParams.get('id')) return;
+
+  event.respondWith((async () => {
+    const cache = await caches.open(DRIVE_CACHE);
+    const cached = await cache.match(req);
+    if (cached) return cached;
+    try {
+      const fresh = await fetch(req);
+      // Only cache successful, full-body responses. Don't poison the cache
+      // with 4xx/5xx bodies — fall through to a normal network response.
+      if (fresh.ok) cache.put(req, fresh.clone());
+      return fresh;
+    } catch (err) {
+      // Offline / DNS failure: surface the original error to the page.
+      return Response.error();
+    }
+  })());
 });
 
 // === Push handler ===

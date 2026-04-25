@@ -57,7 +57,12 @@ Deno.serve(async (req: Request) => {
       headers: {
         ...CORS,
         "Content-Type": driveRes.headers.get("Content-Type") || "application/octet-stream",
-        "Cache-Control": "public, max-age=3600",
+        // Drive file ids are immutable — replacing an avatar produces a new
+        // id, so the URL changes too. Safe to cache aggressively (30 days +
+        // immutable hint) which lets the browser AND any CDN in front of
+        // this skip the network entirely on repeat loads. The previous
+        // 1h max-age meant Luna's avatar redownloaded every hour.
+        "Cache-Control": "public, max-age=2592000, immutable",
       },
     });
   } catch (e) {
