@@ -111,28 +111,29 @@ export const Divination: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 flex flex-col justify-center min-w-0">
-              <h2 className="text-base md:text-2xl font-bold text-wade-text-main mb-2 md:mb-3 leading-tight">II THE HIGH PRIESTESS</h2>
-              <div className="flex flex-wrap gap-1 md:gap-2 mb-3 md:mb-5">
-                <span className="bg-wade-accent-light text-wade-accent px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-[11px] font-bold tracking-wide">intuition</span>
-                <span className="bg-wade-accent-light text-wade-accent px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-[11px] font-bold tracking-wide">mystery</span>
-                <span className="bg-wade-accent-light text-wade-accent px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-[11px] font-bold tracking-wide">inner voice</span>
+            <div className="flex-1 flex flex-col min-w-0">
+              <h2 className="text-lg md:text-xl font-bold text-wade-text-main mb-3 leading-tight">II THE HIGH PRIESTESS</h2>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="bg-wade-accent-light text-wade-accent px-3 py-1 rounded-full text-xs font-medium">intuition</span>
+                <span className="bg-wade-accent-light text-wade-accent px-3 py-1 rounded-full text-xs font-medium">mystery</span>
+                <span className="bg-wade-accent-light text-wade-accent px-3 py-1 rounded-full text-xs font-medium">inner voice</span>
               </div>
 
-              <p className="font-vault text-sm md:text-base text-wade-text-muted mb-3 md:mb-6 leading-relaxed italic opacity-90">
+              <p className="text-sm md:text-base text-wade-text-main mb-5 leading-relaxed">
+                A veil between worlds.<br/>
                 Trust the whispers, the pauses,<br/>
                 the dreams that linger<br/>
                 when you wake.
               </p>
 
-              <div className="w-8 h-[1px] bg-wade-border mb-4" />
+              <div className="h-px bg-wade-border mb-4" />
 
-              <h4 className="text-[11px] font-bold text-wade-accent uppercase tracking-widest mb-2">Guidance</h4>
-              <p className="font-vault text-sm md:text-base text-wade-text-main mb-6 leading-relaxed">
+              <h4 className="text-base font-semibold text-wade-accent mb-2">Guidance</h4>
+              <p className="text-sm md:text-base text-wade-text-muted mb-6 leading-relaxed">
                 Listen inward today. The answers are not loud, but they are true.
               </p>
 
-              <button className="text-wade-accent text-sm font-bold flex items-center gap-1 mt-auto hover:text-wade-accent-hover transition-colors w-max">
+              <button className="border border-wade-accent text-wade-accent text-sm font-medium flex items-center gap-1.5 mt-auto hover:bg-wade-accent-light transition-colors w-max px-4 py-1.5 rounded-full">
                 View Full Meaning <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
