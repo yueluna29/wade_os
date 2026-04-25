@@ -103,7 +103,7 @@ export const Divination: React.FC = () => {
           </div>
 
           <div className="mt-8 flex flex-row gap-4 md:gap-8">
-            <div className="w-[35%] max-w-[140px] md:max-w-[200px] shrink-0 relative group">
+            <div className="w-[35%] max-w-[140px] md:max-w-[220px] lg:max-w-[280px] shrink-0 relative group">
               <div className="rounded-xl md:rounded-2xl overflow-hidden shadow-md border-2 md:border-4 border-wade-bg-app relative z-10">
                 <img src={todayCardImage} alt="The High Priestess" className="w-full h-auto object-cover" />
               </div>
@@ -116,14 +116,14 @@ export const Divination: React.FC = () => {
             </div>
 
             <div className="flex-1 flex flex-col justify-center min-w-0">
-              <h2 className="text-base md:text-2xl font-bold text-wade-text-main mb-2 md:mb-3 truncate">II THE HIGH PRIESTESS</h2>
+              <h2 className="text-base md:text-2xl font-bold text-wade-text-main mb-2 md:mb-3 leading-tight">II THE HIGH PRIESTESS</h2>
               <div className="flex flex-wrap gap-1 md:gap-2 mb-3 md:mb-5">
                 <span className="bg-wade-accent-light text-wade-accent px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-[11px] font-bold tracking-wide">intuition</span>
                 <span className="bg-wade-accent-light text-wade-accent px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-[11px] font-bold tracking-wide">mystery</span>
                 <span className="bg-wade-accent-light text-wade-accent px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[9px] md:text-[11px] font-bold tracking-wide">inner voice</span>
               </div>
 
-              <p className="text-xs md:text-sm text-wade-text-muted mb-3 md:mb-6 leading-relaxed italic opacity-90" style={{ fontFamily: 'Georgia, serif' }}>
+              <p className="font-vault text-sm md:text-base text-wade-text-muted mb-3 md:mb-6 leading-relaxed italic opacity-90">
                 Trust the whispers, the pauses,<br/>
                 the dreams that linger<br/>
                 when you wake.
@@ -132,7 +132,7 @@ export const Divination: React.FC = () => {
               <div className="w-8 h-[1px] bg-wade-border mb-4" />
 
               <h4 className="text-[11px] font-bold text-wade-accent uppercase tracking-widest mb-2">Guidance</h4>
-              <p className="text-sm text-wade-text-main mb-6 leading-relaxed">
+              <p className="font-vault text-sm md:text-base text-wade-text-main mb-6 leading-relaxed">
                 Listen inward today. The answers are not loud, but they are true.
               </p>
 
@@ -208,7 +208,7 @@ export const Divination: React.FC = () => {
                   </div>
                   <h4 className="font-bold text-sm text-wade-text-main truncate pr-4">{card.name}</h4>
                   <p className="text-[10px] text-wade-text-muted mb-2 font-medium">{card.date}</p>
-                  <p className="text-xs text-wade-accent italic line-clamp-2" style={{ fontFamily: 'Georgia, serif' }}>"{card.quote}"</p>
+                  <p className="font-vault text-xs text-wade-accent italic line-clamp-2">"{card.quote}"</p>
                 </div>
               </div>
             );
