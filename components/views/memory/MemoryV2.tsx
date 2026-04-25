@@ -179,7 +179,7 @@ const CoreMemoryCard: React.FC<{
       </div>
 
       <div
-        className={`mt-2.5 sm:mt-3 text-[12px] sm:text-[13px] leading-[1.5] sm:leading-[1.6] font-mono text-[var(--wade-text-main)]/80 whitespace-pre-wrap transition-all overflow-hidden ${
+        className={`mt-2.5 sm:mt-3 text-[12px] sm:text-[13px] leading-[1.5] sm:leading-[1.6] text-[var(--wade-text-main)]/80 whitespace-pre-wrap transition-all overflow-hidden ${
           isExpanded ? '' : 'line-clamp-2 text-[var(--wade-text-muted)]'
         }`}
       >
@@ -264,7 +264,7 @@ const WadeMemoryCard: React.FC<{ memory: WadeMemory }> = ({ memory }) => {
         </button>
       </div>
 
-      <p className="font-vault text-[12px] sm:text-[13px] text-[var(--wade-text-main)]/90 leading-[1.5] sm:leading-[1.6] flex-1 mb-3 sm:mb-5 break-words">
+      <p className="text-[12px] sm:text-[13px] text-[var(--wade-text-main)]/90 leading-[1.5] sm:leading-[1.6] flex-1 mb-3 sm:mb-5 break-words">
         {memory.content}
       </p>
 
