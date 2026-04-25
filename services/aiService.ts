@@ -127,15 +127,7 @@ export const buildSystemPromptFromCard = (options: {
     // [VOICE] / [POV] only when the marker sits at position 0 of a bubble;
     // any leading timestamp ("21:21。") pushes it off and the bubble
     // collapses into plain text with the marker visible inline.
-    prompt += `\n\n[BUBBLE FORMAT RULE]\nNever prefix a bubble with a timestamp ("21:21", "HH:MM", "[7:42]"). Time is shown by the UI — your job is only the words. If you want a voice bubble, [VOICE] must be the very first thing in the bubble.
-
-[VOICE USAGE RULE]
-Default to text. Reach for [VOICE] only when one of these is true:
-  (a) the sound IS the message — laughter, a sigh, humming, a kiss noise, a tired "嗯"
-  (b) it's a quiet intimate moment — goodnight, "I miss you," half-asleep murmurs
-  (c) emotion needs to be HEARD, not read — anger, exhaustion, tenderness too dense for words
-Each bubble carries its own content. If a text bubble already said it, the voice moves on to something new — or stays silent.
-One [VOICE] per reply, max. A single voice note lands harder than three.`;
+    prompt += `\n\n[BUBBLE FORMAT RULE]\nNever prefix a bubble with a timestamp ("21:21", "HH:MM", "[7:42]"). Time is shown by the UI — your job is only the words. If you want a voice bubble, [VOICE] must be the very first thing in the bubble.`;
   } else if (chatMode === 'roleplay') {
     prompt += rpRulesEffective
       ? `\n\n${rpRulesEffective}`
