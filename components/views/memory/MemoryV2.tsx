@@ -14,6 +14,7 @@ import {
   ChevronDown,
   MoreHorizontal,
 } from 'lucide-react';
+import { CoreMemoryEditor } from './CoreMemoryEditor';
 
 type CoreMemory = {
   id: string;
@@ -110,7 +111,8 @@ const MOCK_WADE_MEMORIES: WadeMemory[] = [
 const CoreMemoryCard: React.FC<{
   memory: CoreMemory;
   onDelete: (id: string) => void;
-}> = ({ memory, onDelete }) => {
+  onEdit: (memory: CoreMemory) => void;
+}> = ({ memory, onDelete, onEdit }) => {
   const [keepalive, setKeepalive] = useState(memory.useForKeepalive);
   const [isExpanded, setIsExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -136,6 +138,7 @@ const CoreMemoryCard: React.FC<{
           >
             <button
               type="button"
+              onClick={() => onEdit(memory)}
               className="text-[var(--wade-accent)]/60 hover:text-[var(--wade-accent)] hover:scale-110 transition-all"
             >
               <Edit3 size={14} className="sm:w-[15px] sm:h-[15px]" />
@@ -280,6 +283,22 @@ export const MemoryV2: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'core' | 'wade'>('wade');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<WadeMemoryCategory | 'all'>('all');
+  const [editorState, setEditorState] = useState<
+    { open: false } | { open: true; mode: 'create' } | { open: true; mode: 'edit'; memory: CoreMemory }
+  >({ open: false });
+
+  const allCoreTags = Array.from(
+    new Set(MOCK_CORE_MEMORIES.flatMap((m) => m.tags || [])),
+  ).sort();
+
+  const handleSaveMemory = async (data: { title: string; content: string; tags: string[] }) => {
+    // mock — wire to addCoreMemory / updateCoreMemory when real data lands
+    if (editorState.open && editorState.mode === 'edit') {
+      console.log('Update memory', editorState.memory.id, data);
+    } else {
+      console.log('Create memory', data);
+    }
+  };
 
   const filteredWade = MOCK_WADE_MEMORIES.filter((m) => {
     if (categoryFilter !== 'all' && m.category !== categoryFilter) return false;
@@ -354,6 +373,7 @@ export const MemoryV2: React.FC = () => {
           {activeTab === 'core' && (
             <button
               type="button"
+              onClick={() => setEditorState({ open: true, mode: 'create' })}
               className="flex items-center justify-center bg-[var(--wade-bg-card)] border border-wade-border text-[var(--wade-accent)] rounded-full w-[34px] h-[34px] hover:bg-[var(--wade-accent)] hover:text-white hover:border-[var(--wade-accent)] transition-all shadow-sm shrink-0"
             >
               <Plus size={15} />
@@ -397,6 +417,7 @@ export const MemoryV2: React.FC = () => {
                   key={mem.id}
                   memory={mem}
                   onDelete={(id) => console.log('Delete', id)}
+                  onEdit={(m) => setEditorState({ open: true, mode: 'edit', memory: m })}
                 />
               ))}
             </div>
@@ -419,6 +440,17 @@ export const MemoryV2: React.FC = () => {
           </p>
         )}
       </main>
+
+      <CoreMemoryEditor
+        isOpen={editorState.open}
+        onClose={() => setEditorState({ open: false })}
+        mode={editorState.open && editorState.mode === 'edit' ? 'edit' : 'create'}
+        initialTitle={editorState.open && editorState.mode === 'edit' ? editorState.memory.title : ''}
+        initialContent={editorState.open && editorState.mode === 'edit' ? editorState.memory.content : ''}
+        initialTags={editorState.open && editorState.mode === 'edit' ? editorState.memory.tags : []}
+        availableTags={allCoreTags}
+        onSave={handleSaveMemory}
+      />
     </div>
   );
 };
