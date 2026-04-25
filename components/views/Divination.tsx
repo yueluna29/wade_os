@@ -112,29 +112,29 @@ export const Divination: React.FC = () => {
             </div>
 
             <div className="flex-1 flex flex-col min-w-0">
-              <h2 className="text-lg md:text-xl font-bold text-wade-text-main mb-3 leading-tight">II THE HIGH PRIESTESS</h2>
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[11px] font-medium">intuition</span>
-                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[11px] font-medium">mystery</span>
-                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[11px] font-medium">inner voice</span>
+              <h2 className="text-base md:text-lg font-bold text-wade-text-main mb-2.5 leading-tight">II THE HIGH PRIESTESS</h2>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[10px] font-medium">intuition</span>
+                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[10px] font-medium">mystery</span>
+                <span className="bg-wade-accent-light text-wade-accent px-2.5 py-0.5 rounded-full text-[10px] font-medium">inner voice</span>
               </div>
 
-              <p className="text-sm text-wade-text-muted mb-5 leading-relaxed">
+              <p className="text-xs md:text-sm text-wade-text-muted mb-4 leading-relaxed">
                 A veil between worlds.<br/>
                 Trust the whispers, the pauses,<br/>
                 the dreams that linger<br/>
                 when you wake.
               </p>
 
-              <div className="h-px bg-wade-border mb-4" />
+              <div className="h-px bg-wade-border mb-3" />
 
-              <h4 className="text-base font-semibold text-wade-accent mb-2">Guidance</h4>
-              <p className="text-sm text-wade-text-muted mb-6 leading-relaxed">
+              <h4 className="text-sm font-semibold text-wade-accent mb-1.5">Guidance</h4>
+              <p className="text-xs md:text-sm text-wade-text-muted mb-5 leading-relaxed">
                 Listen inward today. The answers are not loud, but they are true.
               </p>
 
-              <button className="bg-wade-accent-light text-wade-accent text-sm font-medium flex items-center gap-1.5 mt-auto hover:bg-wade-accent/15 transition-colors w-max px-4 py-1.5 rounded-full">
-                View Full Meaning <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <button className="bg-wade-accent-light text-wade-accent text-xs font-medium flex items-center gap-1.5 mt-auto hover:bg-wade-accent/15 transition-colors w-max px-3.5 py-1.5 rounded-full">
+                View Full Meaning <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
           </div>
