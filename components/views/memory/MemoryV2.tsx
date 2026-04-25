@@ -345,19 +345,19 @@ const NowMemoryCard: React.FC<{
           ))}
         </div>
         {confirmResolve ? (
-          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-medium text-[var(--wade-text-main)] shrink-0">
-            Resolved?
+          <div className="flex items-center gap-2 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase shrink-0">
+            <span className="text-[var(--wade-accent)]">Resolved?</span>
             <button
               type="button"
               onClick={() => onResolve(memory.id)}
-              className="font-bold text-[var(--wade-accent)] hover:underline"
+              className="text-[var(--wade-accent)] hover:opacity-70 transition-opacity"
             >
               Yes
             </button>
             <button
               type="button"
               onClick={() => setConfirmResolve(false)}
-              className="hover:underline text-[var(--wade-text-muted)]"
+              className="text-[var(--wade-text-muted)] hover:opacity-70 transition-opacity"
             >
               No
             </button>
@@ -366,7 +366,7 @@ const NowMemoryCard: React.FC<{
           <button
             type="button"
             onClick={() => setConfirmResolve(true)}
-            className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase text-[var(--wade-accent)] hover:text-[var(--wade-accent-hover)] transition-colors shrink-0"
+            className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold tracking-wider uppercase text-[var(--wade-accent)] hover:opacity-70 transition-opacity shrink-0"
           >
             <CheckCircle2 size={13} />
             Resolved
