@@ -315,6 +315,17 @@ const NowMemoryCard: React.FC<{
 }> = ({ memory, onResolve }) => {
   const [confirmResolve, setConfirmResolve] = useState(false);
   const days = memory.expires_at ? daysUntil(memory.expires_at) : null;
+  // Show concrete date instead of "15d left" — Luna asked for the same
+  // absolute treatment as the Wade card timestamps. Keep today/tomorrow
+  // as special cases so the urgency reads at a glance.
+  const expiryLabel =
+    memory.expires_at == null
+      ? null
+      : days === 0
+      ? 'expires today'
+      : days === 1
+      ? 'expires tomorrow'
+      : `expires ${formatAbsolute(memory.expires_at)}`;
 
   return (
     <div className="bg-[var(--wade-accent-light)] border border-[var(--wade-accent)]/30 rounded-[20px] sm:rounded-[24px] p-4 sm:p-5 flex flex-col gap-3 transition-all hover:border-[var(--wade-accent)] hover:shadow-[0_4px_15px_rgba(var(--wade-accent-rgb),0.15)]">
@@ -323,10 +334,10 @@ const NowMemoryCard: React.FC<{
           <span className="px-2 sm:px-3 py-0.5 sm:py-1 bg-[var(--wade-accent)] text-white text-[8px] sm:text-[10px] font-bold tracking-[0.1em] uppercase rounded-full">
             Active Now
           </span>
-          {days !== null && (
+          {expiryLabel && (
             <span className="flex items-center gap-1 text-[9px] sm:text-[10px] font-bold text-[var(--wade-accent)]">
               <AlarmClock size={11} />
-              {days === 0 ? 'expires today' : days === 1 ? 'expires tomorrow' : `${days}d left`}
+              {expiryLabel}
             </span>
           )}
         </div>
