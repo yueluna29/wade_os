@@ -12,6 +12,7 @@ import { Memos } from './components/views/Memos';
 import { VaultTab } from './components/views/VaultTab';
 import { MemoryBank } from './components/views/MemoryBank';
 import { MemoryDashboard } from './components/views/memory/MemoryDashboard';
+import { MemoryV2 } from './components/views/memory/MemoryV2';
 import { Home } from './components/views/Home';
 import { TimeCapsulesView } from './components/views/TimeCapsulesView';
 import { WadesPicksView } from './components/views/WadesPicksView';
@@ -139,6 +140,7 @@ const AppContent = () => {
       case 'favorites': return <VaultTab />;
       case 'memory': return <MemoryBank />;
       case 'wade-memory': return <MemoryDashboard />;
+      case 'memory-v2': return <MemoryV2 />;
       case 'time-capsules': return <TimeCapsulesView />;
       case 'wade-picks': return <WadesPicksView />;
       case 'theme-lab': return <ThemeLab />;
