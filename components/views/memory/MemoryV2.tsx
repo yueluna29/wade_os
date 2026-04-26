@@ -479,7 +479,6 @@ export const MemoryV2: React.FC = () => {
   const [archivedMemories, setArchivedMemories] = useState<WadeMemoryRow[]>([]);
   const [memoriesLoaded, setMemoriesLoaded] = useState(false);
   const [weeklySummary, setWeeklySummary] = useState<{ content: string; period_start: string; period_end: string; updated_at: string } | null>(null);
-  const [recentDiaries, setRecentDiaries] = useState<{ id: string; content: string; mood: string | null; created_at: string }[]>([]);
 
   // Pull active wade_memories once + subscribe to changes. Status entries
   // (is_status=true) live in their own bucket (Now tab); draft_status='draft'
@@ -523,29 +522,21 @@ export const MemoryV2: React.FC = () => {
     };
   }, []);
 
-  // Weekly tab data: latest summary + last 7 days of diary. Both refresh on
-  // tab switch so a freshly-completed dream pipeline shows up immediately.
+  // Weekly tab: just the latest summary. The Journal page owns the
+  // diary timeline so we don't duplicate it here.
   useEffect(() => {
     if (activeTab !== 'weekly') return;
     let cancelled = false;
     (async () => {
-      const [{ data: summary }, { data: diaries }] = await Promise.all([
-        supabase
-          .from('wade_summaries')
-          .select('content, period_start, period_end, updated_at')
-          .eq('summary_type', 'weekly')
-          .order('period_end', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('wade_diary')
-          .select('id, content, mood, created_at')
-          .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-          .order('created_at', { ascending: false }),
-      ]);
+      const { data: summary } = await supabase
+        .from('wade_summaries')
+        .select('content, period_start, period_end, updated_at')
+        .eq('summary_type', 'weekly')
+        .order('period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (cancelled) return;
       setWeeklySummary(summary || null);
-      setRecentDiaries(diaries || []);
     })();
     return () => { cancelled = true; };
   }, [activeTab]);
@@ -854,7 +845,9 @@ export const MemoryV2: React.FC = () => {
           )
         ) : activeTab === 'weekly' ? (
           <div className="flex flex-col gap-4 animate-fade-in">
-            {/* Weekly summary card — what the dreaming pipeline distilled. */}
+            {/* Weekly summary card — what the dreaming pipeline distilled.
+                Diary timeline lives on the Journal page; we link there
+                instead of duplicating the data here. */}
             <div className="bg-[var(--wade-bg-card)] border border-wade-border rounded-2xl p-4 sm:p-5 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[var(--wade-accent)]">
@@ -877,44 +870,14 @@ export const MemoryV2: React.FC = () => {
               )}
             </div>
 
-            {/* Diary timeline — last 7 days */}
-            <div>
-              <div className="text-[9px] font-bold tracking-[0.2em] uppercase text-[var(--wade-text-muted)] mb-2 px-1">
-                Diary · Last 7 Days
-              </div>
-              {recentDiaries.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {recentDiaries.map((d) => (
-                    <details
-                      key={d.id}
-                      className="bg-[var(--wade-bg-card)] border border-wade-border rounded-xl overflow-hidden group"
-                    >
-                      <summary className="cursor-pointer px-3 py-2 flex items-center gap-2 hover:bg-[var(--wade-accent)]/5 transition-colors list-none">
-                        <span className="text-[10px] font-mono text-[var(--wade-accent)] shrink-0">
-                          {new Date(d.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
-                        </span>
-                        {d.mood && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--wade-accent)]/10 text-[var(--wade-accent)] font-bold">
-                            {d.mood}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-[var(--wade-text-muted)] flex-1 truncate">
-                          {d.content?.slice(0, 80)}
-                        </span>
-                        <ChevronDown size={12} className="text-[var(--wade-text-muted)]/50 transition-transform group-open:rotate-180 shrink-0" />
-                      </summary>
-                      <div className="px-3 pb-3 pt-1 text-[12px] text-[var(--wade-text-main)] whitespace-pre-wrap leading-relaxed border-t border-wade-border/50">
-                        {d.content}
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-8">
-                  No diary entries in the last 7 days.
-                </p>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => useStore.getState().setTab('journal')}
+              className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[var(--wade-bg-app)] border border-wade-border text-[var(--wade-accent)] hover:bg-[var(--wade-accent)] hover:text-white hover:border-[var(--wade-accent)] transition-colors"
+            >
+              View full Journal
+              <ChevronDown size={12} className="-rotate-90" />
+            </button>
           </div>
         ) : activeTab === 'draft' ? (
           /* draft tab */
