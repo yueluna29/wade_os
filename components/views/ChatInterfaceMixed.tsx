@@ -1120,66 +1120,48 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     });
   }, [wadeStatus]);
 
-  // Virtuoso's built-in followOutput fires once when a new item mounts and
-  // aligns its top edge into view — so a tall bubble (long text, image, voice)
-  // ends up showing only its first line. Image/font reflow after mount makes
-  // it worse: the bubble grows but Virtuoso has already "finished" scrolling.
-  // Worse, when Wade fires multiple bubbles 1.5s apart, the previous bubble's
-  // measure-after-mount keeps Virtuoso's internal atBottom flag false long
-  // enough to skip following the next bubble entirely.
-  //
-  // Fix: ignore Virtuoso's atBottom flag and drive the snap-to-bottom from
-  // userScrolledUpRef, a sticky lock toggled by real wheel/touch gestures.
-  // Whenever the message list changes (new bubble OR last bubble's text /
-  // attachments mutate), force-snap to LAST with align: 'end' across multiple
-  // frames to outlast async reflow (image decode, font swap, markdown layout).
+  // Single source of truth for "force the chat scroll to the very bottom".
+  // Bypasses Virtuoso's scrollToIndex (which depends on internal measure
+  // state + atBottom flag) and just slams the underlying scroller's
+  // scrollTop. Repeats across many frames so async layout (image decode,
+  // font swap, markdown reflow, late attachment hydration) can't leave us
+  // stranded mid-list.
+  const snapToBottom = () => {
+    const el = scrollerElRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  };
+  const snapBurst = () => {
+    snapToBottom();
+    const r = requestAnimationFrame(snapToBottom);
+    const ts = [30, 90, 200, 450, 900, 1500].map((d) => window.setTimeout(snapToBottom, d));
+    return () => { cancelAnimationFrame(r); ts.forEach(clearTimeout); };
+  };
+
+  // 1) Last-bubble signature — covers Wade's multi-part replies, edits,
+  //    attachment fills, voice cache writebacks, anything that can grow the
+  //    last bubble after mount.
   const lastMsg = renderMessages[renderMessages.length - 1] as any;
   const lastSig = lastMsg
     ? `${lastMsg.id}|${(lastMsg.text || '').length}|${(lastMsg.attachments || []).length}`
     : '';
   useEffect(() => {
     if (userScrolledUpRef.current) return;
-    const snap = () => virtuosoRef.current?.scrollToIndex({
-      index: 'LAST',
-      align: 'end',
-      behavior: 'auto',
-    });
-    snap();
-    const r1 = requestAnimationFrame(snap);
-    const t1 = window.setTimeout(snap, 80);
-    const t2 = window.setTimeout(snap, 250);
-    const t3 = window.setTimeout(snap, 600);
-    return () => {
-      cancelAnimationFrame(r1);
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
+    return snapBurst();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderMessages.length, lastSig]);
 
-  // Mount-time / contact-switch snap. initialTopMostItemIndex covers the
-  // synchronous case, but messages often load async (hydration, session
-  // switch, supabase fetch) — so once the list goes from empty to non-empty
-  // for THIS contact we hard-snap to bottom across a long-tail of frames to
-  // outlast late image decode and the late hydration of attachment rows.
-  const hasHydratedForContactRef = useRef(false);
-  useEffect(() => { hasHydratedForContactRef.current = false; }, [contact.id, resolvedSessionId]);
+  // 2) Open / contact-switch / session-switch — fires whenever the chat
+  //    re-enters view, regardless of whether length happens to match. Also
+  //    re-arms when messages first hydrate from store/supabase. Resets the
+  //    user scroll lock so a clean entry isn't stuck on a stale "user
+  //    scrolled up" flag from before.
   useEffect(() => {
+    userScrolledUpRef.current = false;
     if (renderMessages.length === 0) return;
-    if (hasHydratedForContactRef.current) return;
-    if (userScrolledUpRef.current) return;
-    hasHydratedForContactRef.current = true;
-    const snap = () => virtuosoRef.current?.scrollToIndex({
-      index: 'LAST',
-      align: 'end',
-      behavior: 'auto',
-    });
-    const timers: number[] = [];
-    [0, 50, 150, 350, 700, 1200].forEach((d) => {
-      timers.push(window.setTimeout(snap, d));
-    });
-    return () => { timers.forEach(clearTimeout); };
-  }, [contact.id, resolvedSessionId, renderMessages.length]);
+    return snapBurst();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contact.id, resolvedSessionId]);
 
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
@@ -1302,6 +1284,10 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  // Direct ref to Virtuoso's internal scroller element — lets us bypass
+  // scrollToIndex (which depends on Virtuoso's measure/atBottom internals
+  // and races async hydration) and just slam scrollTop = scrollHeight.
+  const scrollerElRef = useRef<HTMLElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Snapshot of `storeMessages` that async handlers can read without waiting
@@ -2933,12 +2919,12 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
       >
         <Virtuoso
           ref={virtuosoRef}
+          scrollerRef={(ref) => {
+            scrollerElRef.current = (ref as HTMLElement) || null;
+          }}
           style={{ height: '100%' }}
           data={renderMessages}
-          initialTopMostItemIndex={{
-            index: Math.max(0, renderMessages.length - 1),
-            align: 'end',
-          }}
+          initialTopMostItemIndex={Math.max(0, renderMessages.length - 1)}
           followOutput={false}
           atBottomStateChange={(atBottom) => {
             isAtBottomRef.current = atBottom;
