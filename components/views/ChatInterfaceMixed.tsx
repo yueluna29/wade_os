@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1145,7 +1145,11 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const lastSig = lastMsg
     ? `${lastMsg.id}|${(lastMsg.text || '').length}|${(lastMsg.attachments || []).length}`
     : '';
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) — runs synchronously after DOM mutations
+  // but BEFORE the browser paints. So the very first frame the user sees is
+  // already scrolled to the bottom; no flash of "stopped on bubble N-2 then
+  // jumped to N-1" when messages hydrate in batches.
+  useLayoutEffect(() => {
     if (userScrolledUpRef.current) return;
     return snapBurst();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1156,7 +1160,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   //    re-arms when messages first hydrate from store/supabase. Resets the
   //    user scroll lock so a clean entry isn't stuck on a stale "user
   //    scrolled up" flag from before.
-  useEffect(() => {
+  useLayoutEffect(() => {
     userScrolledUpRef.current = false;
     if (renderMessages.length === 0) return;
     return snapBurst();
