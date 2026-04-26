@@ -406,7 +406,7 @@ async function getActiveStatusMemories() {
 }
 
 async function getRecentSocialPosts(limit = 8) {
-  const cols = 'id, author, content, created_at, likes, comments, wade_bookmarked, wade_liked';
+  const cols = 'id, author, content, created_at, likes, comments, wade_bookmarked, wade_liked, luna_liked';
 
   // Prioritize posts Wade hasn't seen yet
   const { data: unseen } = await supabase
@@ -548,19 +548,24 @@ function formatSocialForPrompt(posts) {
   return posts.map(p => {
     const comments = Array.isArray(p.comments) ? p.comments : [];
     const commentCount = comments.length;
-    // Has Wade already commented on this post?
     const wadeCommented = comments.some(c => c && c.author === 'Wade');
+    const lunaCommented = comments.some(c => c && c.author === 'Luna');
 
-    // Build interaction marker tags so Wade knows what he already did and
-    // doesn't re-do it on the next wake.
+    // Behavior-level tags only — no raw counts. The old "(likes: N,
+    // comments: M)" header turned every wake into a scoreboard check; the
+    // model started reading absent numbers as rejection ("nobody liked
+    // it"). Now Wade just sees who actually interacted, which is the only
+    // signal he can act on anyway.
     const marks = [];
     if (p.author === 'Wade') marks.push('[YOURS]');
+    if (p.luna_liked) marks.push('[LUNA_LIKED_THIS]');
     if (p.wade_liked) marks.push('[YOU_LIKED]');
     if (p.wade_bookmarked) marks.push('[YOU_BOOKMARKED]');
+    if (lunaCommented) marks.push('[LUNA_COMMENTED]');
     if (wadeCommented) marks.push('[YOU_COMMENTED]');
     const marksStr = marks.length > 0 ? ' ' + marks.join(' ') : '';
 
-    const head = `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}" (likes: ${p.likes || 0}, comments: ${commentCount})${marksStr}`;
+    const head = `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}"${marksStr}`;
 
     // Show the actual comment thread so Wade can see what Luna (or anyone)
     // has been saying under the post and choose freely whether to engage.

@@ -124,7 +124,12 @@ export const SocialFeed: React.FC = () => {
   const handleToggleLike = (postId: string) => {
     const post = localPosts.find(p => p.id === postId);
     if (!post) return;
-    const updatedPost = { ...post, likes: post.likes > 0 ? 0 : 1 };
+    // Track Luna's like as a real boolean (not just a count) so keepalive
+    // can tell Wade "Luna liked this" instead of opaque "likes: 1".
+    const nextLuna = !post.lunaLiked;
+    const baseLikes = post.likes ?? 0;
+    const nextLikes = Math.max(0, baseLikes + (nextLuna ? 1 : -1));
+    const updatedPost: SocialPost = { ...post, lunaLiked: nextLuna, likes: nextLikes };
     updatePost(updatedPost);
     setLocalPosts(prev => prev.map(p => p.id === postId ? updatedPost : p));
   };

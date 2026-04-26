@@ -168,6 +168,8 @@ export interface SocialPost {
   likes: number;
   isBookmarked?: boolean; // Luna bookmarked
   wadeBookmarked?: boolean; // Wade bookmarked
+  lunaLiked?: boolean; // Luna tapped the heart — surfaced to Wade in keepalive
+  wadeLiked?: boolean; // Wade tapped the heart — already in DB as wade_liked
 }
 
 export interface SocialComment {

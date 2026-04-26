@@ -508,6 +508,8 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
                         comments: typeof p.comments === 'string' ? JSON.parse(p.comments) : (p.comments || []),
                         isBookmarked: p.is_bookmarked || false,
                         wadeBookmarked: p.wade_bookmarked || false,
+                        lunaLiked: p.luna_liked || false,
+                        wadeLiked: p.wade_liked || false,
                      };
                  }));
              }
@@ -1481,7 +1483,9 @@ export const StoreProvider = ({ children }: { children: ReactNode }) => {
       likes: p.likes,
       comments: p.comments,
       is_bookmarked: p.isBookmarked,
-      wade_bookmarked: p.wadeBookmarked
+      wade_bookmarked: p.wadeBookmarked,
+      luna_liked: p.lunaLiked ?? false,
+      wade_liked: p.wadeLiked ?? false,
     }).eq('id', p.id);
     if (error) console.error('updatePost failed:', error);
   };
