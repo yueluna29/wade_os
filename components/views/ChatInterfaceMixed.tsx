@@ -1111,6 +1111,35 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     });
   }, [wadeStatus]);
 
+  // Virtuoso's built-in followOutput fires once when a new item mounts and
+  // aligns its top edge into view — so a tall bubble (long text, image, voice)
+  // ends up showing only its first line. Image/font reflow after mount makes
+  // it worse: the bubble grows but Virtuoso has already "finished" scrolling.
+  // Fix: whenever the message list changes (new bubble OR last bubble's
+  // content/attachments mutate), if Luna was already at the bottom, force-snap
+  // to LAST with align: 'end' across multiple frames to outlast async reflow.
+  const lastMsg = renderMessages[renderMessages.length - 1] as any;
+  const lastSig = lastMsg
+    ? `${lastMsg.id}|${(lastMsg.text || '').length}|${(lastMsg.attachments || []).length}`
+    : '';
+  useEffect(() => {
+    if (!isAtBottomRef.current) return;
+    const snap = () => virtuosoRef.current?.scrollToIndex({
+      index: 'LAST',
+      align: 'end',
+      behavior: 'auto',
+    });
+    snap();
+    const r1 = requestAnimationFrame(snap);
+    const t1 = window.setTimeout(snap, 80);
+    const t2 = window.setTimeout(snap, 250);
+    return () => {
+      cancelAnimationFrame(r1);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [renderMessages.length, lastSig]);
+
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
   const [playingMsgId, setPlayingMsgId] = useState<string | number | null>(null);
