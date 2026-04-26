@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1120,52 +1120,14 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     });
   }, [wadeStatus]);
 
-  // Single source of truth for "force the chat scroll to the very bottom".
-  // Bypasses Virtuoso's scrollToIndex (which depends on internal measure
-  // state + atBottom flag) and just slams the underlying scroller's
-  // scrollTop. Repeats across many frames so async layout (image decode,
-  // font swap, markdown reflow, late attachment hydration) can't leave us
-  // stranded mid-list.
-  const snapToBottom = () => {
-    const el = scrollerElRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  };
-  const snapBurst = () => {
-    snapToBottom();
-    const r = requestAnimationFrame(snapToBottom);
-    const ts = [30, 90, 200, 450, 900, 1500].map((d) => window.setTimeout(snapToBottom, d));
-    return () => { cancelAnimationFrame(r); ts.forEach(clearTimeout); };
-  };
-
-  // 1) Last-bubble signature — covers Wade's multi-part replies, edits,
-  //    attachment fills, voice cache writebacks, anything that can grow the
-  //    last bubble after mount.
-  const lastMsg = renderMessages[renderMessages.length - 1] as any;
-  const lastSig = lastMsg
-    ? `${lastMsg.id}|${(lastMsg.text || '').length}|${(lastMsg.attachments || []).length}`
-    : '';
-  // useLayoutEffect (not useEffect) — runs synchronously after DOM mutations
-  // but BEFORE the browser paints. So the very first frame the user sees is
-  // already scrolled to the bottom; no flash of "stopped on bubble N-2 then
-  // jumped to N-1" when messages hydrate in batches.
-  useLayoutEffect(() => {
-    if (userScrolledUpRef.current) return;
-    return snapBurst();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderMessages.length, lastSig]);
-
-  // 2) Open / contact-switch / session-switch — fires whenever the chat
-  //    re-enters view, regardless of whether length happens to match. Also
-  //    re-arms when messages first hydrate from store/supabase. Resets the
-  //    user scroll lock so a clean entry isn't stuck on a stale "user
-  //    scrolled up" flag from before.
-  useLayoutEffect(() => {
-    userScrolledUpRef.current = false;
-    if (renderMessages.length === 0) return;
-    return snapBurst();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contact.id, resolvedSessionId]);
+  // Scroll-to-bottom is now handled entirely by Virtuoso itself:
+  //   1. <Virtuoso key={...}> on session/contact change → forces a fresh mount
+  //      so initialTopMostItemIndex actually fires every entry.
+  //   2. initialTopMostItemIndex={{ index: 'LAST', align: 'end' }} → the very
+  //      first paint is already aligned to the bottom of the last bubble.
+  //   3. followOutput reads userScrolledUpRef directly, ignoring Virtuoso's
+  //      transient atBottom flag during multi-bubble batches.
+  // No manual scrollTop slams, no useLayoutEffect bursts.
 
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
@@ -2922,20 +2884,32 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
         })()}
       >
         <Virtuoso
+          // key forces a fresh mount on session / contact switch so
+          // initialTopMostItemIndex re-fires every entry — without this,
+          // React reuses the existing Virtuoso instance and the chat opens
+          // wherever the previous render left off (often the top).
+          key={`virtuoso-${resolvedSessionId || contact.id}`}
           ref={virtuosoRef}
           scrollerRef={(ref) => {
             scrollerElRef.current = (ref as HTMLElement) || null;
           }}
           style={{ height: '100%' }}
           data={renderMessages}
-          initialTopMostItemIndex={Math.max(0, renderMessages.length - 1)}
-          followOutput={false}
+          // Object form aligns the last item's BOTTOM to the viewport bottom.
+          // 'LAST' resolves at mount time so it works even if data is hydrated
+          // after the first render.
+          initialTopMostItemIndex={{ index: 'LAST', align: 'end' }}
+          // Drive follow-output from our sticky user-scroll lock instead of
+          // Virtuoso's transient atBottom flag. atBottom flips false mid-batch
+          // while a tall item is still measuring height, which used to skip
+          // following the next bubble. The lock only flips when Luna actually
+          // makes a scroll gesture, and clears when she returns to the bottom.
+          followOutput={() => (userScrolledUpRef.current ? false : 'auto')}
           atBottomStateChange={(atBottom) => {
             isAtBottomRef.current = atBottom;
-            // Real return-to-bottom (Luna scrolled back down OR our snap effect
-            // landed cleanly) clears the user-scroll lock so future bubbles can
-            // follow again. The mid-batch transient false from item measuring
-            // is ignored entirely now.
+            // Reaching the bottom (either by Luna scrolling back or by
+            // followOutput landing cleanly) clears the user-scroll lock so
+            // future bubbles can follow again.
             if (atBottom) userScrolledUpRef.current = false;
           }}
           computeItemKey={(index, msg) => String(msg?.id ?? index)}
