@@ -303,20 +303,6 @@ export const AddContactSheet: React.FC<{
               )}
             </button>
 
-            {/* Simple + badge */}
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="absolute bottom-0 right-0 w-5 h-5 rounded-full flex items-center justify-center text-white shadow-md hover:scale-105 transition-transform"
-              style={{
-                background:
-                  'linear-gradient(135deg, var(--wade-accent), var(--wade-accent-hover))',
-              }}
-              aria-label="Add photo"
-            >
-              <Plus className="w-3 h-3" strokeWidth={2.5} />
-            </button>
-
             <input
               ref={fileRef}
               type="file"
@@ -353,17 +339,21 @@ export const AddContactSheet: React.FC<{
               <label className="text-[9px] font-bold text-wade-text-muted/80 uppercase tracking-widest pl-2">
                 Personality
               </label>
-              <textarea
-                value={personality}
-                onChange={(e) => setPersonality(e.target.value)}
-                placeholder="Their vibe, quirks, how they talk..."
-                rows={3}
-                className="premium-input w-full bg-wade-bg-card/60 border border-[color:var(--wade-glass-border)] focus:border-wade-accent rounded-[24px] px-5 py-3.5 text-[13px] font-medium text-wade-text-main/80 leading-relaxed placeholder:text-wade-text-muted/40 outline-none resize-none transition-colors focus:bg-wade-bg-card"
+              <div
+                className="w-full bg-wade-bg-card/60 border border-[color:var(--wade-glass-border)] focus-within:border-wade-accent rounded-[24px] overflow-hidden transition-colors focus-within:bg-wade-bg-card"
                 style={{
                   boxShadow:
                     '0 4px 12px rgba(0,0,0,0.03), inset 0 2px 6px var(--wade-glass-highlight)',
                 }}
-              />
+              >
+                <textarea
+                  value={personality}
+                  onChange={(e) => setPersonality(e.target.value)}
+                  placeholder="Their vibe, quirks, how they talk..."
+                  rows={3}
+                  className="block w-full bg-transparent border-0 px-5 py-3.5 text-[13px] font-medium text-wade-text-main/80 leading-relaxed placeholder:text-wade-text-muted/40 outline-none resize-none"
+                />
+              </div>
             </div>
 
             {/* Bio */}
