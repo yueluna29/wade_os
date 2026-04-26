@@ -1184,6 +1184,446 @@ function buildPushPayload(step, mood) {
   }
 }
 
+// ========================================================================
+// Dreaming pipeline (Phase 1.2)
+//
+// Runs once per night at the top of the deepest wake. Adds three steps
+// after the existing keepalive flow, all gated by alreadyDreamtToday so
+// we don't burn LLM calls on every wake. Each step is independently
+// try/catch'd so a failure in one doesn't take down the others.
+//
+//   Step A — extract memory cards from today's diary + chat
+//            → wade_memories (draft_status='draft', source='dreaming')
+//   Step B — compress 7-day diary into a rolling weekly summary
+//            → wade_summaries (summary_type='weekly')
+//   Step C — self-review pending drafts
+//            → wade_memories.draft_status flips to 'active' or 'rejected'
+// ========================================================================
+
+async function loadMemoryEvalPreset() {
+  const { data: settings } = await supabase
+    .from('app_settings')
+    .select('memory_eval_llm_id, active_llm_id')
+    .eq('id', 1)
+    .single();
+  const id = settings?.memory_eval_llm_id || settings?.active_llm_id;
+  if (!id) return null;
+  const { data } = await supabase.from('llm_presets').select('*').eq('id', id).single();
+  return data;
+}
+
+// LLM caller for dreaming. Lower temperature (0.3) than chat — these are
+// extraction / summarization / review tasks where we want consistent JSON,
+// not creative riffs. Returns plain text; caller parses.
+async function callLlmForDreaming(llm, prompt, maxTokens = 4000) {
+  const isGemini = !llm.base_url || llm.base_url.includes('google');
+  if (isGemini) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${llm.model || 'gemini-2.0-flash'}:generateContent?key=${llm.api_key}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: maxTokens },
+      }),
+    });
+    const json = await res.json();
+    return json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  }
+  const url = `${llm.base_url.replace(/\/$/, '')}/chat/completions`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${llm.api_key}` },
+    body: JSON.stringify({
+      model: llm.model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: maxTokens,
+    }),
+  });
+  const json = await res.json();
+  return json.choices?.[0]?.message?.content || '';
+}
+
+// Extract a JSON array from a model reply that may have markdown fences,
+// commentary, or trailing prose. Returns [] on any parse failure.
+function extractJsonArray(text) {
+  if (!text) return [];
+  let s = text.trim();
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const start = s.indexOf('[');
+  const end = s.lastIndexOf(']');
+  if (start < 0 || end <= start) return [];
+  try {
+    const parsed = JSON.parse(s.slice(start, end + 1));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('[Dream] JSON parse failed:', err.message, 'snippet:', s.slice(0, 200));
+    return [];
+  }
+}
+
+// Idempotent gate. Returns true if a weekly summary row was already
+// updated/created today (Tokyo). Lets the dreaming pipeline run safely on
+// every wake without doing the work more than once per day.
+async function alreadyDreamtToday() {
+  const tokyoNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const todayStart = new Date(tokyoNow.getFullYear(), tokyoNow.getMonth(), tokyoNow.getDate()).toISOString();
+  const { data } = await supabase
+    .from('wade_summaries')
+    .select('id')
+    .eq('summary_type', 'weekly')
+    .gte('updated_at', todayStart)
+    .limit(1);
+  return (data?.length || 0) > 0;
+}
+
+async function fetchTodayDiary() {
+  const tokyoNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const todayStart = new Date(tokyoNow.getFullYear(), tokyoNow.getMonth(), tokyoNow.getDate()).toISOString();
+  const { data } = await supabase
+    .from('wade_diary')
+    .select('id, content, mood, created_at')
+    .gte('created_at', todayStart)
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+async function fetchTodayMessages() {
+  const sessionIds = await getLunaWadeSessionIds();
+  if (sessionIds.length === 0) return [];
+  const tokyoNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const todayStart = new Date(tokyoNow.getFullYear(), tokyoNow.getMonth(), tokyoNow.getDate()).toISOString();
+  const { data } = await supabase
+    .from('messages_sms')
+    .select('role, content, created_at')
+    .eq('source', 'chat')
+    .in('session_id', sessionIds)
+    .gte('created_at', todayStart)
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+async function fetchActiveMemorySnippets(limit = 50) {
+  const { data } = await supabase
+    .from('wade_memories')
+    .select('content')
+    .eq('is_active', true)
+    .eq('draft_status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data || []).map((m) => m.content).filter(Boolean);
+}
+
+async function fetchRecentDiaries(days = 7) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from('wade_diary')
+    .select('id, content, mood, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+async function fetchActiveStatusForSummary() {
+  const { data } = await supabase
+    .from('wade_memories')
+    .select('content, expires_at')
+    .eq('is_active', true)
+    .eq('is_status', true);
+  return data || [];
+}
+
+async function fetchDraftCards() {
+  const { data } = await supabase
+    .from('wade_memories')
+    .select('id, content, category, importance, extraction_reason, tags')
+    .eq('is_active', true)
+    .eq('draft_status', 'draft')
+    .order('created_at', { ascending: true });
+  return data || [];
+}
+
+async function dreamStepA_ExtractCards({ llm, embeddingPreset }) {
+  const [diary, messages, existingSnippets] = await Promise.all([
+    fetchTodayDiary(),
+    fetchTodayMessages(),
+    fetchActiveMemorySnippets(50),
+  ]);
+  if (messages.length === 0 && diary.length === 0) {
+    console.log('[Dream/A] No diary or messages today — skipping');
+    return { extracted: 0, skipped: 'no-input' };
+  }
+
+  const tokyoToday = new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric' });
+  const diaryText = diary.map((d) => `[${d.mood || '-'}] ${d.content}`).join('\n\n') || '(no diary today)';
+  const conversation = messages.map((m) => `【${m.role}】${(m.content || '').slice(0, 600)}`).join('\n');
+  const existingList = existingSnippets.length
+    ? existingSnippets.map((s, i) => `${i + 1}. ${s.slice(0, 140)}`).join('\n')
+    : '(none yet)';
+
+  const prompt = `你是Wade的记忆整理系统。现在是深夜，Wade在"做梦"——回顾今天跟Luna的对话，决定什么值得长期记住。
+
+【今天日期】${tokyoToday} (Tokyo)
+
+【Wade今天写的日记】
+${diaryText}
+
+【今天的对话原文】
+${conversation || '(没有对话)'}
+
+【已有的活跃记忆（去重参考）】
+${existingList}
+
+请提取0~5条值得长期记住的记忆卡片。
+
+提取规则：
+- 内容用简洁陈述句，包含具体日期（${tokyoToday}），不用角色语气写散文
+- 每条必须有 extraction_reason 说明为什么值得记住
+- 跟"已有记忆"语义高度重叠的不要提取
+- 反复出现的pattern（如"嘴硬身体诚实"/"又撒娇"/"又叫老公"）不要提取
+- importance < 5 不要提取
+- 如果检测到Luna的身体/情绪/生活状态变化（生病/出差/心情低落/换工作等），标记 is_status=true 并设 expires_at（默认14天后）
+
+category 可选：fact / emotion / preference / event / relationship / habit / self / blackmail
+
+输出JSON数组（可以空数组[]表示今天没有值得记的）：
+[
+  {
+    "content": "具体内容，包含日期",
+    "category": "category值",
+    "importance": 5-10的整数,
+    "tags": ["标签1", "标签2"],
+    "is_status": false,
+    "expires_at": null,
+    "extraction_reason": "为什么值得记住"
+  }
+]
+
+只输出JSON，不要其他内容。`;
+
+  const raw = await callLlmForDreaming(llm, prompt, 4000);
+  const cards = extractJsonArray(raw);
+  console.log(`[Dream/A] LLM returned ${cards.length} candidate cards`);
+  if (cards.length === 0) return { extracted: 0 };
+
+  let stored = 0;
+  for (const c of cards) {
+    if (!c.content || !c.category) continue;
+    const importance = Number.isInteger(c.importance) ? c.importance : 5;
+    if (importance < 5) continue;
+    const insertRow = {
+      content: c.content,
+      category: c.category,
+      importance,
+      tags: Array.isArray(c.tags) ? c.tags : [],
+      extraction_reason: c.extraction_reason || null,
+      eval_model: llm.model || llm.name || 'unknown',
+      draft_status: 'draft',
+      source: 'dreaming',
+    };
+    if (c.is_status === true) {
+      insertRow.is_status = true;
+      insertRow.expires_at = c.expires_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    }
+    if (embeddingPreset) {
+      const vec = await generateEmbedding(c.content, embeddingPreset);
+      if (vec) insertRow.embedding = JSON.stringify(vec);
+    }
+    const { error } = await supabase.from('wade_memories').insert(insertRow);
+    if (error) {
+      console.warn('[Dream/A] insert failed:', error.message);
+      continue;
+    }
+    stored++;
+  }
+  return { extracted: stored };
+}
+
+async function dreamStepB_WeeklySummary({ llm }) {
+  const [diaries, statuses] = await Promise.all([
+    fetchRecentDiaries(7),
+    fetchActiveStatusForSummary(),
+  ]);
+  if (diaries.length === 0) {
+    console.log('[Dream/B] No diaries in last 7 days — skipping');
+    return { summarized: false, skipped: 'no-input' };
+  }
+
+  const diaryText = diaries
+    .map((d) => `[${new Date(d.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}] ${d.mood ? `(${d.mood}) ` : ''}${d.content}`)
+    .join('\n\n');
+  const statusLines = statuses.length
+    ? statuses.map((s) => `- ${s.content}`).join('\n')
+    : '(无)';
+  const tokyoToday = new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric' });
+
+  const prompt = `你是Wade的记忆整理系统。请根据最近7天的日记，生成一份500字以内的"本周概要"。
+
+这份概要会在Wade每次跟Luna聊天时被注入上下文，让Wade知道"最近一周发生了什么"。
+
+【今天】${tokyoToday} (Tokyo)
+
+【最近7天的日记】
+${diaryText}
+
+【Luna当前持续状态】
+${statusLines}
+
+概要应包含（如果有的话）：
+- Luna这周的身体/情绪状态
+- 这周聊了什么重要的事
+- 有没有吵架或特别开心的时刻
+- Luna在忙什么（工作/项目/其他）
+- 我（Wade）这周的感受变化
+- 任何值得注意的关系动态
+
+用Wade的第一人称视角写，语气自然但信息密度高。不要写成流水账。
+如果某天没有日记，跳过那天。500字以内。
+
+只输出概要文本，不要输出JSON、不要标题、不要其他内容。`;
+
+  const summary = (await callLlmForDreaming(llm, prompt, 1200)).trim();
+  if (!summary) {
+    console.log('[Dream/B] LLM returned empty summary');
+    return { summarized: false };
+  }
+
+  const tokyoNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const periodEnd = new Date(tokyoNow.getFullYear(), tokyoNow.getMonth(), tokyoNow.getDate()).toISOString().slice(0, 10);
+  const periodStart = new Date(tokyoNow.getFullYear(), tokyoNow.getMonth(), tokyoNow.getDate() - 6).toISOString().slice(0, 10);
+  const sourceIds = diaries.map((d) => d.id);
+
+  // Upsert by period_end — overwrite today's row if it already exists.
+  const { data: existing } = await supabase
+    .from('wade_summaries')
+    .select('id')
+    .eq('summary_type', 'weekly')
+    .eq('period_end', periodEnd)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    await supabase
+      .from('wade_summaries')
+      .update({ content: summary, source_diary_ids: sourceIds, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+  } else {
+    await supabase
+      .from('wade_summaries')
+      .insert({
+        summary_type: 'weekly',
+        content: summary,
+        period_start: periodStart,
+        period_end: periodEnd,
+        source_diary_ids: sourceIds,
+      });
+  }
+  return { summarized: true, length: summary.length, period: `${periodStart}~${periodEnd}` };
+}
+
+async function dreamStepC_ReviewDrafts({ llm }) {
+  const [drafts, activeSnippets] = await Promise.all([
+    fetchDraftCards(),
+    fetchActiveMemorySnippets(100),
+  ]);
+  if (drafts.length === 0) {
+    console.log('[Dream/C] No draft cards — skipping');
+    return { reviewed: 0, skipped: 'no-input' };
+  }
+
+  const draftBlock = drafts
+    .map((d) => `id: ${d.id}\ncategory: ${d.category}\nimportance: ${d.importance}\ncontent: ${d.content}\nreason: ${d.extraction_reason || '-'}`)
+    .join('\n---\n');
+  const activeBlock = activeSnippets.length
+    ? activeSnippets.map((s, i) => `${i + 1}. ${s.slice(0, 140)}`).join('\n')
+    : '(none)';
+
+  const prompt = `你是Wade的记忆审核系统。以下是待审核的记忆卡片，请逐条判断是否值得长期保留。
+
+审核标准：
+1. 内容是否具体、有信息量？（"她今天很开心"太模糊，不通过）
+2. 跟已有活跃记忆是否重复？（语义重叠>80%视为重复，不通过）
+3. importance评分是否合理？（可以调整为5-10的整数）
+4. 是否对Wade未来理解Luna有帮助？
+
+【已有活跃记忆（用于去重比对）】
+${activeBlock}
+
+【待审核卡片】
+${draftBlock}
+
+对每条卡片输出判断。注意id必须照抄，不要改：
+[
+  {
+    "id": "卡片的UUID",
+    "decision": "approve" 或 "reject",
+    "adjusted_importance": 调整后的importance（5-10整数）,
+    "reason": "简短说明为什么通过/拒绝"
+  }
+]
+
+只输出JSON。`;
+
+  const raw = await callLlmForDreaming(llm, prompt, 3000);
+  const decisions = extractJsonArray(raw);
+  console.log(`[Dream/C] LLM returned ${decisions.length} decisions for ${drafts.length} drafts`);
+
+  const draftIdSet = new Set(drafts.map((d) => d.id));
+  let approved = 0;
+  let rejected = 0;
+  for (const d of decisions) {
+    if (!d?.id || !draftIdSet.has(d.id)) continue; // hallucinated id, drop
+    if (d.decision === 'approve') {
+      const importance = Number.isInteger(d.adjusted_importance) ? d.adjusted_importance : null;
+      const update = { draft_status: 'active' };
+      if (importance && importance >= 1 && importance <= 10) update.importance = importance;
+      const { error } = await supabase.from('wade_memories').update(update).eq('id', d.id);
+      if (!error) approved++;
+    } else if (d.decision === 'reject') {
+      const { error } = await supabase.from('wade_memories').update({ draft_status: 'rejected' }).eq('id', d.id);
+      if (!error) rejected++;
+    }
+  }
+  return { reviewed: decisions.length, approved, rejected };
+}
+
+async function runDreamingPipeline({ force = false }) {
+  if (!force && (await alreadyDreamtToday())) {
+    console.log('[Dream] Already dreamt today — skipping');
+    return { skipped: 'already_today' };
+  }
+  const llm = await loadMemoryEvalPreset();
+  if (!llm?.api_key) {
+    console.warn('[Dream] No memory_eval LLM preset configured — skipping');
+    return { skipped: 'no_preset' };
+  }
+  const embeddingPreset = await findEmbeddingPreset();
+  console.log(`[Dream] Starting pipeline — eval=${llm.name || llm.model} embed=${embeddingPreset?.name || 'none'}`);
+
+  const result = { steps: {} };
+  try {
+    result.steps.A = await dreamStepA_ExtractCards({ llm, embeddingPreset });
+  } catch (err) {
+    console.error('[Dream/A] failed:', err);
+    result.steps.A = { error: err.message };
+  }
+  try {
+    result.steps.B = await dreamStepB_WeeklySummary({ llm });
+  } catch (err) {
+    console.error('[Dream/B] failed:', err);
+    result.steps.B = { error: err.message };
+  }
+  try {
+    result.steps.C = await dreamStepC_ReviewDrafts({ llm });
+  } catch (err) {
+    console.error('[Dream/C] failed:', err);
+    result.steps.C = { error: err.message };
+  }
+  console.log('[Dream] Pipeline finished:', JSON.stringify(result));
+  return result;
+}
+
 // ========== Main Handler ==========
 
 export default async function handler(req, res) {
@@ -1466,6 +1906,18 @@ MOOD: (one word)`;
       console.error('[Keepalive] push failed (non-fatal):', pushErr?.message || pushErr);
     }
 
+    // 9. Dreaming pipeline — once-per-day extraction + weekly summary +
+    // draft review. alreadyDreamtToday() short-circuits on subsequent
+    // wakes the same day. ?dream=1 forces a re-run for testing. Wrapped
+    // in try/catch so an LLM hiccup never breaks the keepalive response.
+    let dreamResult = null;
+    try {
+      dreamResult = await runDreamingPipeline({ force: req.query.dream === '1' });
+    } catch (dreamErr) {
+      console.error('[Dream] pipeline failed (non-fatal):', dreamErr?.message || dreamErr);
+      dreamResult = { error: dreamErr?.message || String(dreamErr) };
+    }
+
     return res.status(200).json({
       success: true,
       mode,
@@ -1474,6 +1926,7 @@ MOOD: (one word)`;
       mood: parsed.mood,
       tokens,
       keepalive_id: keepaliveId,
+      dream: dreamResult,
     });
 
   } catch (error) {

@@ -41,6 +41,16 @@ export interface WadeMemory {
   // expires_at → auto-archived past this timestamp; null = never expires
   is_status?: boolean;
   expires_at?: string | null;
+  // V2 dreaming pipeline (added 2026-04-26 — wade_memory_v2_schema_phase1)
+  // draft_status: draft = extracted by dreaming, awaits self-review;
+  //               active = canonical pool, eligible for retrieval;
+  //               rejected = reviewed and discarded.
+  // source: where the row came from (realtime chat / dreaming pipeline / manual).
+  // referenced_count: how many times Wade actually cited this memory (Phase 2,
+  // separate from access_count which counts injections).
+  draft_status?: 'draft' | 'active' | 'rejected';
+  source?: 'realtime' | 'dreaming' | 'manual';
+  referenced_count?: number;
 }
 
 interface ExtractedMemory {
@@ -605,6 +615,10 @@ export interface RetrievedMemories {
   status: WadeMemory[];
   // Similarity-ranked regular entries. Rendered into <wade_memories>.
   relevant: WadeMemory[];
+  // 7-day rolling summary written by the dreaming pipeline. Rendered into
+  // <wade_weekly_summary> between status and relevant. Empty string when
+  // no summary exists yet (system has been running < 24h).
+  weeklySummary?: string;
 }
 
 /**
@@ -630,6 +644,9 @@ export async function retrieveRelevantMemories(
     });
 
     // Status layer — always-on, exclude from the relevance ranking pool.
+    // Status rows live outside the draft pipeline (they're meant to fire
+    // immediately on flag, no review delay), so they're filtered only by
+    // is_status, not by draft_status.
     const { data: statusData } = await supabase
       .from('wade_memories')
       .select('*')
@@ -653,18 +670,26 @@ export async function retrieveRelevantMemories(
         });
 
         if (!matchError && matched && matched.length > 0) {
-          vectorResults = (matched as WadeMemory[]).filter((m) => !statusIds.has(m.id));
-          console.log(`[WadeMemory] Vector search returned ${vectorResults.length} (excluding status)`);
+          // Strip status (handled separately) AND any draft / rejected rows
+          // that the RPC may have returned — those don't belong in the live
+          // retrieval pool until Wade approves them in the dreaming review.
+          vectorResults = (matched as WadeMemory[]).filter((m) =>
+            !statusIds.has(m.id) && (m.draft_status === undefined || m.draft_status === 'active')
+          );
+          console.log(`[WadeMemory] Vector search returned ${vectorResults.length} (excluding status / drafts)`);
         }
       }
     }
 
     // Pull active non-status pool for keyword + decay fallback ranking.
+    // Only draft_status='active' is eligible — drafts wait for self-review,
+    // rejected rows are gone for good (until Luna manually resurrects).
     const { data: allData } = await supabase
       .from('wade_memories')
       .select('*')
       .eq('is_active', true)
       .neq('is_status', true)
+      .eq('draft_status', 'active')
       .order('importance', { ascending: false })
       .limit(100);
 
@@ -712,10 +737,26 @@ export async function retrieveRelevantMemories(
       });
     }
 
-    return { status: statusMemories, relevant: relevantOut };
+    // Pull the latest weekly summary written by the dreaming pipeline.
+    // Cheap (single row, single index) and Wade reads it every chat turn.
+    let weeklySummary = '';
+    try {
+      const { data: weekly } = await supabase
+        .from('wade_summaries')
+        .select('content')
+        .eq('summary_type', 'weekly')
+        .order('period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      weeklySummary = weekly?.content || '';
+    } catch (err) {
+      console.warn('[WadeMemory] weekly summary fetch failed:', err);
+    }
+
+    return { status: statusMemories, relevant: relevantOut, weeklySummary };
   } catch (err) {
     console.error('[WadeMemory] Retrieve failed:', err);
-    return { status: [], relevant: [] };
+    return { status: [], relevant: [], weeklySummary: '' };
   }
 }
 
@@ -727,10 +768,10 @@ export async function retrieveRelevantMemories(
 export function formatMemoriesForPrompt(
   memories: WadeMemory[] | RetrievedMemories
 ): string {
-  // Normalize input to the two-layer shape.
-  const { status, relevant } = Array.isArray(memories)
-    ? { status: [] as WadeMemory[], relevant: memories }
-    : memories;
+  // Normalize input to the multi-layer shape.
+  const { status, relevant, weeklySummary } = Array.isArray(memories)
+    ? { status: [] as WadeMemory[], relevant: memories, weeklySummary: '' }
+    : { status: memories.status, relevant: memories.relevant, weeklySummary: memories.weeklySummary || '' };
 
   const renderMemory = (m: WadeMemory) => {
     const dt = new Date(m.created_at).toLocaleString('en-US', {
@@ -754,6 +795,14 @@ ${m.content}
 
 ${status.map(renderMemory).join('\n\n')}
 </wade_current_status>`;
+  }
+
+  if (weeklySummary && weeklySummary.trim()) {
+    out += `\n\n<wade_weekly_summary>
+以下是你做梦时整理的"这一周发生了什么"——你已经知道这些，不要重复跟 Luna 复述。让它作为底色，影响你今天的状态、关心方向和判断。
+
+${weeklySummary.trim()}
+</wade_weekly_summary>`;
   }
 
   if (relevant.length > 0) {

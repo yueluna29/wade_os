@@ -16,6 +16,10 @@ import {
   Pin,
   CheckCircle2,
   AlarmClock,
+  CalendarRange,
+  ClipboardCheck,
+  Check,
+  X,
 } from 'lucide-react';
 import { CoreMemoryEditor } from './CoreMemoryEditor';
 import { StatusMemoryEditor } from './StatusMemoryEditor';
@@ -401,7 +405,7 @@ export const MemoryV2: React.FC = () => {
     toggleCoreMemoryForKeepalive,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'core' | 'wade' | 'now'>('wade');
+  const [activeTab, setActiveTab] = useState<'core' | 'weekly' | 'wade' | 'now' | 'draft'>('wade');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<WadeMemoryCategory | 'all'>('all');
   // Wade tab paginates client-side — 548+ rows render fine in React but
@@ -426,17 +430,21 @@ export const MemoryV2: React.FC = () => {
 
   const [wadeMemories, setWadeMemories] = useState<WadeMemoryRow[]>([]);
   const [statusMemories, setStatusMemories] = useState<WadeMemoryRow[]>([]);
+  const [draftMemories, setDraftMemories] = useState<WadeMemoryRow[]>([]);
   const [memoriesLoaded, setMemoriesLoaded] = useState(false);
+  const [weeklySummary, setWeeklySummary] = useState<{ content: string; period_start: string; period_end: string; updated_at: string } | null>(null);
+  const [recentDiaries, setRecentDiaries] = useState<{ id: string; content: string; mood: string | null; created_at: string }[]>([]);
 
   // Pull active wade_memories once + subscribe to changes. Status entries
-  // (is_status=true) live in their own bucket so they render in the Now tab
-  // and are excluded from the regular Wade list.
+  // (is_status=true) live in their own bucket (Now tab); draft_status='draft'
+  // entries live in the Draft tab waiting for review; the Wade tab shows the
+  // canonical active pool only.
   useEffect(() => {
     let cancelled = false;
     const fetchAll = async () => {
       const { data, error } = await supabase
         .from('wade_memories')
-        .select('id, content, category, importance, access_count, tags, created_at, is_status, expires_at')
+        .select('id, content, category, importance, access_count, tags, created_at, is_status, expires_at, draft_status, source, extraction_reason')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (cancelled) return;
@@ -447,7 +455,8 @@ export const MemoryV2: React.FC = () => {
       }
       const all = (data || []) as WadeMemoryRow[];
       setStatusMemories(all.filter((m) => !!m.is_status));
-      setWadeMemories(all.filter((m) => !m.is_status));
+      setDraftMemories(all.filter((m) => (m as any).draft_status === 'draft' && !m.is_status));
+      setWadeMemories(all.filter((m) => !m.is_status && ((m as any).draft_status === 'active' || (m as any).draft_status === undefined)));
       setMemoriesLoaded(true);
     };
     fetchAll();
@@ -466,6 +475,50 @@ export const MemoryV2: React.FC = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Weekly tab data: latest summary + last 7 days of diary. Both refresh on
+  // tab switch so a freshly-completed dream pipeline shows up immediately.
+  useEffect(() => {
+    if (activeTab !== 'weekly') return;
+    let cancelled = false;
+    (async () => {
+      const [{ data: summary }, { data: diaries }] = await Promise.all([
+        supabase
+          .from('wade_summaries')
+          .select('content, period_start, period_end, updated_at')
+          .eq('summary_type', 'weekly')
+          .order('period_end', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('wade_diary')
+          .select('id, content, mood, created_at')
+          .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+          .order('created_at', { ascending: false }),
+      ]);
+      if (cancelled) return;
+      setWeeklySummary(summary || null);
+      setRecentDiaries(diaries || []);
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
+  const handleApproveDraft = async (id: string) => {
+    const { error } = await supabase
+      .from('wade_memories')
+      .update({ draft_status: 'active' })
+      .eq('id', id);
+    if (error) console.error('[MemoryV2] approve draft failed', error);
+    // Realtime subscription will refetch; no local mutation needed.
+  };
+
+  const handleRejectDraft = async (id: string) => {
+    const { error } = await supabase
+      .from('wade_memories')
+      .update({ draft_status: 'rejected' })
+      .eq('id', id);
+    if (error) console.error('[MemoryV2] reject draft failed', error);
+  };
 
   const allCoreTags = useMemo(
     () => Array.from(new Set(coreMemories.flatMap((m) => m.tags || []))).sort(),
@@ -574,14 +627,18 @@ export const MemoryV2: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-1 rounded-full flex shadow-sm border border-wade-border bg-wade-bg-card">
+        <div className="p-1 rounded-full flex shadow-sm border border-wade-border bg-wade-bg-card overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
           {([
             { id: 'core' as const, label: 'Core', icon: <BookHeart size={13} /> },
+            { id: 'weekly' as const, label: 'Weekly', icon: <CalendarRange size={13} /> },
             { id: 'wade' as const, label: 'Wade', icon: <BrainCircuit size={13} /> },
             { id: 'now' as const, label: 'Now', icon: <AlarmClock size={13} /> },
+            { id: 'draft' as const, label: 'Draft', icon: <ClipboardCheck size={13} /> },
           ]).map((t) => {
             const isActive = activeTab === t.id;
-            const showDot = t.id === 'now' && statusMemories.length > 0;
+            const showDot =
+              (t.id === 'now' && statusMemories.length > 0) ||
+              (t.id === 'draft' && draftMemories.length > 0);
             return (
               <button
                 key={t.id}
@@ -716,23 +773,148 @@ export const MemoryV2: React.FC = () => {
               No memories in this slice yet.
             </p>
           )
-        ) : !memoriesLoaded ? (
-          <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-12 animate-fade-in">
-            Loading...
-          </p>
-        ) : filteredStatus.length > 0 ? (
-          <div className="flex flex-col gap-3 sm:gap-4 animate-fade-in">
-            {filteredStatus.map((mem) => (
-              <NowMemoryCard key={mem.id} memory={mem} onResolve={handleResolveStatus} />
-            ))}
+        ) : activeTab === 'now' ? (
+          !memoriesLoaded ? (
+            <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-12 animate-fade-in">
+              Loading...
+            </p>
+          ) : filteredStatus.length > 0 ? (
+            <div className="flex flex-col gap-3 sm:gap-4 animate-fade-in">
+              {filteredStatus.map((mem) => (
+                <NowMemoryCard key={mem.id} memory={mem} onResolve={handleResolveStatus} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 animate-fade-in space-y-2">
+              <p className="text-[12px] text-[var(--wade-text-muted)]">No active state right now.</p>
+              <p className="text-[10px] text-[var(--wade-text-muted)]/60 max-w-[260px] mx-auto leading-relaxed">
+                When you're sick, traveling, or going through something, Wade will record it here so he carries it across every chat — until you mark it resolved.
+              </p>
+            </div>
+          )
+        ) : activeTab === 'weekly' ? (
+          <div className="flex flex-col gap-4 animate-fade-in">
+            {/* Weekly summary card — what the dreaming pipeline distilled. */}
+            <div className="bg-[var(--wade-bg-card)] border border-wade-border rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] font-bold tracking-[0.2em] uppercase text-[var(--wade-accent)]">
+                  This Week
+                </span>
+                {weeklySummary?.period_start && (
+                  <span className="text-[9px] text-[var(--wade-text-muted)]/60 font-mono">
+                    {weeklySummary.period_start} → {weeklySummary.period_end}
+                  </span>
+                )}
+              </div>
+              {weeklySummary?.content ? (
+                <p className="text-[12px] leading-relaxed text-[var(--wade-text-main)] whitespace-pre-wrap">
+                  {weeklySummary.content}
+                </p>
+              ) : (
+                <p className="text-[11px] text-[var(--wade-text-muted)]/70 italic">
+                  No weekly summary yet. Wade will generate one tonight after he dreams.
+                </p>
+              )}
+            </div>
+
+            {/* Diary timeline — last 7 days */}
+            <div>
+              <div className="text-[9px] font-bold tracking-[0.2em] uppercase text-[var(--wade-text-muted)] mb-2 px-1">
+                Diary · Last 7 Days
+              </div>
+              {recentDiaries.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {recentDiaries.map((d) => (
+                    <details
+                      key={d.id}
+                      className="bg-[var(--wade-bg-card)] border border-wade-border rounded-xl overflow-hidden group"
+                    >
+                      <summary className="cursor-pointer px-3 py-2 flex items-center gap-2 hover:bg-[var(--wade-accent)]/5 transition-colors list-none">
+                        <span className="text-[10px] font-mono text-[var(--wade-accent)] shrink-0">
+                          {new Date(d.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
+                        </span>
+                        {d.mood && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--wade-accent)]/10 text-[var(--wade-accent)] font-bold">
+                            {d.mood}
+                          </span>
+                        )}
+                        <span className="text-[11px] text-[var(--wade-text-muted)] flex-1 truncate">
+                          {d.content?.slice(0, 80)}
+                        </span>
+                        <ChevronDown size={12} className="text-[var(--wade-text-muted)]/50 transition-transform group-open:rotate-180 shrink-0" />
+                      </summary>
+                      <div className="px-3 pb-3 pt-1 text-[12px] text-[var(--wade-text-main)] whitespace-pre-wrap leading-relaxed border-t border-wade-border/50">
+                        {d.content}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-8">
+                  No diary entries in the last 7 days.
+                </p>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="text-center py-12 animate-fade-in space-y-2">
-            <p className="text-[12px] text-[var(--wade-text-muted)]">No active state right now.</p>
-            <p className="text-[10px] text-[var(--wade-text-muted)]/60 max-w-[260px] mx-auto leading-relaxed">
-              When you're sick, traveling, or going through something, Wade will record it here so he carries it across every chat — until you mark it resolved.
+          /* draft tab */
+          !memoriesLoaded ? (
+            <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-12 animate-fade-in">
+              Loading...
             </p>
-          </div>
+          ) : draftMemories.length > 0 ? (
+            <div className="flex flex-col gap-3 animate-fade-in">
+              {draftMemories.map((mem) => (
+                <div
+                  key={mem.id}
+                  className="bg-[var(--wade-bg-card)] border border-wade-border rounded-2xl p-4 shadow-sm"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--wade-accent)]/10 text-[var(--wade-accent)] font-bold uppercase tracking-wider">
+                      {mem.category}
+                    </span>
+                    <span className="text-[9px] text-[var(--wade-text-muted)]/60 font-mono">
+                      importance {mem.importance}
+                    </span>
+                    <span className="text-[9px] text-[var(--wade-text-muted)]/60 ml-auto font-mono">
+                      {new Date(mem.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' })}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-[var(--wade-text-main)] leading-relaxed mb-2">
+                    {mem.content}
+                  </p>
+                  {(mem as any).extraction_reason && (
+                    <p className="text-[10px] italic text-[var(--wade-text-muted)] leading-relaxed mb-3 opacity-80">
+                      "{(mem as any).extraction_reason}"
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 pt-2 border-t border-wade-border/40">
+                    <button
+                      type="button"
+                      onClick={() => handleApproveDraft(mem.id)}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[var(--wade-accent)] text-white hover:opacity-90 transition-opacity shadow-sm"
+                    >
+                      <Check size={12} /> Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRejectDraft(mem.id)}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[var(--wade-bg-app)] border border-wade-border text-[var(--wade-text-muted)] hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 transition-colors"
+                    >
+                      <X size={12} /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 animate-fade-in space-y-2">
+              <p className="text-[12px] text-[var(--wade-text-muted)]">没有待审核的记忆。</p>
+              <p className="text-[10px] text-[var(--wade-text-muted)]/60 max-w-[260px] mx-auto leading-relaxed">
+                Wade 做梦时提取的卡片会出现在这里。今天还没做梦或者没有值得记的，就先空着。
+              </p>
+            </div>
+          )
         )}
       </main>
 
