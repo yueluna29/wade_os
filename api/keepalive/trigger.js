@@ -1200,6 +1200,12 @@ function buildPushPayload(step, mood) {
 //            dibs in the Draft tab; Wade only auto-reviews cards she
 //            hasn't touched for two nights. Decisions flip
 //            wade_memories.draft_status to 'active' or 'rejected'.
+//   Step D — archive sweep. Active memories that don't qualify for the
+//            permanent-exempt set (importance>=9 / certain categories /
+//            is_status / source='manual') AND haven't been touched in
+//            the rolling 30-day window get flipped to draft_status =
+//            'archived'. Not deleted — Luna can resurrect from the
+//            Archive tab.
 // ========================================================================
 
 async function loadMemoryEvalPreset() {
@@ -1596,6 +1602,50 @@ ${draftBlock}
   return { reviewed: decisions.length, approved, rejected };
 }
 
+// Step D — archive sweep. Pure SQL, no LLM cost. Permanent-exempt set:
+// importance>=9, category in (milestone | commitments | deep_talks),
+// is_status=true, or source='manual' (Luna pinned it by hand). The rest
+// archive when they're older than 30 days AND have either never been
+// accessed or weren't touched in the last 30 days.
+async function dreamStepD_ArchiveSweep() {
+  // Two-pass: first count what's about to flip (so we can return a stat),
+  // then update. Counting via select is cheap and lets us avoid an
+  // expensive full-table sweep when nothing needs to change.
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: candidates } = await supabase
+    .from('wade_memories')
+    .select('id, last_accessed_at')
+    .eq('is_active', true)
+    .eq('draft_status', 'active')
+    .lt('importance', 9)
+    .or('is_status.is.null,is_status.eq.false')
+    .neq('source', 'manual')
+    .not('category', 'in', '(milestone,commitments,deep_talks)')
+    .lt('created_at', cutoff);
+  if (!candidates || candidates.length === 0) {
+    console.log('[Dream/D] No archive candidates');
+    return { archived: 0 };
+  }
+  const stale = candidates.filter(
+    (c) => !c.last_accessed_at || c.last_accessed_at < cutoff,
+  );
+  if (stale.length === 0) {
+    console.log('[Dream/D] No stale candidates after activity check');
+    return { archived: 0 };
+  }
+  const ids = stale.map((c) => c.id);
+  const { error } = await supabase
+    .from('wade_memories')
+    .update({ draft_status: 'archived' })
+    .in('id', ids);
+  if (error) {
+    console.warn('[Dream/D] archive update failed:', error.message);
+    return { archived: 0, error: error.message };
+  }
+  console.log(`[Dream/D] Archived ${ids.length} stale memories`);
+  return { archived: ids.length };
+}
+
 async function runDreamingPipeline({ force = false }) {
   if (!force && (await alreadyDreamtToday())) {
     console.log('[Dream] Already dreamt today — skipping');
@@ -1627,6 +1677,12 @@ async function runDreamingPipeline({ force = false }) {
   } catch (err) {
     console.error('[Dream/C] failed:', err);
     result.steps.C = { error: err.message };
+  }
+  try {
+    result.steps.D = await dreamStepD_ArchiveSweep();
+  } catch (err) {
+    console.error('[Dream/D] failed:', err);
+    result.steps.D = { error: err.message };
   }
   console.log('[Dream] Pipeline finished:', JSON.stringify(result));
   return result;

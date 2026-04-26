@@ -48,7 +48,7 @@ export interface WadeMemory {
   // source: where the row came from (realtime chat / dreaming pipeline / manual).
   // referenced_count: how many times Wade actually cited this memory (Phase 2,
   // separate from access_count which counts injections).
-  draft_status?: 'draft' | 'active' | 'rejected';
+  draft_status?: 'draft' | 'active' | 'rejected' | 'archived';
   source?: 'realtime' | 'dreaming' | 'manual';
   referenced_count?: number;
 }
@@ -782,8 +782,11 @@ export function formatMemoriesForPrompt(
       minute: '2-digit',
       hour12: false,
     });
-    return `<memory importance="${m.importance}" category="${m.category}" time="${dt}">
-${m.content}
+    // id attribute lets Wade reference this memory via <!-- ref:ID --> in
+    // his reply (Phase 2 renewal). Prefix the content with the same id in
+    // brackets so models that ignore XML attributes still see the handle.
+    return `<memory id="${m.id}" importance="${m.importance}" category="${m.category}" time="${dt}">
+[memory:${m.id}] ${m.content}
 </memory>`;
   };
 
@@ -810,8 +813,82 @@ ${weeklySummary.trim()}
 以下是你关于 Luna 的记忆，在对话中自然地运用它们，不要刻意提及"我记得"：
 
 ${relevant.map(renderMemory).join('\n\n')}
+
+（系统指令：如果你在回复中**真正参考了**上面某条或某几条记忆的内容，请在回复**最末尾**添加这个标记：<!-- ref:记忆ID1,记忆ID2 --> 。只标真正用到的，被注入但没用上的不要标。这个标记 Luna 看不到，是给系统记账用——被你引用过的记忆才会续命，不被引用的会慢慢淡出。）
 </wade_memories>`;
   }
 
   return out;
+}
+
+// =============================================
+// Phase 2: Reference parsing & renewal
+// =============================================
+
+/**
+ * Parses Wade's reply for `<!-- ref:ID,ID -->` markers, validates the IDs
+ * against the memory pool that was actually injected this turn, strips
+ * the marker out of the visible reply, and bumps `referenced_count` +
+ * `last_accessed_at` on every valid reference.
+ *
+ * Hallucinated IDs (model invents an ID that wasn't injected) are
+ * silently dropped — no DB write for those.
+ *
+ * Returns the cleaned reply text and the list of valid references for
+ * downstream telemetry / UI use.
+ */
+export async function processMemoryRefs(
+  rawReply: string,
+  injectedMemoryIds: string[],
+): Promise<{ cleanReply: string; referencedIds: string[] }> {
+  if (!rawReply) return { cleanReply: rawReply, referencedIds: [] };
+  const refRegex = /<!--\s*ref:([\w\-, \t]+?)\s*-->/g;
+  const allIds: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = refRegex.exec(rawReply)) !== null) {
+    const ids = m[1].split(',').map((s) => s.trim()).filter(Boolean);
+    allIds.push(...ids);
+  }
+  // Strip every marker (there could be more than one if the model splits).
+  const cleanReply = rawReply.replace(refRegex, '').trim();
+
+  if (allIds.length === 0) return { cleanReply, referencedIds: [] };
+
+  // Validate against the injected pool to prevent hallucinated IDs.
+  const injectedSet = new Set(injectedMemoryIds);
+  const validIds = Array.from(new Set(allIds.filter((id) => injectedSet.has(id))));
+
+  if (validIds.length > 0) {
+    // Increment referenced_count + bump last_accessed_at. Use the existing
+    // RPC if you have one; otherwise fall back to read-then-write per id.
+    void (async () => {
+      try {
+        const { data: rows, error } = await supabase
+          .from('wade_memories')
+          .select('id, referenced_count')
+          .in('id', validIds);
+        if (error) {
+          console.warn('[WadeMemory] processMemoryRefs read failed:', error.message);
+          return;
+        }
+        const now = new Date().toISOString();
+        await Promise.all(
+          (rows || []).map((r: any) =>
+            supabase
+              .from('wade_memories')
+              .update({
+                referenced_count: (r.referenced_count || 0) + 1,
+                last_accessed_at: now,
+              })
+              .eq('id', r.id),
+          ),
+        );
+        console.log(`[WadeMemory] referenced ${validIds.length} memories`);
+      } catch (err) {
+        console.warn('[WadeMemory] processMemoryRefs update failed:', err);
+      }
+    })();
+  }
+
+  return { cleanReply, referencedIds: validIds };
 }

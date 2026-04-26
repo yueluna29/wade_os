@@ -20,6 +20,8 @@ import {
   ClipboardCheck,
   Check,
   X,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 import { CoreMemoryEditor } from './CoreMemoryEditor';
 import { StatusMemoryEditor } from './StatusMemoryEditor';
@@ -47,6 +49,12 @@ interface WadeMemoryRow {
   created_at: string;
   is_status?: boolean | null;
   expires_at?: string | null;
+  draft_status?: 'draft' | 'active' | 'rejected' | 'archived' | null;
+  source?: 'realtime' | 'dreaming' | 'manual' | null;
+  extraction_reason?: string | null;
+  referenced_count?: number | null;
+  last_accessed_at?: string | null;
+  updated_at?: string | null;
 }
 
 const WADE_CATEGORIES: { id: WadeMemoryCategory | 'all'; label: string }[] = [
@@ -306,6 +314,43 @@ const WadeMemoryCard: React.FC<{
           <Activity size={10} className="text-[var(--wade-accent)]/70 sm:w-[12px] sm:h-[12px]" />
           {memory.access_count} {memory.access_count === 1 ? 'recall' : 'recalls'}
         </span>
+        {(memory.referenced_count ?? 0) > 0 && (
+          <span
+            className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[11px] font-medium"
+            style={{ backgroundColor: 'var(--wade-accent-light)', color: 'var(--wade-accent)', borderColor: 'var(--wade-accent)' }}
+            title="Times Wade actually cited this memory in a reply"
+          >
+            <Pin size={10} className="sm:w-[12px] sm:h-[12px]" />
+            {memory.referenced_count} ref
+          </span>
+        )}
+        {(() => {
+          // Decay warning: row is < 7 days from being archived. Skip when
+          // it's permanently exempt (high importance / certain category /
+          // status / Luna-pinned).
+          const exempt =
+            memory.importance >= 9 ||
+            (memory.category as string) === 'milestone' ||
+            (memory.category as string) === 'commitments' ||
+            (memory.category as string) === 'deep_talks' ||
+            !!memory.is_status ||
+            memory.source === 'manual';
+          if (exempt) return null;
+          const lastTouch = memory.last_accessed_at || memory.created_at;
+          const ageMs = Date.now() - new Date(lastTouch).getTime();
+          const daysIdle = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+          // Warning fires when we're inside the last 7 days of the 30-day window.
+          if (daysIdle < 23) return null;
+          return (
+            <span
+              className="flex items-center justify-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-medium border"
+              style={{ color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.4)', backgroundColor: 'rgba(254, 243, 199, 0.6)' }}
+              title="Will be archived if not referenced soon"
+            >
+              ⚠ fading
+            </span>
+          );
+        })()}
         <span className="flex items-center gap-1 sm:gap-1.5 text-[9px] sm:text-[11px] font-medium text-[var(--wade-text-muted)]/70">
           <Clock size={10} className="sm:w-[12px] sm:h-[12px]" /> {formatAbsolute(memory.created_at)}
         </span>
@@ -405,7 +450,7 @@ export const MemoryV2: React.FC = () => {
     toggleCoreMemoryForKeepalive,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'core' | 'weekly' | 'wade' | 'now' | 'draft'>('wade');
+  const [activeTab, setActiveTab] = useState<'core' | 'weekly' | 'wade' | 'now' | 'draft' | 'archive'>('wade');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<WadeMemoryCategory | 'all'>('all');
   // Wade tab paginates client-side — 548+ rows render fine in React but
@@ -431,6 +476,7 @@ export const MemoryV2: React.FC = () => {
   const [wadeMemories, setWadeMemories] = useState<WadeMemoryRow[]>([]);
   const [statusMemories, setStatusMemories] = useState<WadeMemoryRow[]>([]);
   const [draftMemories, setDraftMemories] = useState<WadeMemoryRow[]>([]);
+  const [archivedMemories, setArchivedMemories] = useState<WadeMemoryRow[]>([]);
   const [memoriesLoaded, setMemoriesLoaded] = useState(false);
   const [weeklySummary, setWeeklySummary] = useState<{ content: string; period_start: string; period_end: string; updated_at: string } | null>(null);
   const [recentDiaries, setRecentDiaries] = useState<{ id: string; content: string; mood: string | null; created_at: string }[]>([]);
@@ -444,7 +490,7 @@ export const MemoryV2: React.FC = () => {
     const fetchAll = async () => {
       const { data, error } = await supabase
         .from('wade_memories')
-        .select('id, content, category, importance, access_count, tags, created_at, is_status, expires_at, draft_status, source, extraction_reason')
+        .select('id, content, category, importance, access_count, tags, created_at, is_status, expires_at, draft_status, source, extraction_reason, referenced_count, last_accessed_at, updated_at')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (cancelled) return;
@@ -455,8 +501,9 @@ export const MemoryV2: React.FC = () => {
       }
       const all = (data || []) as WadeMemoryRow[];
       setStatusMemories(all.filter((m) => !!m.is_status));
-      setDraftMemories(all.filter((m) => (m as any).draft_status === 'draft' && !m.is_status));
-      setWadeMemories(all.filter((m) => !m.is_status && ((m as any).draft_status === 'active' || (m as any).draft_status === undefined)));
+      setDraftMemories(all.filter((m) => m.draft_status === 'draft' && !m.is_status));
+      setArchivedMemories(all.filter((m) => m.draft_status === 'archived'));
+      setWadeMemories(all.filter((m) => !m.is_status && (m.draft_status === 'active' || !m.draft_status)));
       setMemoriesLoaded(true);
     };
     fetchAll();
@@ -518,6 +565,18 @@ export const MemoryV2: React.FC = () => {
       .update({ draft_status: 'rejected' })
       .eq('id', id);
     if (error) console.error('[MemoryV2] reject draft failed', error);
+  };
+
+  // Resurrect an archived memory back into the active retrieval pool.
+  // Bumps last_accessed_at so the renewal clock restarts from now —
+  // otherwise the next nightly sweep would archive it again immediately.
+  const handleRestoreArchived = async (id: string) => {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from('wade_memories')
+      .update({ draft_status: 'active', last_accessed_at: now })
+      .eq('id', id);
+    if (error) console.error('[MemoryV2] restore archived failed', error);
   };
 
   const allCoreTags = useMemo(
@@ -634,6 +693,7 @@ export const MemoryV2: React.FC = () => {
             { id: 'wade' as const, label: 'Wade', icon: <BrainCircuit size={13} /> },
             { id: 'now' as const, label: 'Now', icon: <AlarmClock size={13} /> },
             { id: 'draft' as const, label: 'Draft', icon: <ClipboardCheck size={13} /> },
+            { id: 'archive' as const, label: 'Archive', icon: <Archive size={13} /> },
           ]).map((t) => {
             const isActive = activeTab === t.id;
             const showDot =
@@ -856,7 +916,7 @@ export const MemoryV2: React.FC = () => {
               )}
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'draft' ? (
           /* draft tab */
           !memoriesLoaded ? (
             <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-12 animate-fade-in">
@@ -912,6 +972,66 @@ export const MemoryV2: React.FC = () => {
               <p className="text-[12px] text-[var(--wade-text-muted)]">没有待审核的记忆。</p>
               <p className="text-[10px] text-[var(--wade-text-muted)]/60 max-w-[260px] mx-auto leading-relaxed">
                 Wade 做梦时提取的卡片会出现在这里。今天还没做梦或者没有值得记的，就先空着。
+              </p>
+            </div>
+          )
+        ) : (
+          /* archive tab — memories that aged out of the 30-day rolling
+             window. Sorted by updated_at desc so the most recently
+             archived sits at the top. */
+          !memoriesLoaded ? (
+            <p className="text-center text-[11px] text-[var(--wade-text-muted)]/60 py-12 animate-fade-in">
+              Loading...
+            </p>
+          ) : archivedMemories.length > 0 ? (
+            <div className="flex flex-col gap-3 animate-fade-in">
+              {[...archivedMemories]
+                .sort((a, b) => {
+                  const ta = new Date(a.updated_at || a.created_at).getTime();
+                  const tb = new Date(b.updated_at || b.created_at).getTime();
+                  return tb - ta;
+                })
+                .map((mem) => (
+                  <div
+                    key={mem.id}
+                    className="bg-[var(--wade-bg-card)] border border-wade-border rounded-2xl p-4 shadow-sm opacity-80"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-wade-bg-app border border-wade-border text-[var(--wade-text-muted)] font-bold uppercase tracking-wider">
+                        {mem.category}
+                      </span>
+                      <span className="text-[9px] text-[var(--wade-text-muted)]/60 font-mono">
+                        importance {mem.importance}
+                      </span>
+                      {(mem.referenced_count ?? 0) > 0 && (
+                        <span className="text-[9px] text-[var(--wade-text-muted)]/60 font-mono">
+                          {mem.referenced_count} ref
+                        </span>
+                      )}
+                      <span className="text-[9px] text-[var(--wade-text-muted)]/60 ml-auto font-mono">
+                        archived {formatAbsolute(mem.updated_at || mem.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-[12px] text-[var(--wade-text-main)] leading-relaxed mb-3 line-clamp-3">
+                      {mem.content}
+                    </p>
+                    <div className="flex items-center pt-2 border-t border-wade-border/40">
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreArchived(mem.id)}
+                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[var(--wade-bg-app)] border border-wade-border text-[var(--wade-accent)] hover:bg-[var(--wade-accent)] hover:text-white hover:border-[var(--wade-accent)] transition-colors"
+                      >
+                        <RotateCcw size={12} /> Restore
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 animate-fade-in space-y-2">
+              <p className="text-[12px] text-[var(--wade-text-muted)]">没有被淘汰的记忆。</p>
+              <p className="text-[10px] text-[var(--wade-text-muted)]/60 max-w-[260px] mx-auto leading-relaxed">
+                被 Wade 长期遗忘的记忆会安静地来到这里，你可以随时把它们叫回来。
               </p>
             </div>
           )

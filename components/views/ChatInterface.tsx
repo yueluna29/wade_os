@@ -8,7 +8,7 @@ import { generateMinimaxTTS } from '../../services/minimaxService';
 import { Message, ChatMode, ArchiveMessage, ChatArchive } from '../../types';
 import { ChatThemePanel } from './chat/ChatThemePanel';
 import { supabase } from '../../services/supabase';
-import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, WadeMemory } from '../../services/memoryService';
+import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, processMemoryRefs, WadeMemory } from '../../services/memoryService';
 import { getPendingTodos, formatTodosForChatPrompt, extractTodoTags, writeExtractedFromChat, getRecentDiaries, formatDiariesForPrompt } from '../../services/todoService';
 import { MemoryLiveIndicator } from './memory/MemoryLiveIndicator';
 
@@ -575,6 +575,7 @@ export const ChatInterface: React.FC = () => {
  
       // 智能记忆：检索已有记忆注入 prompt
       let wadeMemoriesXml = '';
+      let wadeMemoryIds: string[] = [];
       try {
         const currentUserText = activeMode === 'sms'
           ? freshMessages.filter(m => m.role === 'Luna').slice(-3).map(m => m.text).join('\n')
@@ -592,6 +593,10 @@ export const ChatInterface: React.FC = () => {
           : llmPresets.find(p => isGemini(p) && p.apiKey);
         const wadeMemories = await retrieveRelevantMemories(currentUserText, 10, memEvalLlm, embLlm);
         wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
+        wadeMemoryIds = [
+          ...(wadeMemories.status || []).map((m) => m.id),
+          ...(wadeMemories.relevant || []).map((m) => m.id),
+        ];
         setLastWadeMemoriesXml(wadeMemoriesXml);
       } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
 
@@ -627,11 +632,25 @@ export const ChatInterface: React.FC = () => {
         llmPreset: activeLlm,
       });
 
+      // Phase 2 ref parsing — strip <!-- ref:ID --> markers and bump
+      // referenced_count + last_accessed_at on every valid (injected) ID.
+      // Hallucinated IDs are dropped silently.
+      const rawResponseText = response.text;
+      let refStrippedText = rawResponseText;
+      try {
+        const refResult = await processMemoryRefs(rawResponseText, wadeMemoryIds);
+        refStrippedText = refResult.cleanReply;
+        if (refResult.referencedIds.length > 0) {
+          console.log('[WadeMemory] Wade referenced:', refResult.referencedIds);
+        }
+      } catch (refErr) {
+        console.warn('[WadeMemory] processMemoryRefs failed:', refErr);
+      }
+
       // Strip <todo> / <done> tags from Wade's reply BEFORE displaying or
       // splitting into bubbles. The extracted notes are async-written to the
       // wade_todos table so Wade sees them on his next wake / chat turn.
-      const rawResponseText = response.text;
-      const extracted = extractTodoTags(rawResponseText);
+      const extracted = extractTodoTags(refStrippedText);
       const responseText = extracted.cleanText;
       if (extracted.todos.length > 0 || extracted.doneIds.length > 0) {
         writeExtractedFromChat(extracted, targetSessionId).catch(err => {

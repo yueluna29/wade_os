@@ -11,7 +11,7 @@ import { useStore } from '../../store';
 import { supabase } from '../../services/supabase';
 import { generateMinimaxTTS } from '../../services/minimaxService';
 import { generateFromCard, generateChatTitle, summarizeConversation, generateImageDescription } from '../../services/aiService';
-import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, WadeMemory } from '../../services/memoryService';
+import { retrieveRelevantMemories, formatMemoriesForPrompt, evaluateAndStoreMemory, processMemoryRefs, WadeMemory } from '../../services/memoryService';
 import { getPendingTodos, formatTodosForChatPrompt, getRecentDiaries, formatDiariesForPrompt, extractTodoTags, writeExtractedFromChat } from '../../services/todoService';
 import { buildCardFromSettings } from '../../services/personaBuilder';
 import { MemoryLiveIndicator } from './memory/MemoryLiveIndicator';
@@ -1114,6 +1114,10 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     sessionId: string;
     turnAt: number;
     memoriesXml: string;
+    // IDs of every memory rendered into memoriesXml this turn. Used by the
+    // Phase 2 ref parser to validate Wade's <!-- ref:ID --> markers (any
+    // ID that wasn't injected = hallucinated → drop).
+    memoryIds: string[];
     diaryXml: string;
     todosXml: string;
   } | null>(null);
@@ -1751,6 +1755,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       // would silently 400. If no Gemini preset exists we simply skip.
       const isLunaWadeChat = phoneOwner === 'luna' && contact.id === 'wade';
       let wadeMemoriesXml = '';
+      let wadeMemoryIds: string[] = [];
       let wadeDiaryXml = '';
       let wadeTodosXml = '';
       const recentLunaTexts = allSessionMsgs
@@ -1786,6 +1791,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
               : llmPresets.find((p) => (p.provider === 'Gemini' || p.baseUrl?.includes('googleapis')) && p.apiKey);
             const wadeMemories = await retrieveRelevantMemories(recentLunaTexts, 7, memEvalLlm, embLlm);
             wadeMemoriesXml = formatMemoriesForPrompt(wadeMemories);
+            // Capture both status + relevant IDs so the ref parser can
+            // validate against the full pool Wade actually saw this turn.
+            wadeMemoryIds = [
+              ...(wadeMemories.status || []).map((m) => m.id),
+              ...(wadeMemories.relevant || []).map((m) => m.id),
+            ];
           } catch (e) { console.error('[WadeMemory] Retrieval failed:', e); }
 
           try {
@@ -1802,11 +1813,13 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
             sessionId: targetSessionId,
             turnAt: lunaTurnCount,
             memoriesXml: wadeMemoriesXml,
+            memoryIds: wadeMemoryIds,
             diaryXml: wadeDiaryXml,
             todosXml: wadeTodosXml,
           };
         } else {
           wadeMemoriesXml = cache!.memoriesXml;
+          wadeMemoryIds = cache!.memoryIds || [];
           wadeDiaryXml = cache!.diaryXml;
           wadeTodosXml = cache!.todosXml;
         }
@@ -1847,12 +1860,27 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
         });
       }
 
+      // Phase 2 ref parsing — strip <!-- ref:ID,ID --> markers and bump
+      // referenced_count + last_accessed_at on every valid (injected) ID.
+      // Hallucinated IDs are dropped silently. Runs before todo extraction
+      // so the ref marker can't accidentally end up inside a <todo> body.
+      const rawResponseText = response.text;
+      let refStrippedText = rawResponseText;
+      try {
+        const refResult = await processMemoryRefs(rawResponseText, wadeMemoryIds);
+        refStrippedText = refResult.cleanReply;
+        if (refResult.referencedIds.length > 0) {
+          console.log('[WadeMemory] Wade referenced:', refResult.referencedIds);
+        }
+      } catch (refErr) {
+        console.warn('[WadeMemory] processMemoryRefs failed:', refErr);
+      }
+
       // Strip <todo> / <done> tags from Wade's reply before it's shown or
       // split into bubbles. The extracted notes / completions are fired off
       // to wade_todos so Wade sees them on his next wake; the user-facing
       // text keeps the cleaned body only.
-      const rawResponseText = response.text;
-      const extracted = extractTodoTags(rawResponseText);
+      const extracted = extractTodoTags(refStrippedText);
       const responseText = extracted.cleanText;
       if (extracted.todos.length > 0 || extracted.doneIds.length > 0) {
         writeExtractedFromChat(extracted, targetSessionId).catch((err) => {
