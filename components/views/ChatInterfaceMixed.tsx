@@ -1157,6 +1157,30 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     };
   }, [renderMessages.length, lastSig]);
 
+  // Mount-time / contact-switch snap. initialTopMostItemIndex covers the
+  // synchronous case, but messages often load async (hydration, session
+  // switch, supabase fetch) — so once the list goes from empty to non-empty
+  // for THIS contact we hard-snap to bottom across a long-tail of frames to
+  // outlast late image decode and the late hydration of attachment rows.
+  const hasHydratedForContactRef = useRef(false);
+  useEffect(() => { hasHydratedForContactRef.current = false; }, [contact.id, resolvedSessionId]);
+  useEffect(() => {
+    if (renderMessages.length === 0) return;
+    if (hasHydratedForContactRef.current) return;
+    if (userScrolledUpRef.current) return;
+    hasHydratedForContactRef.current = true;
+    const snap = () => virtuosoRef.current?.scrollToIndex({
+      index: 'LAST',
+      align: 'end',
+      behavior: 'auto',
+    });
+    const timers: number[] = [];
+    [0, 50, 150, 350, 700, 1200].forEach((d) => {
+      timers.push(window.setTimeout(snap, d));
+    });
+    return () => { timers.forEach(clearTimeout); };
+  }, [contact.id, resolvedSessionId, renderMessages.length]);
+
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
   const [playingMsgId, setPlayingMsgId] = useState<string | number | null>(null);
@@ -2911,7 +2935,10 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           ref={virtuosoRef}
           style={{ height: '100%' }}
           data={renderMessages}
-          initialTopMostItemIndex={Math.max(0, renderMessages.length - 1)}
+          initialTopMostItemIndex={{
+            index: Math.max(0, renderMessages.length - 1),
+            align: 'end',
+          }}
           followOutput={false}
           atBottomStateChange={(atBottom) => {
             isAtBottomRef.current = atBottom;
