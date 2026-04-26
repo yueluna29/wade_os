@@ -80,6 +80,13 @@ export const SystemPersonaTabCompact: React.FC<SystemPersonaTabCompactProps> = (
             onSave={(v) => onUpdateField('sms_mode_rules', v)}
             setFocusModal={setFocusModal}
           />
+          <EditableRow
+            label="Mixed Mode Rules"
+            hint="Bubble / POV / voice format — applied to every reply"
+            value={cardData.mixed_mode_rules || ''}
+            onSave={(v) => onUpdateField('mixed_mode_rules', v)}
+            setFocusModal={setFocusModal}
+          />
           <EditableRow isLast
             label="RP Kink Rules (Safety off)"
             hint="Roleplay mode -- Deep chat also uses this"

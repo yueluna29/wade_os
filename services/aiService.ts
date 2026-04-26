@@ -74,6 +74,10 @@ export const buildSystemPromptFromCard = (options: {
   const globalDirectives = systemCard?.global_directives?.trim() || wadeCard?.global_directives?.trim();
   const smsRulesEffective = systemCard?.sms_mode_rules?.trim() || wadeCard?.sms_mode_rules?.trim();
   const rpRulesEffective = systemCard?.rp_mode_rules?.trim() || wadeCard?.rp_mode_rules?.trim();
+  // Mixed-mode rules apply to every reply regardless of chat_mode — Mixed
+  // UI lets a single thread mix dialogue / POV / voice bubbles. Edited
+  // from the System card UI like the other mode rules.
+  const mixedRulesEffective = systemCard?.mixed_mode_rules?.trim() || wadeCard?.mixed_mode_rules?.trim();
 
   let prompt = '';
 
@@ -135,6 +139,12 @@ export const buildSystemPromptFromCard = (options: {
   } else {
     // deep 模式：如果有 RP 规则也加上（因为 deep 模式也需要 CoT）
     if (rpRulesEffective) prompt += `\n\n${rpRulesEffective}`;
+  }
+
+  // 5b. Mixed 格式规则（适用于所有 chat_mode — Mixed UI 单一会话支持
+  //     dialogue / POV narration / voice 三种气泡，规则总要给）
+  if (mixedRulesEffective) {
+    prompt += `\n\n${mixedRulesEffective}`;
   }
 
   // 6. 长期记忆（慢变：Luna 改 memory 时）

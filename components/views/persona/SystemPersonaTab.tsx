@@ -26,6 +26,9 @@ export const SystemPersonaTab: React.FC<SystemPersonaTabProps> = ({
           <FormInput label="SMS Brainwash Rules" value={cardData.sms_mode_rules || ''} onChange={(v) => onUpdateField('sms_mode_rules', v)} isTextArea onExpand={() => setFocusModal({label: "SMS Brainwash Rules", value: cardData.sms_mode_rules || '', onSave: (v) => onUpdateField('sms_mode_rules', v)})} />
         </div>
         <div className="bg-wade-bg-card p-6 rounded-[24px] shadow-sm border border-wade-border">
+          <FormInput label="Mixed Mode Rules" value={cardData.mixed_mode_rules || ''} onChange={(v) => onUpdateField('mixed_mode_rules', v)} isTextArea onExpand={() => setFocusModal({label: "Mixed Mode Rules", value: cardData.mixed_mode_rules || '', onSave: (v) => onUpdateField('mixed_mode_rules', v)})} />
+        </div>
+        <div className="bg-wade-bg-card p-6 rounded-[24px] shadow-sm border border-wade-border">
           <FormInput label="RP Kink Rules (Safety off)" value={cardData.rp_mode_rules || ''} onChange={(v) => onUpdateField('rp_mode_rules', v)} isTextArea onExpand={() => setFocusModal({label: "RP Kink Rules (Safety off)", value: cardData.rp_mode_rules || '', onSave: (v) => onUpdateField('rp_mode_rules', v)})} />
         </div>
       </div>

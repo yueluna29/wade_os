@@ -138,6 +138,8 @@ export const XRayModal: React.FC<XRayModalProps> = ({
   const modeRules = activeMode === 'sms'
     ? ((systemCardData.sms_mode_rules || wadeCardData.sms_mode_rules || '(None — SMS fallback)').trim() || '(None — SMS fallback)')
     : ((systemCardData.rp_mode_rules || wadeCardData.rp_mode_rules || '(None — RP/Deep fallback)').trim() || '(None — RP/Deep fallback)');
+  // Mixed-mode rules apply to every reply regardless of chat_mode.
+  const mixedModeRules = (systemCardData.mixed_mode_rules || wadeCardData.mixed_mode_rules || '').trim();
 
   // === 统一样式 ===
   const textStyle = "text-[11px] leading-relaxed font-mono text-wade-text-main/80 whitespace-pre-wrap";
@@ -325,6 +327,12 @@ export const XRayModal: React.FC<XRayModalProps> = ({
           <XRaySection title="Mode Rules" subtitle={activeMode === 'sms' ? 'SMS Format Rules' : activeMode === 'roleplay' ? 'RP Format Rules' : 'Deep/CoT Rules'}>
             <CodeBlock content={modeRules} />
           </XRaySection>
+
+          {mixedModeRules && (
+            <XRaySection title="Mixed Mode Rules" subtitle="Bubble / POV / voice format — every reply">
+              <CodeBlock content={mixedModeRules} />
+            </XRaySection>
+          )}
 
           {spiceContent && (
             <XRaySection title="Special Sauce" subtitle="Session Custom Prompt">

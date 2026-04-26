@@ -594,6 +594,13 @@ export const ApiSettingsV2: React.FC<ApiSettingsV2Props> = ({ onBack }) => {
                             rows: 5,
                           },
                           {
+                            key: 'mixed_mode_rules',
+                            label: 'Mixed Mode Rules',
+                            hint: 'Applied to every reply regardless of chat mode. Use this for the bubble / POV / voice format spec the parser expects.',
+                            placeholder: 'How replies are split into bubbles — ||| separator, *narration*, [VOICE], no timestamp prefix.',
+                            rows: 5,
+                          },
+                          {
                             key: 'keepalive_prompt',
                             label: 'Keepalive Prompt',
                             hint: 'Drives the background autonomy loop only. Completely separate from chat — chat never sees this.',
