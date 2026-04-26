@@ -448,6 +448,7 @@ export const MemoryV2: React.FC = () => {
     updateCoreMemory,
     deleteCoreMemory,
     toggleCoreMemoryForKeepalive,
+    setTab,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<'core' | 'weekly' | 'wade' | 'now' | 'draft' | 'archive'>('wade');
@@ -872,7 +873,7 @@ export const MemoryV2: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => useStore.getState().setTab('journal')}
+              onClick={() => setTab('journal')}
               className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[var(--wade-bg-app)] border border-wade-border text-[var(--wade-accent)] hover:bg-[var(--wade-accent)] hover:text-white hover:border-[var(--wade-accent)] transition-colors"
             >
               View full Journal
