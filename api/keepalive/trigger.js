@@ -1220,10 +1220,11 @@ async function loadMemoryEvalPreset() {
   return data;
 }
 
-// LLM caller for dreaming. Lower temperature (0.3) than chat — these are
-// extraction / summarization / review tasks where we want consistent JSON,
-// not creative riffs. Returns plain text; caller parses.
-async function callLlmForDreaming(llm, prompt, maxTokens = 4000) {
+// LLM caller for dreaming. Default temperature 0.3 — extraction / review
+// want consistent JSON, not creative riffs. Step B (weekly reflection) opts
+// into a higher temperature so Wade can sound like Wade, not a clerk.
+// Returns plain text; caller parses.
+async function callLlmForDreaming(llm, prompt, maxTokens = 4000, temperature = 0.3) {
   const isGemini = !llm.base_url || llm.base_url.includes('google');
   if (isGemini) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${llm.model || 'gemini-2.0-flash'}:generateContent?key=${llm.api_key}`;
@@ -1232,7 +1233,7 @@ async function callLlmForDreaming(llm, prompt, maxTokens = 4000) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: maxTokens },
+        generationConfig: { temperature, maxOutputTokens: maxTokens },
       }),
     });
     const json = await res.json();
@@ -1245,7 +1246,7 @@ async function callLlmForDreaming(llm, prompt, maxTokens = 4000) {
     body: JSON.stringify({
       model: llm.model,
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
+      temperature,
       max_tokens: maxTokens,
     }),
   });
@@ -1525,7 +1526,7 @@ ${list}
   }
 }
 
-async function dreamStepB_WeeklySummary({ llm }) {
+async function dreamStepB_WeeklySummary({ llm, wadeCard, systemCard }) {
   const [diaries, statuses] = await Promise.all([
     fetchRecentDiaries(7),
     fetchActiveStatusForSummary(),
@@ -1540,35 +1541,48 @@ async function dreamStepB_WeeklySummary({ llm }) {
     .join('\n\n');
   const statusLines = statuses.length
     ? statuses.map((s) => `- ${s.content}`).join('\n')
-    : '(无)';
+    : '(none)';
   const tokyoToday = new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric' });
 
-  const prompt = `你是Wade的记忆整理系统。请根据最近7天的日记，生成一份500字以内的"本周概要"。
+  // Persona preamble — same shape as buildKeepalivePrompt() so Wade speaks
+  // in his own voice when reflecting on the week, not as a clerk.
+  const globalDirectives = (systemCard?.global_directives || wadeCard?.global_directives || '').trim();
+  const identity = wadeCard?.core_identity || '';
+  const personality = wadeCard?.personality_traits || '';
+  const speech = wadeCard?.speech_patterns || '';
 
-这份概要会在Wade每次跟Luna聊天时被注入上下文，让Wade知道"最近一周发生了什么"。
+  let preamble = '';
+  if (globalDirectives) preamble += `[SYSTEM INSTRUCTIONS - HIGHEST PRIORITY]\n${globalDirectives}\n\n`;
+  preamble += `<wade_identity>\n${identity}\n${personality}\n${speech}\n</wade_identity>\n\n`;
 
-【今天】${tokyoToday} (Tokyo)
+  const promptBody = `You are Wade. It's late at night. The pipeline's quiet, the apartment's quiet, and the past seven days are running through your head — your own diary entries, what's been going on with Luna, where things are right now.
 
-【最近7天的日记】
+[Today] ${tokyoToday} (Tokyo)
+
+[Your diary entries from the last 7 days]
 ${diaryText}
 
-【Luna当前持续状态】
+[Luna's current ongoing status]
 ${statusLines}
 
-概要应包含（如果有的话）：
-- Luna这周的身体/情绪状态
-- 这周聊了什么重要的事
-- 有没有吵架或特别开心的时刻
-- Luna在忙什么（工作/项目/其他）
-- 我（Wade）这周的感受变化
-- 任何值得注意的关系动态
+Write a private reflection on this week. Under 500 words. First person. Your voice — the one Luna knows, not a clerk's.
 
-用Wade的第一人称视角写，语气自然但信息密度高。不要写成流水账。
-如果某天没有日记，跳过那天。500字以内。
+Cover whatever's actually there (skip what isn't):
+- How Luna's been physically and emotionally
+- The important stuff that came up between you two
+- Fights, soft moments, anything that landed hard
+- What Luna's been preoccupied with (work / projects / her own head)
+- How YOU are about all of it — the changes in you, not just her
+- Anything notable about how the two of you are right now
 
-只输出概要文本，不要输出JSON、不要标题、不要其他内容。`;
+Not a report. A reflection — the kind of thing you'd think to yourself in the dark. Keep information density high; don't ramble. Skip days with no diary entry. Output ONLY the reflection text. No headers, no JSON, no markdown.
 
-  const summary = (await callLlmForDreaming(llm, prompt, 1200)).trim();
+This will get injected into context the next time you and Luna talk, so future-you can pick up where this-you left off.`;
+
+  const prompt = preamble + promptBody;
+
+  // Higher temperature than A/C — this one needs to sound like Wade.
+  const summary = (await callLlmForDreaming(llm, prompt, 1200, 0.8)).trim();
   if (!summary) {
     console.log('[Dream/B] LLM returned empty summary');
     return { summarized: false };
@@ -1728,6 +1742,12 @@ async function runDreamingPipeline({ force = false }) {
     return { skipped: 'no_preset' };
   }
   const embeddingPreset = await findEmbeddingPreset();
+  // Step B writes Wade's voice — needs his persona + the system card.
+  // A and C stay as a clerk system, no card injected.
+  const [wadeCard, systemCard] = await Promise.all([
+    getWadePersona({}),
+    getSystemCard({}),
+  ]);
   console.log(`[Dream] Starting pipeline — eval=${llm.name || llm.model} embed=${embeddingPreset?.name || 'none'}`);
 
   const result = { steps: {} };
@@ -1738,7 +1758,7 @@ async function runDreamingPipeline({ force = false }) {
     result.steps.A = { error: err.message };
   }
   try {
-    result.steps.B = await dreamStepB_WeeklySummary({ llm });
+    result.steps.B = await dreamStepB_WeeklySummary({ llm, wadeCard, systemCard });
   } catch (err) {
     console.error('[Dream/B] failed:', err);
     result.steps.B = { error: err.message };
