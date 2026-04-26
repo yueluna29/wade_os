@@ -619,6 +619,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     updateMessageAttachments, stripAttachmentContentInDb,
     saveVaultGroup,
     addMessage, personaCards, functionBindings, getDefaultPersonaCard, setTab,
+    updateLlmPreset,
   } = useStore();
 
   // Per-anchor override for which regen group to display. When absent, the
@@ -1010,7 +1011,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // Sub-view for the Control-Center-style menu. 'main' is the tile grid;
   // 'model' is the Switch Brain list. Reset back to 'main' whenever the
   // popover closes so the next open always lands on the grid.
-  const [menuView, setMenuView] = useState<'main' | 'model'>('main');
+  const [menuView, setMenuView] = useState<'main' | 'model' | 'edit-llm'>('main');
+  // When the user taps the gear on a Switch Brain row we drop into an inline
+  // edit form for that preset. Tracks which preset is being edited and the
+  // unsaved draft so the form doesn't write to DB on every keystroke.
+  const [editingLlmId, setEditingLlmId] = useState<string | null>(null);
+  const [llmDraft, setLlmDraft] = useState<any | null>(null);
   const [showContactCard, setShowContactCard] = useState(false);
   const [attachments, setAttachments] = useState<{ type: 'image' | 'file'; content: string; mimeType: string; name: string }[]>([]);
 
@@ -2733,7 +2739,23 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
           list (model view). Two-stage: tapping the Model tile swaps this same
           popover's content rather than stacking a second overlay. */}
       {showMenu && (() => {
-        const closeMenu = () => { setShowMenu(false); setMenuView('main'); };
+        const closeMenu = () => { setShowMenu(false); setMenuView('main'); setEditingLlmId(null); setLlmDraft(null); };
+        const enterEditLlm = (preset: any) => {
+          setEditingLlmId(preset.id);
+          setLlmDraft({ ...preset });
+          setMenuView('edit-llm');
+        };
+        const exitEditLlm = () => {
+          setEditingLlmId(null);
+          setLlmDraft(null);
+          setMenuView('model');
+        };
+        const saveEditLlm = () => {
+          if (!editingLlmId || !llmDraft) return;
+          const { id, ...patch } = llmDraft;
+          updateLlmPreset(editingLlmId, patch);
+          exitEditLlm();
+        };
         const activeLlmId = activeSession?.customLlmId || binding?.llmPreset?.id || settings.activeLlmId;
         const activeLlm = llmPresets.find((p: any) => p.id === activeLlmId);
         const modelShort = (activeLlm?.name || activeLlm?.model || 'Model').split('/').pop()!.slice(0, 14);
@@ -2864,7 +2886,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                     </React.Fragment>
                   ))}
                 </div>
-              ) : (
+              ) : menuView === 'model' ? (
                 <div>
                   <div className="flex items-center gap-2 px-3 py-2.5 border-b border-wade-border/50 bg-wade-bg-app/40">
                     <button
@@ -2880,38 +2902,196 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                     {llmPresets.map((preset: any) => {
                       const isActive = preset.id === activeLlmId;
                       return (
-                        <button
+                        <div
                           key={preset.id}
-                          onClick={() => {
-                            if (resolvedSessionId) updateSession(resolvedSessionId, { customLlmId: preset.id });
-                            closeMenu();
-                          }}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors border-b border-wade-border/30 last:border-0 ${
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 transition-colors border-b border-wade-border/30 last:border-0 ${
                             isActive ? 'bg-wade-accent-light' : 'hover:bg-wade-bg-app/60'
                           }`}
                         >
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                            isActive ? 'bg-wade-accent text-white' : 'bg-wade-bg-app text-wade-text-muted'
-                          }`}>
-                            <Icons.Cube size={13} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className={`text-[11px] font-bold truncate ${isActive ? 'text-wade-accent' : 'text-wade-text-main'}`}>
-                              {preset.name || preset.model}
+                          <button
+                            onClick={() => {
+                              if (resolvedSessionId) updateSession(resolvedSessionId, { customLlmId: preset.id });
+                              closeMenu();
+                            }}
+                            className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+                          >
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                              isActive ? 'bg-wade-accent text-white' : 'bg-wade-bg-app text-wade-text-muted'
+                            }`}>
+                              <Icons.Cube size={13} />
                             </div>
-                            <div className="text-[9px] text-wade-text-muted/60 truncate font-mono">
-                              {preset.model}
+                            <div className="flex-1 min-w-0">
+                              <div className={`text-[11px] font-bold truncate ${isActive ? 'text-wade-accent' : 'text-wade-text-main'}`}>
+                                {preset.name || preset.model}
+                              </div>
+                              <div className="text-[9px] text-wade-text-muted/60 truncate font-mono">
+                                {preset.model}
+                              </div>
                             </div>
-                          </div>
+                          </button>
                           {isActive && (
                             <div className="shrink-0 text-wade-accent">
                               <Icons.Check size={12} />
                             </div>
                           )}
-                        </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); enterEditLlm(preset); }}
+                            className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-wade-text-muted/60 hover:bg-wade-border/40 hover:text-wade-accent transition-colors"
+                            aria-label="Edit brain"
+                            title="Edit parameters"
+                          >
+                            <Icons.Settings size={13} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
+                </div>
+              ) : (
+                /* edit-llm view: tweak the parameters for the brain Luna
+                   tapped the gear on. Saves on tap, cancels back to list. */
+                <div>
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b border-wade-border/50 bg-wade-bg-app/40">
+                    <button
+                      onClick={exitEditLlm}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-wade-text-muted hover:bg-wade-border/40 hover:text-wade-text-main transition-colors"
+                      aria-label="Back"
+                    >
+                      <Icons.ChevronLeft size={14} />
+                    </button>
+                    <div className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-[0.2em] truncate">
+                      Edit · {llmDraft?.name || llmDraft?.model || 'Brain'}
+                    </div>
+                  </div>
+                  {llmDraft && (
+                    <div className="max-h-[60vh] overflow-y-auto custom-scrollbar p-3 space-y-3">
+                      {/* Name */}
+                      <label className="block">
+                        <span className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-wider">Name</span>
+                        <input
+                          type="text"
+                          value={llmDraft.name || ''}
+                          onChange={(e) => setLlmDraft((d: any) => ({ ...d, name: e.target.value }))}
+                          className="mt-1 w-full px-2 py-1.5 text-[11px] bg-wade-bg-app rounded-md border border-wade-border focus:border-wade-accent focus:outline-none"
+                        />
+                      </label>
+                      {/* Model */}
+                      <label className="block">
+                        <span className="text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-wider">Model ID</span>
+                        <input
+                          type="text"
+                          value={llmDraft.model || ''}
+                          onChange={(e) => setLlmDraft((d: any) => ({ ...d, model: e.target.value }))}
+                          className="mt-1 w-full px-2 py-1.5 text-[11px] font-mono bg-wade-bg-app rounded-md border border-wade-border focus:border-wade-accent focus:outline-none"
+                        />
+                      </label>
+                      {/* Temperature */}
+                      <div>
+                        <div className="flex items-center justify-between text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-wider">
+                          <span>Temperature</span>
+                          <span className="text-wade-accent font-mono normal-case">{(llmDraft.temperature ?? 1).toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range" min={0} max={2} step={0.05}
+                          value={llmDraft.temperature ?? 1}
+                          onChange={(e) => setLlmDraft((d: any) => ({ ...d, temperature: parseFloat(e.target.value) }))}
+                          className="mt-1 w-full accent-wade-accent"
+                        />
+                      </div>
+                      {/* Top P */}
+                      <div>
+                        <div className="flex items-center justify-between text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-wider">
+                          <span>Top P</span>
+                          <span className="text-wade-accent font-mono normal-case">{(llmDraft.topP ?? 1).toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range" min={0} max={1} step={0.01}
+                          value={llmDraft.topP ?? 1}
+                          onChange={(e) => setLlmDraft((d: any) => ({ ...d, topP: parseFloat(e.target.value) }))}
+                          className="mt-1 w-full accent-wade-accent"
+                        />
+                      </div>
+                      {/* Top K */}
+                      <label className="block">
+                        <div className="flex items-center justify-between text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-wider">
+                          <span>Top K</span>
+                          <span className="text-wade-accent font-mono normal-case">{llmDraft.topK ?? '—'}</span>
+                        </div>
+                        <input
+                          type="number" min={0} step={1}
+                          value={llmDraft.topK ?? ''}
+                          placeholder="(unset)"
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setLlmDraft((d: any) => ({ ...d, topK: v === '' ? undefined : parseInt(v, 10) }));
+                          }}
+                          className="mt-1 w-full px-2 py-1.5 text-[11px] font-mono bg-wade-bg-app rounded-md border border-wade-border focus:border-wade-accent focus:outline-none"
+                        />
+                      </label>
+                      {/* Frequency Penalty */}
+                      <div>
+                        <div className="flex items-center justify-between text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-wider">
+                          <span>Frequency Penalty</span>
+                          <span className="text-wade-accent font-mono normal-case">{(llmDraft.frequencyPenalty ?? 0).toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range" min={-2} max={2} step={0.05}
+                          value={llmDraft.frequencyPenalty ?? 0}
+                          onChange={(e) => setLlmDraft((d: any) => ({ ...d, frequencyPenalty: parseFloat(e.target.value) }))}
+                          className="mt-1 w-full accent-wade-accent"
+                        />
+                      </div>
+                      {/* Presence Penalty */}
+                      <div>
+                        <div className="flex items-center justify-between text-[9px] font-bold text-wade-text-muted/70 uppercase tracking-wider">
+                          <span>Presence Penalty</span>
+                          <span className="text-wade-accent font-mono normal-case">{(llmDraft.presencePenalty ?? 0).toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range" min={-2} max={2} step={0.05}
+                          value={llmDraft.presencePenalty ?? 0}
+                          onChange={(e) => setLlmDraft((d: any) => ({ ...d, presencePenalty: parseFloat(e.target.value) }))}
+                          className="mt-1 w-full accent-wade-accent"
+                        />
+                      </div>
+                      {/* Toggles */}
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 text-[10px] text-wade-text-main">
+                          <input
+                            type="checkbox"
+                            checked={!!llmDraft.isVision}
+                            onChange={(e) => setLlmDraft((d: any) => ({ ...d, isVision: e.target.checked }))}
+                            className="accent-wade-accent"
+                          />
+                          Vision
+                        </label>
+                        <label className="flex items-center gap-2 text-[10px] text-wade-text-main">
+                          <input
+                            type="checkbox"
+                            checked={!!llmDraft.isImageGen}
+                            onChange={(e) => setLlmDraft((d: any) => ({ ...d, isImageGen: e.target.checked }))}
+                            className="accent-wade-accent"
+                          />
+                          Image Gen
+                        </label>
+                      </div>
+                      {/* Save / Cancel */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-wade-border/40">
+                        <button
+                          onClick={exitEditLlm}
+                          className="flex-1 px-3 py-1.5 text-[11px] font-bold rounded-md bg-wade-bg-app text-wade-text-muted hover:bg-wade-border/40 hover:text-wade-text-main transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={saveEditLlm}
+                          className="flex-1 px-3 py-1.5 text-[11px] font-bold rounded-md bg-wade-accent text-white hover:bg-wade-accent-hover transition-colors"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
