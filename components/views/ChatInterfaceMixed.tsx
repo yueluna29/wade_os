@@ -977,6 +977,33 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const userScrolledUpRef = useRef(false);
   useEffect(() => { userScrolledUpRef.current = false; }, [contact.id]);
 
+  // Hoisted scroll refs + snap helpers so the wadeStatus effect below (and
+  // every send / regen path) can call them. The actual <div>s these point at
+  // are wired up further down in the JSX; using them here is fine because
+  // useRef returns a stable object whose .current is read at callback time.
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const snapToBottomNow = React.useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, []);
+
+  // Used after Luna sends or Wade starts typing — re-snaps across multiple
+  // frames so async layout (keyboard transitions, image / font loads,
+  // streamed bubble batches) can't leave us short. Pins isAtBottomRef so
+  // ResizeObserver and the followOutput effect won't bail on the way down.
+  const snapToBottomStaggered = React.useCallback(() => {
+    isAtBottomRef.current = true;
+    userScrolledUpRef.current = false;
+    snapToBottomNow();
+    const t1 = setTimeout(snapToBottomNow, 50);
+    const t2 = setTimeout(snapToBottomNow, 200);
+    const t3 = setTimeout(snapToBottomNow, 500);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [snapToBottomNow]);
+
   const [inputText, setInputText] = useState('');
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -1112,19 +1139,14 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     setRegenHidden(null);
   }, [wadeStatus, regenHidden]);
 
-  // When Wade flips to typing, nudge the bottom marker into view *instantly*
-  // so the `...` indicator doesn't kick off a smooth scroll that fights with
-  // Virtuoso's own followOutput. `behavior: 'auto'` = snap, no animation.
-  // Skip when Luna has scrolled up to read old messages — yanking her back
-  // to bottom mid-scroll is the "flicker" she notices.
+  // When Wade flips to typing, snap the bottom marker into view across a
+  // few frames. Skip if Luna has scrolled up to read old messages —
+  // yanking her back mid-scroll is the flicker she'd notice.
   useEffect(() => {
     if (wadeStatus !== 'typing') return;
     if (userScrolledUpRef.current) return;
-    isAtBottomRef.current = true;
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
-    });
-  }, [wadeStatus]);
+    return snapToBottomStaggered();
+  }, [wadeStatus, snapToBottomStaggered]);
 
   // Track whether we've already done the per-session "land at bottom" snap.
   // Reset on session/contact switch so a fresh entry re-snaps even if the
@@ -1190,9 +1212,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   }, []);
 
   // Single source of truth for "is Luna at the bottom?" — driven by the
-  // actual scroll container's scrollTop. Replaces Virtuoso's
-  // atBottomStateChange + the wheel/touch capture lock that were trying to
-  // approximate the same signal indirectly.
+  // actual scroll container's scrollTop.
   const handleScrollContainer = React.useCallback(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
@@ -1201,6 +1221,20 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     isAtBottomRef.current = atBottom;
     userScrolledUpRef.current = !atBottom;
   }, []);
+
+  // iOS keyboard open/close fires visualViewport resize but not a scroll
+  // event, so handleScrollContainer doesn't recompute. If Luna was pinned
+  // to the bottom before the keyboard appeared, keep her there as the
+  // viewport shrinks.
+  useEffect(() => {
+    if (!window.visualViewport) return;
+    const onResize = () => {
+      if (!isAtBottomRef.current) return;
+      snapToBottomNow();
+    };
+    window.visualViewport.addEventListener('resize', onResize);
+    return () => window.visualViewport?.removeEventListener('resize', onResize);
+  }, [snapToBottomNow]);
 
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
@@ -1320,10 +1354,8 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const [variantIndices, setVariantIndices] = useState<Record<string, number>>({});
   const [typingLine] = useState(() => WADE_TYPING_LINES[Math.floor(Math.random() * WADE_TYPING_LINES.length)]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-  // virtuosoRef / scrollerElRef removed — native scroll uses
-  // messagesContainerRef directly.
+  // messagesEndRef + messagesContainerRef hoisted earlier in the component
+  // so the wadeStatus / send paths can reach them.
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Snapshot of `storeMessages` that async handlers can read without waiting
@@ -2059,11 +2091,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       textareaRef.current.style.height = 'auto';
       textareaRef.current.focus();
     }
-    isAtBottomRef.current = true;
-    userScrolledUpRef.current = false;
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, 50);
+    snapToBottomStaggered();
 
     setIsPainting(true);
     setWadeStatus('typing');
@@ -2299,16 +2327,10 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       textareaRef.current.style.height = 'auto';
       textareaRef.current.focus();
     }
-    // Force-scroll to the new bubble regardless of the user's prior scroll
-    // position. Smash the user-scroll lock first, then wait 50ms for React
-    // to commit the new bubble to the DOM — only then can scrollToIndex
-    // actually find a real last item to land on. requestAnimationFrame fires
-    // before the bubble is mounted, which is why earlier attempts no-op'd.
-    isAtBottomRef.current = true;
-    userScrolledUpRef.current = false;
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, 50);
+    // Force-snap to the new bubble regardless of Luna's prior scroll
+    // position. Pins isAtBottomRef so subsequent ResizeObserver follow-ups
+    // (Wade's reply growing the content) don't bail.
+    snapToBottomStaggered();
 
     if (isFirstMessage) {
       const titleLlm =
