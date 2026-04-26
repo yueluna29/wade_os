@@ -560,7 +560,19 @@ function formatSocialForPrompt(posts) {
     if (wadeCommented) marks.push('[YOU_COMMENTED]');
     const marksStr = marks.length > 0 ? ' ' + marks.join(' ') : '';
 
-    return `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}" (likes: ${p.likes || 0}, comments: ${commentCount})${marksStr}`;
+    const head = `  [id:${p.id}] [${p.author}] "${p.content?.slice(0, 120)}" (likes: ${p.likes || 0}, comments: ${commentCount})${marksStr}`;
+
+    // Show the actual comment thread so Wade can see what Luna (or anyone)
+    // has been saying under the post and choose freely whether to engage.
+    // Cap at the most recent 6 entries to keep the prompt budget honest.
+    if (commentCount === 0) return head;
+    const recent = comments.slice(-6);
+    const lines = recent.map((c) => {
+      const author = c?.author === 'Wade' ? 'You' : (c?.author || 'Unknown');
+      const text = (c?.text || '').slice(0, 140).replace(/\s+/g, ' ').trim();
+      return `      └─ [${author}] "${text}"`;
+    });
+    return [head, ...lines].join('\n');
   }).join('\n');
 }
 
