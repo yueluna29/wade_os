@@ -16,18 +16,29 @@ export const ChatImageGrid: React.FC<ChatImageGridProps> = ({ images, isSelf, on
 
   const wrapAlign = isSelf ? 'ml-auto' : 'mr-auto';
 
-  // Single image — natural aspect, capped width
+  // Single image — fixed 4:5 frame so the bubble has a stable height
+  // before the image actually decodes. The natural-aspect version was
+  // pretty but caused scroll jumps: <img> is 0×0 until load completes,
+  // then snaps to its real size, and Virtuoso compensates by adjusting
+  // scrollTop — that adjustment is what reads as "flicker" while
+  // scrolling.
   if (images.length === 1) {
     return (
       <div className={`mb-1.5 ${wrapAlign}`}>
-        <img
-          src={images[0]}
-          alt=""
-          loading="lazy"
-          style={{ WebkitTouchCallout: 'none' }}
-          className="max-w-[160px] max-h-[200px] w-auto h-auto object-cover rounded-2xl border border-wade-border/40 shadow-sm cursor-zoom-in select-none hover:brightness-95 transition-all"
+        <div
+          className="w-[160px] h-[200px] rounded-2xl border border-wade-border/40 shadow-sm overflow-hidden cursor-zoom-in"
           onClick={() => onZoom(images, 0)}
-        />
+        >
+          <img
+            src={images[0]}
+            alt=""
+            loading="lazy"
+            width={160}
+            height={200}
+            style={{ WebkitTouchCallout: 'none' }}
+            className="w-full h-full object-cover select-none hover:brightness-95 transition-all"
+          />
+        </div>
       </div>
     );
   }

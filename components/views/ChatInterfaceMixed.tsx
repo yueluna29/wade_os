@@ -2908,11 +2908,6 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           // 'LAST' resolves at mount time so it works even if data is hydrated
           // after the first render.
           initialTopMostItemIndex={{ index: 'LAST', align: 'end' }}
-          // Pre-render items above/below the viewport so when Luna scrolls
-          // up, items entering the viewport are already measured. Without
-          // this, Virtuoso lazy-measures on first paint and adjusts scroll
-          // position to compensate, which feels like a per-scroll flicker.
-          increaseViewportBy={{ top: 1200, bottom: 400 }}
           // Always follow new output. Virtuoso uses its own atBottom check
           // internally — if Luna's scrolled up it won't yank her down. Keeping
           // this as the literal string (not a function) so Virtuoso doesn't
