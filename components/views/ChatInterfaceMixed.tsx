@@ -2908,6 +2908,15 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           // 'LAST' resolves at mount time so it works even if data is hydrated
           // after the first render.
           initialTopMostItemIndex={{ index: 'LAST', align: 'end' }}
+          // Pre-render items 600px above so when Luna scrolls up the items
+          // entering the visible area are already measured. Smaller window
+          // than a full prefetch so chat entry isn't visibly slower.
+          increaseViewportBy={{ top: 600, bottom: 200 }}
+          // Better default estimate (chat bubble average ~ 64px). Without
+          // this Virtuoso uses a generic guess that's far enough off to
+          // cause visible scrollTop corrections each time a new item is
+          // measured — the "jump back and forth" feel on upward scroll.
+          defaultItemHeight={64}
           // Always follow new output. Virtuoso uses its own atBottom check
           // internally — if Luna's scrolled up it won't yank her down. Keeping
           // this as the literal string (not a function) so Virtuoso doesn't
