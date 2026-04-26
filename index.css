@@ -564,3 +564,57 @@ div.markdown-content blockquote p,
 .fixed {
   overscroll-behavior: contain;
 }
+
+/* Wade slider — CSS-variable driven so the brain editor (and anywhere
+   else we drop a range input) follows the active theme on every device.
+   accent-color alone doesn't cut it on iOS Safari: it'll color the thumb
+   but leaves the unfilled track stock black, which doesn't match Luna's
+   palette. Each .wade-slider sets --pct inline (0-100); the linear
+   gradient renders the progress fill in wade-accent and the rest of the
+   track in wade-border-light. */
+.wade-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  width: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--wade-accent) 0%,
+    var(--wade-accent) var(--pct, 50%),
+    var(--wade-border) var(--pct, 50%),
+    var(--wade-border) 100%
+  );
+  cursor: pointer;
+  outline: none;
+}
+.wade-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--wade-accent);
+  border: 2px solid var(--wade-bg-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+.wade-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--wade-accent);
+  border: 2px solid var(--wade-bg-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+.wade-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--wade-border);
+}
+.wade-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--wade-accent);
+}

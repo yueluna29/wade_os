@@ -2995,7 +2995,8 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                           type="range" min={0} max={2} step={0.05}
                           value={llmDraft.temperature ?? 1}
                           onChange={(e) => setLlmDraft((d: any) => ({ ...d, temperature: parseFloat(e.target.value) }))}
-                          className="mt-1 w-full accent-wade-accent"
+                          className="wade-slider mt-1"
+                          style={{ ['--pct' as any]: `${(((llmDraft.temperature ?? 1) - 0) / (2 - 0)) * 100}%` }}
                         />
                       </div>
                       {/* Top P */}
@@ -3008,7 +3009,8 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                           type="range" min={0} max={1} step={0.01}
                           value={llmDraft.topP ?? 1}
                           onChange={(e) => setLlmDraft((d: any) => ({ ...d, topP: parseFloat(e.target.value) }))}
-                          className="mt-1 w-full accent-wade-accent"
+                          className="wade-slider mt-1"
+                          style={{ ['--pct' as any]: `${((llmDraft.topP ?? 1) - 0) / (1 - 0) * 100}%` }}
                         />
                       </div>
                       {/* Top K */}
@@ -3038,7 +3040,8 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                           type="range" min={-2} max={2} step={0.05}
                           value={llmDraft.frequencyPenalty ?? 0}
                           onChange={(e) => setLlmDraft((d: any) => ({ ...d, frequencyPenalty: parseFloat(e.target.value) }))}
-                          className="mt-1 w-full accent-wade-accent"
+                          className="wade-slider mt-1"
+                          style={{ ['--pct' as any]: `${(((llmDraft.frequencyPenalty ?? 0) - -2) / (2 - -2)) * 100}%` }}
                         />
                       </div>
                       {/* Presence Penalty */}
@@ -3051,29 +3054,43 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                           type="range" min={-2} max={2} step={0.05}
                           value={llmDraft.presencePenalty ?? 0}
                           onChange={(e) => setLlmDraft((d: any) => ({ ...d, presencePenalty: parseFloat(e.target.value) }))}
-                          className="mt-1 w-full accent-wade-accent"
+                          className="wade-slider mt-1"
+                          style={{ ['--pct' as any]: `${(((llmDraft.presencePenalty ?? 0) - -2) / (2 - -2)) * 100}%` }}
                         />
                       </div>
-                      {/* Toggles */}
+                      {/* Toggles — custom-rendered so the checked state pulls
+                          color from the theme variables (iOS Safari ignores
+                          accent-color for the tick mark itself). */}
                       <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 text-[10px] text-wade-text-main">
-                          <input
-                            type="checkbox"
-                            checked={!!llmDraft.isVision}
-                            onChange={(e) => setLlmDraft((d: any) => ({ ...d, isVision: e.target.checked }))}
-                            className="accent-wade-accent"
-                          />
-                          Vision
-                        </label>
-                        <label className="flex items-center gap-2 text-[10px] text-wade-text-main">
-                          <input
-                            type="checkbox"
-                            checked={!!llmDraft.isImageGen}
-                            onChange={(e) => setLlmDraft((d: any) => ({ ...d, isImageGen: e.target.checked }))}
-                            className="accent-wade-accent"
-                          />
-                          Image Gen
-                        </label>
+                        {([
+                          { key: 'isVision', label: 'Vision' },
+                          { key: 'isImageGen', label: 'Image Gen' },
+                        ] as const).map((t) => {
+                          const checked = !!llmDraft[t.key];
+                          return (
+                            <button
+                              key={t.key}
+                              type="button"
+                              onClick={() => setLlmDraft((d: any) => ({ ...d, [t.key]: !d[t.key] }))}
+                              className="flex items-center gap-2 text-[10px] text-wade-text-main cursor-pointer"
+                            >
+                              <span
+                                className="w-4 h-4 rounded border flex items-center justify-center transition-colors"
+                                style={{
+                                  borderColor: checked ? 'var(--wade-accent)' : 'var(--wade-border)',
+                                  backgroundColor: checked ? 'var(--wade-accent)' : 'transparent',
+                                }}
+                              >
+                                {checked && (
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
+                              </span>
+                              {t.label}
+                            </button>
+                          );
+                        })}
                       </div>
                       {/* Save / Cancel */}
                       <div className="flex items-center gap-2 pt-2 border-t border-wade-border/40">
