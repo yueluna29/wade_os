@@ -678,7 +678,7 @@ export const MemoryV2: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-1 rounded-full flex shadow-sm border border-wade-border bg-wade-bg-card overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+        <div className="p-1 rounded-2xl flex flex-wrap shadow-sm border border-wade-border bg-wade-bg-card gap-y-0.5 sm:rounded-full sm:flex-nowrap sm:overflow-x-auto sm:gap-y-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
           {([
             { id: 'core' as const, label: 'Core', icon: <BookHeart size={13} /> },
             { id: 'weekly' as const, label: 'Weekly', icon: <CalendarRange size={13} /> },
@@ -696,7 +696,7 @@ export const MemoryV2: React.FC = () => {
                 key={t.id}
                 type="button"
                 onClick={() => setActiveTab(t.id)}
-                className={`relative px-4 sm:px-5 py-2 rounded-full text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                className={`relative flex-1 sm:flex-initial min-w-0 px-2.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-[11px] font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
                   isActive ? 'shadow-sm text-white' : 'hover:opacity-80 text-wade-text-muted'
                 }`}
                 style={isActive ? { backgroundColor: 'var(--wade-accent)' } : undefined}
