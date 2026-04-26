@@ -965,6 +965,15 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const isAtBottomRef = useRef(true);
   useEffect(() => { isAtBottomRef.current = true; }, [contact.id]);
 
+  // Sticky "user scrolled up" lock. Virtuoso's own atBottom signal flips false
+  // mid-batch when a tall item is still measuring height, which made the
+  // multi-bubble Wade reply land on bubble N's top instead of bubble N's
+  // bottom. So we ignore that transient signal entirely and instead set the
+  // lock when the user makes a real scroll gesture (wheel / touchmove). The
+  // lock is cleared once the chat has actually returned to the bottom.
+  const userScrolledUpRef = useRef(false);
+  useEffect(() => { userScrolledUpRef.current = false; }, [contact.id]);
+
   const [inputText, setInputText] = useState('');
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -1115,15 +1124,21 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   // aligns its top edge into view — so a tall bubble (long text, image, voice)
   // ends up showing only its first line. Image/font reflow after mount makes
   // it worse: the bubble grows but Virtuoso has already "finished" scrolling.
-  // Fix: whenever the message list changes (new bubble OR last bubble's
-  // content/attachments mutate), if Luna was already at the bottom, force-snap
-  // to LAST with align: 'end' across multiple frames to outlast async reflow.
+  // Worse, when Wade fires multiple bubbles 1.5s apart, the previous bubble's
+  // measure-after-mount keeps Virtuoso's internal atBottom flag false long
+  // enough to skip following the next bubble entirely.
+  //
+  // Fix: ignore Virtuoso's atBottom flag and drive the snap-to-bottom from
+  // userScrolledUpRef, a sticky lock toggled by real wheel/touch gestures.
+  // Whenever the message list changes (new bubble OR last bubble's text /
+  // attachments mutate), force-snap to LAST with align: 'end' across multiple
+  // frames to outlast async reflow (image decode, font swap, markdown layout).
   const lastMsg = renderMessages[renderMessages.length - 1] as any;
   const lastSig = lastMsg
     ? `${lastMsg.id}|${(lastMsg.text || '').length}|${(lastMsg.attachments || []).length}`
     : '';
   useEffect(() => {
-    if (!isAtBottomRef.current) return;
+    if (userScrolledUpRef.current) return;
     const snap = () => virtuosoRef.current?.scrollToIndex({
       index: 'LAST',
       align: 'end',
@@ -1133,10 +1148,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     const r1 = requestAnimationFrame(snap);
     const t1 = window.setTimeout(snap, 80);
     const t2 = window.setTimeout(snap, 250);
+    const t3 = window.setTimeout(snap, 600);
     return () => {
       cancelAnimationFrame(r1);
       clearTimeout(t1);
       clearTimeout(t2);
+      clearTimeout(t3);
     };
   }, [renderMessages.length, lastSig]);
 
@@ -2866,6 +2883,16 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           if (showSearch) setShowSearch(false);
           if (selectedMsgId !== null) setSelectedMsgId(null);
         }}
+        onWheelCapture={(e) => {
+          // Only an upward wheel (deltaY < 0) means "I want to read older";
+          // a downward wheel keeps following Wade and shouldn't lock anything.
+          if (e.deltaY < 0) userScrolledUpRef.current = true;
+        }}
+        onTouchMoveCapture={() => {
+          // Touch direction is harder to read mid-gesture; flag any drag and
+          // let atBottomStateChange clear the lock once Luna scrolls back down.
+          userScrolledUpRef.current = true;
+        }}
         className="flex-1 min-h-0 overscroll-contain touch-pan-y"
         style={(() => {
           const cs = activeSession?.chatStyle;
@@ -2885,8 +2912,15 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           style={{ height: '100%' }}
           data={renderMessages}
           initialTopMostItemIndex={Math.max(0, renderMessages.length - 1)}
-          followOutput={(isAtBottom) => (isAtBottom ? 'auto' : false)}
-          atBottomStateChange={(atBottom) => { isAtBottomRef.current = atBottom; }}
+          followOutput={false}
+          atBottomStateChange={(atBottom) => {
+            isAtBottomRef.current = atBottom;
+            // Real return-to-bottom (Luna scrolled back down OR our snap effect
+            // landed cleanly) clears the user-scroll lock so future bubbles can
+            // follow again. The mid-batch transient false from item measuring
+            // is ignored entirely now.
+            if (atBottom) userScrolledUpRef.current = false;
+          }}
           computeItemKey={(index, msg) => String(msg?.id ?? index)}
           components={{
             Header: () => <div className="h-3" />,
