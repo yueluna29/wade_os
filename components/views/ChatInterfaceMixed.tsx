@@ -2872,6 +2872,13 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
             ],
           },
           {
+            name: "Wade's headspace",
+            tiles: [
+              { icon: <Icons.Brain size={18} />, label: 'Memory', sublabel: 'Neural Core', action: () => { setTab('memory-v2'); closeMenu(); } },
+              { icon: <Icons.Journal size={18} />, label: 'Journal', sublabel: 'Diary & wakes', action: () => { setTab('journal'); closeMenu(); } },
+            ],
+          },
+          {
             name: 'Under the hood',
             tiles: [
               { icon: <Icons.Cube size={18} />, label: modelShort, sublabel: 'Model', action: () => { setMenuView('model'); } },
