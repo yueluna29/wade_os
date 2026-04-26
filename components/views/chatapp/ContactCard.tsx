@@ -83,7 +83,7 @@ export const ContactCard: React.FC<ContactCardProps> = ({ contact, onClose, onOp
             <TraitPill label="Vibe" value={vibe} />
           </div>
 
-          {contact.definition && (
+          {contact.status && (
             <div
               className={`${(showActions || showChatActions) ? 'mb-4' : 'mb-1'} px-4 py-3 rounded-[22px] bg-wade-bg-card/60 backdrop-blur-sm`}
               style={{
@@ -93,10 +93,10 @@ export const ContactCard: React.FC<ContactCardProps> = ({ contact, onClose, onOp
               }}
             >
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-wade-text-muted/70 mb-1.5">
-                About
+                Bio
               </div>
               <p className="text-[12px] leading-relaxed text-wade-text-main/80 whitespace-pre-wrap">
-                {contact.definition}
+                {contact.status}
               </p>
             </div>
           )}
