@@ -1120,14 +1120,18 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     });
   }, [wadeStatus]);
 
-  // Scroll-to-bottom is now handled entirely by Virtuoso itself:
-  //   1. <Virtuoso key={...}> on session/contact change → forces a fresh mount
-  //      so initialTopMostItemIndex actually fires every entry.
-  //   2. initialTopMostItemIndex={{ index: 'LAST', align: 'end' }} → the very
-  //      first paint is already aligned to the bottom of the last bubble.
-  //   3. followOutput reads userScrolledUpRef directly, ignoring Virtuoso's
-  //      transient atBottom flag during multi-bubble batches.
-  // No manual scrollTop slams, no useLayoutEffect bursts.
+  // Scroll-to-bottom on entry — backstop for the case where
+  // initialTopMostItemIndex lands one bubble short because Virtuoso's
+  // ResizeObserver hasn't measured tall items yet at mount time. 100ms gives
+  // React + ResizeObserver enough time to settle, then we hard-snap.
+  useEffect(() => {
+    if (renderMessages.length === 0) return;
+    const kickItToBottom = setTimeout(() => {
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
+    }, 100);
+    return () => clearTimeout(kickItToBottom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedSessionId, contact.id]);
 
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
@@ -1997,9 +2001,10 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       textareaRef.current.focus();
     }
     isAtBottomRef.current = true;
-    requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
-    });
+    userScrolledUpRef.current = false;
+    setTimeout(() => {
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+    }, 50);
 
     setIsPainting(true);
     setWadeStatus('typing');
@@ -2236,14 +2241,15 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
       textareaRef.current.focus();
     }
     // Force-scroll to the new bubble regardless of the user's prior scroll
-    // position. Virtuoso's `followOutput` only fires when isAtBottom — if Luna
-    // had nudged up mid-compose, a bare data update wouldn't pull us down.
-    // Flip the ref + scrollToIndex so subsequent typing-indicator / Wade
-    // bubbles keep following too.
+    // position. Smash the user-scroll lock first, then wait 50ms for React
+    // to commit the new bubble to the DOM — only then can scrollToIndex
+    // actually find a real last item to land on. requestAnimationFrame fires
+    // before the bubble is mounted, which is why earlier attempts no-op'd.
     isAtBottomRef.current = true;
-    requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
-    });
+    userScrolledUpRef.current = false;
+    setTimeout(() => {
+      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+    }, 50);
 
     if (isFirstMessage) {
       const titleLlm =
@@ -2899,12 +2905,11 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           // 'LAST' resolves at mount time so it works even if data is hydrated
           // after the first render.
           initialTopMostItemIndex={{ index: 'LAST', align: 'end' }}
-          // Drive follow-output from our sticky user-scroll lock instead of
-          // Virtuoso's transient atBottom flag. atBottom flips false mid-batch
-          // while a tall item is still measuring height, which used to skip
-          // following the next bubble. The lock only flips when Luna actually
-          // makes a scroll gesture, and clears when she returns to the bottom.
-          followOutput={() => (userScrolledUpRef.current ? false : 'auto')}
+          // Always follow new output. Virtuoso uses its own atBottom check
+          // internally — if Luna's scrolled up it won't yank her down. Keeping
+          // this as the literal string (not a function) so Virtuoso doesn't
+          // re-evaluate it through our flaky lock during multi-bubble batches.
+          followOutput="auto"
           atBottomStateChange={(atBottom) => {
             isAtBottomRef.current = atBottom;
             // Reaching the bottom (either by Luna scrolling back or by
