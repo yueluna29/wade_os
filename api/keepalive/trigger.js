@@ -1440,9 +1440,27 @@ category 可选：fact / emotion / preference / event / relationship / habit / s
       insertRow.is_status = true;
       insertRow.expires_at = c.expires_at || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
     }
+    let vec = null;
     if (embeddingPreset) {
-      const vec = await generateEmbedding(c.content, embeddingPreset);
+      vec = await generateEmbedding(c.content, embeddingPreset);
       if (vec) insertRow.embedding = JSON.stringify(vec);
+    }
+    // Phase 3 dedup before writing the draft. If the LLM confirms a
+    // dupe, drop a ghost row (is_active=false + superseded_by) and skip
+    // creating a draft for Luna to wade through.
+    const dupId = await checkDreamingDuplicate({
+      content: c.content,
+      category: c.category,
+      embedding: vec,
+      llm,
+    });
+    if (dupId) {
+      insertRow.is_active = false;
+      insertRow.superseded_by = dupId;
+      const { error } = await supabase.from('wade_memories').insert(insertRow);
+      if (error) console.warn('[Dream/A] dup-ghost insert failed:', error.message);
+      else console.log(`[Dream/A] Skipped duplicate (superseded by ${dupId})`);
+      continue;
     }
     const { error } = await supabase.from('wade_memories').insert(insertRow);
     if (error) {
@@ -1452,6 +1470,59 @@ category 可选：fact / emotion / preference / event / relationship / habit / s
     stored++;
   }
   return { extracted: stored };
+}
+
+// Phase 3 dedup helper for the dreaming pipeline. Mirrors the
+// services/memoryService.ts checkDuplicate flow: vector candidates ≥
+// 0.85 cosine, then LLM confirmation. Returns the superseded id or null.
+async function checkDreamingDuplicate({ content, category, embedding, llm }) {
+  if (!embedding) return null;
+  try {
+    const { data: candidates, error } = await supabase.rpc('check_memory_duplicates', {
+      query_embedding: JSON.stringify(embedding),
+      similarity_threshold: 0.85,
+      match_count: 5,
+    });
+    if (error || !candidates || candidates.length === 0) return null;
+
+    const list = candidates
+      .map((c, i) => `${i + 1}. [ID: ${c.id}] (${c.category}) ${c.content} (similarity: ${Number(c.similarity).toFixed(2)})`)
+      .join('\n');
+    const prompt = `你是记忆去重系统。判断"新记忆"跟"已有记忆"是否重复。
+
+重复的定义：核心信息相同，只是措辞/日期/细节略有不同。
+不重复的定义：虽然话题相似，但包含了之前没有的新信息。
+
+新记忆：
+(${category}) ${content}
+
+已有记忆（按相似度排序）：
+${list}
+
+如果新记忆跟某条已有记忆重复，返回 JSON：
+{"duplicate": true, "superseded_by": "被重复的记忆ID", "reason": "简短说明"}
+
+如果不重复，返回：
+{"duplicate": false, "reason": "简短说明"}
+
+只输出 JSON。`;
+
+    const raw = await callLlmForDreaming(llm, prompt, 600);
+    let cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    let parsed;
+    try { parsed = JSON.parse(cleaned.slice(start, end + 1)); } catch { return null; }
+    if (!parsed?.duplicate) return null;
+    const supersededId = String(parsed.superseded_by || '').trim();
+    if (!supersededId) return null;
+    const candidateIds = new Set(candidates.map((c) => c.id));
+    return candidateIds.has(supersededId) ? supersededId : null;
+  } catch (err) {
+    console.warn('[Dream/A] dedup check failed:', err.message);
+    return null;
+  }
 }
 
 async function dreamStepB_WeeklySummary({ llm }) {

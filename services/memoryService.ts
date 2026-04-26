@@ -203,25 +203,34 @@ ${wadeBlock}
 // 去重 Prompt
 // =============================================
 
-const DEDUP_SYSTEM = `你是一个记忆去重判断器。给你一条新记忆和几条已有记忆，判断新记忆是否和某条已有记忆在说同一件事。
+const DEDUP_SYSTEM = `你是记忆去重系统。判断"新记忆"跟"已有记忆"是否重复。
 
-规则：
-- 如果新记忆是对已有记忆的更新/补充/重复，返回那条已有记忆的 id
-- 如果新记忆是全新的信息，返回 "new"
-- 只返回一个值，不要加任何其他文字`;
+重复的定义：核心信息相同，只是措辞/日期/细节略有不同。
+不重复的定义：虽然话题相似，但包含了之前没有的新信息（新日期、新事件、新感受、新细节）。
 
-function buildDedupUserPrompt(newMemory: ExtractedMemory, existing: WadeMemory[]): string {
-  const existingList = existing.map(m =>
-    `[id: ${m.id}] (${m.category}) ${m.content}`
-  ).join('\n');
+如果新记忆跟某条已有记忆重复，返回 JSON：
+{"duplicate": true, "superseded_by": "被重复的记忆ID", "reason": "简短说明"}
+
+如果不重复，返回：
+{"duplicate": false, "reason": "简短说明为什么虽然相似但不重复"}
+
+只输出 JSON，不要加任何其他文字。`;
+
+function buildDedupUserPrompt(
+  newMemory: ExtractedMemory,
+  candidates: { id: string; content: string; category: string; similarity: number }[],
+): string {
+  const list = candidates
+    .map((c, i) => `${i + 1}. [ID: ${c.id}] (${c.category}) ${c.content} (similarity: ${c.similarity.toFixed(2)})`)
+    .join('\n');
 
   return `新记忆：
 (${newMemory.category}) ${newMemory.content}
 
-已有记忆：
-${existingList}
+已有记忆（按相似度排序）：
+${list}
 
-这条新记忆是否和某条已有记忆在说同一件事？如果是，返回那条的 id。如果不是，返回 "new"。`;
+判断新记忆是否跟某条已有记忆重复。`;
 }
 
 // =============================================
@@ -345,37 +354,65 @@ async function generateEmbedding(
 // =============================================
 
 /**
- * 检查新记忆是否和已有记忆重复
- * 返回被替代的旧记忆 id，或 null（表示全新）
+ * 检查新记忆是否和已有记忆重复（Phase 3：向量候选 + LLM 确认）
+ *
+ * 流程：
+ *   1. 用 newMemory.embedding 调 check_memory_duplicates RPC（cosine ≥ 0.85）
+ *   2. 命中 0 条 → 不重复，返回 null
+ *   3. 命中 ≥ 1 条 → LLM 最终确认（避免话题相似但内容新增的误杀）
+ *   4. LLM 说 duplicate → 返回被重复的 id；否则 null
+ *
+ * 替代了原来的"同 category 最近 10 条"窗口（实测 0 触发，老 dupe 看不见）。
+ *
+ * @param newEmbedding 新记忆的 embedding（预先生成；调用方有责任传入）
  */
 async function checkDuplicate(
   newMemory: ExtractedMemory,
-  evalPreset: LlmPreset
+  evalPreset: LlmPreset,
+  newEmbedding: number[] | null,
 ): Promise<string | null> {
+  if (!newEmbedding || newEmbedding.length === 0) {
+    // No embedding to compare with — bail rather than fall back to the
+    // old window-scan, which was unreliable.
+    return null;
+  }
   try {
-    // 拉同 category 的最近 10 条活跃记忆
-    const { data: existing } = await supabase
-      .from('wade_memories')
-      .select('*')
-      .eq('is_active', true)
-      .eq('category', newMemory.category)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    const { data: candidates, error: rpcErr } = await supabase.rpc('check_memory_duplicates', {
+      query_embedding: JSON.stringify(newEmbedding),
+      similarity_threshold: 0.85,
+      match_count: 5,
+    });
+    if (rpcErr) {
+      console.warn('[WadeMemory] check_memory_duplicates RPC failed:', rpcErr.message);
+      return null;
+    }
+    const list = (candidates as { id: string; content: string; category: string; importance: number; similarity: number }[]) || [];
+    if (list.length === 0) return null;
 
-    if (!existing || existing.length === 0) return null;
+    const prompt = buildDedupUserPrompt(newMemory, list);
+    const raw = await callLlmForEval(evalPreset, DEDUP_SYSTEM, prompt);
 
-    const prompt = buildDedupUserPrompt(newMemory, existing as WadeMemory[]);
-    const response = await callLlmForEval(evalPreset, DEDUP_SYSTEM, prompt);
-    const result = response.trim().replace(/['"]/g, '');
-
-    if (result === 'new' || result === '') return null;
-
-    // 验证返回的 id 确实存在
-    const match = existing.find(m => m.id === result);
-    return match ? result : null;
+    // Parse JSON response. Strip markdown fences if the model added them.
+    let cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(cleaned.slice(start, end + 1));
+    } catch {
+      return null;
+    }
+    if (!parsed?.duplicate) return null;
+    const supersededId = String(parsed.superseded_by || '').trim();
+    if (!supersededId) return null;
+    // Validate: ID must be one of the candidates we surfaced. Drops any
+    // hallucinated IDs the LLM might invent.
+    const match = list.find((c) => c.id === supersededId);
+    return match ? supersededId : null;
   } catch (err) {
     console.error('[WadeMemory] Dedup check failed:', err);
-    return null; // 去重失败就当新记忆处理
+    return null; // dedup failure → treat as new, don't block insertion
   }
 }
 
@@ -475,30 +512,20 @@ export async function evaluateAndStoreMemory(
         insertRow.expires_at = mem.expires_at || fallbackExpiry;
       }
 
-      // 去重检查
-      const duplicateId = await checkDuplicate(mem, evalPreset);
+      // 去重检查（Phase 3：向量候选 + LLM 确认）
+      const duplicateId = await checkDuplicate(mem, evalPreset, embedding);
 
       if (duplicateId) {
-        // 更新已有记忆：标记旧的为 inactive，插入新版本
-        const { data: newData, error: insErr } = await supabase
-          .from('wade_memories')
-          .insert(insertRow)
-          .select()
-          .single();
-
+        // 重复：写入一条 inactive ghost 行，superseded_by 指向已有的那条。
+        // 旧记忆保持不动（避免高质量旧条目被相似措辞覆盖），ghost 行只
+        // 用作 debug 审计："这条之前提取过，被 X 替代了"。UI 不展示。
+        insertRow.is_active = false;
+        insertRow.superseded_by = duplicateId;
+        const { error: insErr } = await supabase.from('wade_memories').insert(insertRow);
         if (insErr) {
-          // 不再静默吞掉，throw 出去让 ChatInterface 的 .catch 显示 toast
-          throw new Error(`Memory insert failed: ${insErr.message} (${insErr.code})`);
+          throw new Error(`Memory dedup ghost insert failed: ${insErr.message} (${insErr.code})`);
         }
-        if (newData) {
-          void supabase
-            .from('wade_memories')
-            .update({ is_active: false, superseded_by: newData.id })
-            .eq('id', duplicateId);
-
-          console.log(`[WadeMemory] Updated memory (replaced ${duplicateId})`);
-          storedMemories.push(newData as WadeMemory);
-        }
+        console.log(`[WadeMemory] Skipped duplicate (superseded by ${duplicateId})`);
       } else {
         // 全新记忆，直接插入
         const { data: newData, error: insErr } = await supabase
