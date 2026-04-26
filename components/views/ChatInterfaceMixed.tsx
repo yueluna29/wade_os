@@ -1126,29 +1126,68 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     });
   }, [wadeStatus]);
 
-  // Scroll-to-bottom on entry. 100ms gives React + image layout enough
-  // time to settle before we slam scrollTop, otherwise we land short.
+  // Track whether we've already done the per-session "land at bottom" snap.
+  // Reset on session/contact switch so a fresh entry re-snaps even if the
+  // component instance is reused.
+  const initialSnappedRef = useRef(false);
   useEffect(() => {
-    if (renderMessages.length === 0) return;
-    const kickItToBottom = setTimeout(() => {
-      const el = messagesContainerRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
-    }, 100);
-    return () => clearTimeout(kickItToBottom);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    initialSnappedRef.current = false;
   }, [resolvedSessionId, contact.id]);
 
-  // followOutput, native edition: when the message list grows AND Luna is
-  // already pinned to the bottom, snap to the new bottom. If she's reading
-  // older messages (isAtBottomRef.current === false), leave her alone.
+  // Inner wrapper around every message — needed so ResizeObserver below has
+  // something whose box height grows with the content (the scroll container
+  // itself has fixed flex-1 height).
+  const messagesContentRef = useRef<HTMLDivElement>(null);
+
+  // Entry snap: fires when this session's messages first hydrate. Multiple
+  // staggered passes because images / fonts / Drive proxy can take a while
+  // to finalize bubble heights — a single 100ms snap lands short and Luna
+  // ends up in the middle.
+  useEffect(() => {
+    if (initialSnappedRef.current) return;
+    if (renderMessages.length === 0) return;
+    initialSnappedRef.current = true;
+    const snap = () => {
+      messagesEndRef.current?.scrollIntoView({ block: 'end' });
+      // Belt-and-suspenders: also slam scrollTop in case scrollIntoView
+      // is no-op (e.g., target inside a still-laying-out flex parent).
+      const el = messagesContainerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    };
+    const timers = [
+      setTimeout(snap, 0),
+      setTimeout(snap, 50),
+      setTimeout(snap, 200),
+      setTimeout(snap, 500),
+      setTimeout(snap, 1200),
+    ];
+    return () => { timers.forEach(clearTimeout); };
+  }, [resolvedSessionId, contact.id, renderMessages.length]);
+
+  // followOutput, native edition. Two paths:
+  //   1) renderMessages.length grew → snap if Luna is at bottom. Covers a
+  //      new bubble arriving (Wade reply, Luna send, regen, etc.).
+  //   2) ResizeObserver on the content wrapper → fires when bubble heights
+  //      change without the count changing (image loaded, font swapped,
+  //      audio waveform expanded, variant switched). Without this, content
+  //      grows below the previous "bottom" and Luna gets stranded mid-list.
   useEffect(() => {
     if (!isAtBottomRef.current) return;
-    const el = messagesContainerRef.current;
-    if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      messagesEndRef.current?.scrollIntoView({ block: 'end' });
     });
   }, [renderMessages.length]);
+
+  useEffect(() => {
+    const content = messagesContentRef.current;
+    if (!content) return;
+    const ro = new ResizeObserver(() => {
+      if (!isAtBottomRef.current) return;
+      messagesEndRef.current?.scrollIntoView({ block: 'end' });
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
 
   // Single source of truth for "is Luna at the bottom?" — driven by the
   // actual scroll container's scrollTop. Replaces Virtuoso's
@@ -2900,6 +2939,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           return s;
         })()}
       >
+        <div ref={messagesContentRef}>
         <div className="h-3" />
         {renderMessages.map((msg, index) => {
           // WeChat rule: show a centered time label before a bubble when the
@@ -2942,6 +2982,7 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           </div>
         )}
         <div ref={messagesEndRef} className="h-4" />
+        </div>
       </div>
 
 
