@@ -1196,8 +1196,10 @@ function buildPushPayload(step, mood) {
 //            → wade_memories (draft_status='draft', source='dreaming')
 //   Step B — compress 7-day diary into a rolling weekly summary
 //            → wade_summaries (summary_type='weekly')
-//   Step C — self-review pending drafts
-//            → wade_memories.draft_status flips to 'active' or 'rejected'
+//   Step C — self-review pending drafts older than 48h. Luna gets first
+//            dibs in the Draft tab; Wade only auto-reviews cards she
+//            hasn't touched for two nights. Decisions flip
+//            wade_memories.draft_status to 'active' or 'rejected'.
 // ========================================================================
 
 async function loadMemoryEvalPreset() {
@@ -1334,12 +1336,18 @@ async function fetchActiveStatusForSummary() {
   return data || [];
 }
 
+// Draft pickup rule: Luna gets first dibs in the Draft tab. Wade only
+// auto-reviews cards that have been sitting unhandled for 48h+ — that
+// way Luna can savor reading what he extracted on her own schedule, and
+// the queue still drains if she's busy.
 async function fetchDraftCards() {
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from('wade_memories')
     .select('id, content, category, importance, extraction_reason, tags')
     .eq('is_active', true)
     .eq('draft_status', 'draft')
+    .lte('created_at', cutoff)
     .order('created_at', { ascending: true });
   return data || [];
 }
@@ -1528,7 +1536,7 @@ async function dreamStepC_ReviewDrafts({ llm }) {
     fetchActiveMemorySnippets(100),
   ]);
   if (drafts.length === 0) {
-    console.log('[Dream/C] No draft cards — skipping');
+    console.log('[Dream/C] No drafts older than 48h — Luna still has time to review');
     return { reviewed: 0, skipped: 'no-input' };
   }
 
