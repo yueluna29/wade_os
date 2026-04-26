@@ -60,36 +60,37 @@ export const Divination: React.FC = () => {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
         {[
-          { title: 'Daily Pull',      desc: 'One card guidance',  icon: 1 },
-          { title: 'Spread Room',     desc: 'Explore spreads',    icon: 2 },
-          { title: 'Card Library',    desc: 'Browse all cards',   icon: 3 },
-          { title: 'Reading Archive', desc: 'Your past readings', icon: 4 },
+          { title: 'Daily Pull',      desc: 'One card guidance',  iconUrl: '', icon: 1 },
+          { title: 'Spread Room',     desc: 'Explore spreads',    iconUrl: '', icon: 2 },
+          { title: 'Card Library',    desc: 'Browse all cards',   iconUrl: '', icon: 3 },
+          { title: 'Reading Archive', desc: 'Your past readings', iconUrl: '', icon: 4 },
         ].map((item, idx) => (
-          <div key={idx} className="relative bg-wade-bg-card rounded-3xl p-5 flex flex-col items-center justify-center text-center shadow-sm border border-wade-border hover:-translate-y-1 hover:shadow-md transition-all cursor-pointer group">
-            <div className="absolute top-3 right-3 text-wade-accent/30 group-hover:text-wade-accent/60 transition-colors">
+          <div key={idx} className="relative bg-wade-bg-card rounded-2xl md:rounded-3xl p-3 md:p-5 flex flex-row md:flex-col items-center md:justify-center text-left md:text-center gap-3 md:gap-0 shadow-sm border border-wade-border hover:-translate-y-1 hover:shadow-md transition-all cursor-pointer group">
+            <div className="absolute top-2 right-2 md:top-3 md:right-3 text-wade-accent/30 group-hover:text-wade-accent/60 transition-colors">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 0l2.5 9.5L24 12l-9.5 2.5L12 24l-2.5-9.5L0 12l9.5-2.5z"/>
               </svg>
             </div>
 
-            <div className="w-12 h-12 mb-3 text-wade-accent/70 group-hover:text-wade-accent transition-colors flex items-center justify-center">
-              {item.icon === 1 && (
+            <div className="w-10 h-10 md:w-12 md:h-12 md:mb-3 text-wade-accent/70 group-hover:text-wade-accent transition-colors flex items-center justify-center shrink-0">
+              {item.iconUrl ? (
+                <img src={item.iconUrl} alt={item.title} className="w-full h-full object-contain" />
+              ) : item.icon === 1 ? (
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              )}
-              {item.icon === 2 && (
+              ) : item.icon === 2 ? (
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-              )}
-              {item.icon === 3 && (
+              ) : item.icon === 3 ? (
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-              )}
-              {item.icon === 4 && (
+              ) : (
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
               )}
             </div>
-            <h3 className="font-bold text-sm text-wade-text-main">{item.title}</h3>
-            <p className="text-[11px] text-wade-text-muted mt-1">{item.desc}</p>
+            <div className="flex flex-col min-w-0">
+              <h3 className="font-bold text-sm text-wade-text-main leading-tight">{item.title}</h3>
+              <p className="text-[11px] text-wade-text-muted md:mt-1 leading-tight">{item.desc}</p>
+            </div>
           </div>
         ))}
       </section>
