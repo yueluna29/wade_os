@@ -1,5 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
+// Removed Virtuoso — its lazy measure-then-correct dance is the visible
+// "jump back and forth" Luna noticed on upward scroll. The legacy SMS
+// chat used native overflow-y-auto and never had this problem; reverting
+// to native scroll for that same buttery feel.
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -1123,18 +1126,42 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     });
   }, [wadeStatus]);
 
-  // Scroll-to-bottom on entry — backstop for the case where
-  // initialTopMostItemIndex lands one bubble short because Virtuoso's
-  // ResizeObserver hasn't measured tall items yet at mount time. 100ms gives
-  // React + ResizeObserver enough time to settle, then we hard-snap.
+  // Scroll-to-bottom on entry. 100ms gives React + image layout enough
+  // time to settle before we slam scrollTop, otherwise we land short.
   useEffect(() => {
     if (renderMessages.length === 0) return;
     const kickItToBottom = setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' });
+      const el = messagesContainerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
     }, 100);
     return () => clearTimeout(kickItToBottom);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedSessionId, contact.id]);
+
+  // followOutput, native edition: when the message list grows AND Luna is
+  // already pinned to the bottom, snap to the new bottom. If she's reading
+  // older messages (isAtBottomRef.current === false), leave her alone.
+  useEffect(() => {
+    if (!isAtBottomRef.current) return;
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [renderMessages.length]);
+
+  // Single source of truth for "is Luna at the bottom?" — driven by the
+  // actual scroll container's scrollTop. Replaces Virtuoso's
+  // atBottomStateChange + the wheel/touch capture lock that were trying to
+  // approximate the same signal indirectly.
+  const handleScrollContainer = React.useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    const atBottom = distance < 80;
+    isAtBottomRef.current = atBottom;
+    userScrolledUpRef.current = !atBottom;
+  }, []);
 
   const [zoomedImage, setZoomedImage] = useState<{ images: string[]; index: number } | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | number | null>(null);
@@ -1256,11 +1283,8 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  // Direct ref to Virtuoso's internal scroller element — lets us bypass
-  // scrollToIndex (which depends on Virtuoso's measure/atBottom internals
-  // and races async hydration) and just slam scrollTop = scrollHeight.
-  const scrollerElRef = useRef<HTMLElement | null>(null);
+  // virtuosoRef / scrollerElRef removed — native scroll uses
+  // messagesContainerRef directly.
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Snapshot of `storeMessages` that async handlers can read without waiting
@@ -1316,19 +1340,12 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
   const totalResults = searchResults.length;
 
   const scrollToMessage = (id: string | number) => {
-    const idx = renderMessages.findIndex((m) => String(m.id) === String(id));
-    if (idx < 0) return;
-    // Anchor to the bottom when the target is literally the latest bubble so
-    // we don't leave the awkward empty space below a centered last-message.
-    // Otherwise center it — "you are here" feel for the GPS / search jump.
     const realBubbles = renderMessages.filter((m) => m.type !== 'presence');
     const last = realBubbles[realBubbles.length - 1];
     const isLast = last && String(last.id) === String(id);
-    virtuosoRef.current?.scrollToIndex({
-      index: idx,
-      align: isLast ? 'end' : 'center',
-      behavior: 'smooth',
-    });
+    const target = document.getElementById(`msg-${id}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: isLast ? 'end' : 'center' });
   };
 
   const goToNextResult = () => {
@@ -2006,7 +2023,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     isAtBottomRef.current = true;
     userScrolledUpRef.current = false;
     setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, 50);
 
     setIsPainting(true);
@@ -2251,7 +2268,7 @@ export const ChatInterfaceMixed: React.FC<ChatInterfaceMixedProps> = ({ contact,
     isAtBottomRef.current = true;
     userScrolledUpRef.current = false;
     setTimeout(() => {
-      virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'smooth' });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, 50);
 
     if (isFirstMessage) {
@@ -2855,30 +2872,21 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
         />
       )}
 
-      {/* Messages Area — virtualized so long threads only render what's on
-          screen. Virtuoso handles scroll-to-bottom and variable-height items
-          natively; the old multi-pass pin + manual scroll listener are gone.
-          overscroll-contain + touch-pan-y cage the iOS rubber-band inside
-          the list so an open keyboard + scroll gesture can't jello the
-          whole app (body is position:fixed, so any leaked overscroll bounces
-          the entire layout). */}
+      {/* Messages Area — native overflow-y-auto. Virtualization (Virtuoso)
+          was removed: its lazy measure-then-correct on items entering the
+          render range was visible as upward-scroll jitter. Native scroll is
+          rock-solid and matches the legacy ChatInterface feel. overscroll-
+          contain cages iOS rubber-band inside the list so an open keyboard
+          + scroll gesture can't jello the whole app (body is
+          position:fixed). */}
       <div
         ref={messagesContainerRef}
         onClick={() => {
           if (showSearch) setShowSearch(false);
           if (selectedMsgId !== null) setSelectedMsgId(null);
         }}
-        onWheelCapture={(e) => {
-          // Only an upward wheel (deltaY < 0) means "I want to read older";
-          // a downward wheel keeps following Wade and shouldn't lock anything.
-          if (e.deltaY < 0) userScrolledUpRef.current = true;
-        }}
-        onTouchMoveCapture={() => {
-          // Touch direction is harder to read mid-gesture; flag any drag and
-          // let atBottomStateChange clear the lock once Luna scrolls back down.
-          userScrolledUpRef.current = true;
-        }}
-        className="flex-1 min-h-0 overscroll-contain touch-pan-y"
+        onScroll={handleScrollContainer}
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
         style={(() => {
           const cs = activeSession?.chatStyle;
           if (!cs) return undefined;
@@ -2892,93 +2900,48 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
           return s;
         })()}
       >
-        <Virtuoso
-          // key forces a fresh mount on session / contact switch so
-          // initialTopMostItemIndex re-fires every entry — without this,
-          // React reuses the existing Virtuoso instance and the chat opens
-          // wherever the previous render left off (often the top).
-          key={`virtuoso-${resolvedSessionId || contact.id}`}
-          ref={virtuosoRef}
-          scrollerRef={(ref) => {
-            scrollerElRef.current = (ref as HTMLElement) || null;
-          }}
-          style={{ height: '100%' }}
-          data={renderMessages}
-          // Object form aligns the last item's BOTTOM to the viewport bottom.
-          // 'LAST' resolves at mount time so it works even if data is hydrated
-          // after the first render.
-          initialTopMostItemIndex={{ index: 'LAST', align: 'end' }}
-          // Pre-render items 600px above so when Luna scrolls up the items
-          // entering the visible area are already measured. Smaller window
-          // than a full prefetch so chat entry isn't visibly slower.
-          increaseViewportBy={{ top: 600, bottom: 200 }}
-          // Better default estimate (chat bubble average ~ 64px). Without
-          // this Virtuoso uses a generic guess that's far enough off to
-          // cause visible scrollTop corrections each time a new item is
-          // measured — the "jump back and forth" feel on upward scroll.
-          defaultItemHeight={64}
-          // Always follow new output. Virtuoso uses its own atBottom check
-          // internally — if Luna's scrolled up it won't yank her down. Keeping
-          // this as the literal string (not a function) so Virtuoso doesn't
-          // re-evaluate it through our flaky lock during multi-bubble batches.
-          followOutput="auto"
-          atBottomStateChange={(atBottom) => {
-            isAtBottomRef.current = atBottom;
-            // Reaching the bottom (either by Luna scrolling back or by
-            // followOutput landing cleanly) clears the user-scroll lock so
-            // future bubbles can follow again.
-            if (atBottom) userScrolledUpRef.current = false;
-          }}
-          computeItemKey={(index, msg) => String(msg?.id ?? index)}
-          components={{
-            Header: () => <div className="h-3" />,
-            Footer: () => (
-              <>
-                {wadeStatus === 'typing' && (
-                  <div className={`flex w-full pt-2 px-4 ${phoneOwner === 'wade' ? 'items-end justify-end' : 'items-start justify-start'}`}>
-                    <div
-                      className={`px-4 py-3 flex gap-1 shadow-sm rounded-full ${phoneOwner === 'wade' ? '' : 'border border-wade-border/50'}`}
-                      style={{ backgroundColor: phoneOwner === 'wade' ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade)' }}
-                    >
-                      <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce" />
-                      <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.1s]" />
-                      <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.2s]" />
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} className="h-4" />
-              </>
-            ),
-          }}
-          itemContent={(index, msg) => {
-            // WeChat rule: show a centered time label before a bubble when the
-            // gap from the previous real (timestamped) message exceeds 5 min,
-            // or when this is the first such message in the list. Presence
-            // dividers carry their own timestamp, so we skip the extra label
-            // above them.
-            let showDivider = false;
-            if (msg?.type !== 'presence' && typeof msg?.ts === 'number') {
-              let prevTs: number | undefined;
-              for (let i = index - 1; i >= 0; i--) {
-                const p = renderMessages[i];
-                if (typeof p?.ts === 'number') { prevTs = p.ts; break; }
-              }
-              showDivider = prevTs === undefined || (msg.ts - prevTs) > 5 * 60 * 1000;
+        <div className="h-3" />
+        {renderMessages.map((msg, index) => {
+          // WeChat rule: show a centered time label before a bubble when the
+          // gap from the previous real (timestamped) message exceeds 5 min,
+          // or when this is the first such message in the list. Presence
+          // dividers carry their own timestamp, so we skip the extra label
+          // above them.
+          let showDivider = false;
+          if (msg?.type !== 'presence' && typeof msg?.ts === 'number') {
+            let prevTs: number | undefined;
+            for (let i = index - 1; i >= 0; i--) {
+              const p = renderMessages[i];
+              if (typeof p?.ts === 'number') { prevTs = p.ts; break; }
             }
-            return (
-              <div className="px-4 pb-1">
-                {showDivider && (
-                  <div className="flex justify-center my-4 select-none">
-                    <span className="text-[10px] text-wade-text-muted/40 font-medium px-2 py-1 bg-wade-border/30 rounded-full">
-                      {formatTimeDivider(msg.ts)}
-                    </span>
-                  </div>
-                )}
-                {renderMixedItem(msg, index)}
-              </div>
-            );
-          }}
-        />
+            showDivider = prevTs === undefined || (msg.ts - prevTs) > 5 * 60 * 1000;
+          }
+          return (
+            <div key={String(msg?.id ?? index)} className="px-4 pb-1">
+              {showDivider && (
+                <div className="flex justify-center my-4 select-none">
+                  <span className="text-[10px] text-wade-text-muted/40 font-medium px-2 py-1 bg-wade-border/30 rounded-full">
+                    {formatTimeDivider(msg.ts)}
+                  </span>
+                </div>
+              )}
+              {renderMixedItem(msg, index)}
+            </div>
+          );
+        })}
+        {wadeStatus === 'typing' && (
+          <div className={`flex w-full pt-2 px-4 ${phoneOwner === 'wade' ? 'items-end justify-end' : 'items-start justify-start'}`}>
+            <div
+              className={`px-4 py-3 flex gap-1 shadow-sm rounded-full ${phoneOwner === 'wade' ? '' : 'border border-wade-border/50'}`}
+              style={{ backgroundColor: phoneOwner === 'wade' ? 'var(--wade-bubble-luna)' : 'var(--wade-bubble-wade)' }}
+            >
+              <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce" />
+              <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.1s]" />
+              <span className="w-1.5 h-1.5 bg-wade-accent/60 rounded-full animate-bounce [animation-delay:0.2s]" />
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} className="h-4" />
       </div>
 
 
@@ -3147,11 +3110,9 @@ Luna just opened a fresh thread with you. Treat this as a clean slate and react 
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
                 }}
                 onFocus={() => {
-                  setTimeout(() => virtuosoRef.current?.scrollToIndex({
-                    index: 'LAST',
-                    align: 'end',
-                    behavior: 'smooth',
-                  }), 300);
+                  setTimeout(() => {
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                  }, 300);
                 }}
                 onKeyDown={(e) => {
                   if (window.innerWidth >= 768 && e.key === 'Enter' && !e.shiftKey) {
