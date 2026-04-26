@@ -678,7 +678,7 @@ export const MemoryV2: React.FC = () => {
           </p>
         </div>
 
-        <div className="p-1 rounded-2xl flex flex-wrap shadow-sm border border-wade-border bg-wade-bg-card gap-y-0.5 sm:rounded-full sm:flex-nowrap sm:overflow-x-auto sm:gap-y-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+        <div className="p-1 rounded-full flex shadow-sm border border-wade-border bg-wade-bg-card overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
           {([
             { id: 'core' as const, label: 'Core', icon: <BookHeart size={13} /> },
             { id: 'weekly' as const, label: 'Weekly', icon: <CalendarRange size={13} /> },
@@ -696,12 +696,15 @@ export const MemoryV2: React.FC = () => {
                 key={t.id}
                 type="button"
                 onClick={() => setActiveTab(t.id)}
-                className={`relative flex-1 sm:flex-initial min-w-0 px-2.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-[11px] font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
+                aria-label={t.label}
+                title={t.label}
+                className={`relative flex-1 sm:flex-initial min-w-0 px-2 sm:px-5 py-2 rounded-full text-[11px] font-bold transition-all flex items-center justify-center gap-0 sm:gap-1.5 ${
                   isActive ? 'shadow-sm text-white' : 'hover:opacity-80 text-wade-text-muted'
                 }`}
                 style={isActive ? { backgroundColor: 'var(--wade-accent)' } : undefined}
               >
-                {t.icon} {t.label}
+                {t.icon}
+                <span className="hidden sm:inline">{t.label}</span>
                 {showDot && (
                   <span
                     className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--wade-accent)] shadow-[0_0_6px_rgba(var(--wade-accent-rgb),0.6)]"
