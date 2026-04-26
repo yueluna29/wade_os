@@ -62,10 +62,10 @@ export const Divination: React.FC = () => {
 
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
         {[
-          { title: 'Daily Pull',      desc: 'One card guidance',  iconUrl: '', icon: 1 },
-          { title: 'Spread Room',     desc: 'Explore spreads',    iconUrl: '', icon: 2 },
-          { title: 'Card Library',    desc: 'Browse all cards',   iconUrl: '', icon: 3 },
-          { title: 'Reading Archive', desc: 'Your past readings', iconUrl: '', icon: 4 },
+          { title: 'Daily Pull',      desc: 'One card guidance',  iconUrl: driveUrlFromId('11DIh5DBikfdikvU5Nq0TnedxBeFu6Q64'), icon: 1 },
+          { title: 'Spread Room',     desc: 'Explore spreads',    iconUrl: driveUrlFromId('1Lsh2JQFo9bIuPyCpOzla7R4ZjQx5eLgS'), icon: 2 },
+          { title: 'Card Library',    desc: 'Browse all cards',   iconUrl: driveUrlFromId('1oCJAH5Plo8nfdkMZizAF1t52m1PxaLJd'), icon: 3 },
+          { title: 'Reading Archive', desc: 'Your past readings', iconUrl: driveUrlFromId('1pT219h45LYWgtT3v1MNHQz17GfkAkzZH'), icon: 4 },
         ].map((item, idx) => (
           <div key={idx} className="relative bg-wade-bg-card rounded-2xl md:rounded-3xl p-3 md:p-5 flex flex-row md:flex-col items-center md:justify-center text-left md:text-center gap-3 md:gap-0 shadow-sm border border-wade-border hover:-translate-y-1 hover:shadow-md transition-all cursor-pointer group">
             <div className="absolute top-2 right-2 md:top-3 md:right-3 text-wade-accent/30 group-hover:text-wade-accent/60 transition-colors">
