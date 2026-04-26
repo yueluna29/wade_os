@@ -31,29 +31,29 @@ export const Divination: React.FC = () => {
         </button>
       </header>
 
-      <section className="relative rounded-[2rem] overflow-hidden bg-wade-accent-light mb-6 shadow-sm border border-wade-border/50 min-h-[220px] md:min-h-[280px] flex items-center">
+      <section className="relative rounded-[2rem] overflow-hidden bg-wade-accent-light mb-6 shadow-sm border border-wade-border/50 min-h-[180px] md:min-h-[280px] flex items-center">
         <div className="absolute inset-0 z-0">
           <img src={heroImage} className="w-full h-full object-cover" alt="Mystic Background" />
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-wade-bg-app/15 to-wade-bg-app/55" />
         </div>
 
-        <div className="relative z-10 p-6 flex w-full justify-end">
-          <div className="flex flex-col items-center text-center max-w-xs md:mr-10 [text-shadow:0_2px_8px_rgba(0,0,0,0.35)]">
-            <div className="flex items-center gap-2 mb-3 text-white/70">
-              <div className="h-px w-10 bg-white/50" />
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0l2.5 9.5L24 12l-9.5 2.5L12 24l-2.5-9.5L0 12l9.5-2.5z"/></svg>
-              <div className="h-px w-10 bg-white/50" />
+        <div className="relative z-10 p-3 md:p-6 flex w-full justify-end">
+          <div className="flex flex-col items-center text-center max-w-[55%] md:max-w-xs md:mr-10 [text-shadow:0_2px_8px_rgba(0,0,0,0.35)]">
+            <div className="flex items-center gap-1.5 md:gap-2 mb-2 md:mb-3 text-white/70">
+              <div className="h-px w-5 md:w-10 bg-white/50" />
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="md:w-2.5 md:h-2.5"><path d="M12 0l2.5 9.5L24 12l-9.5 2.5L12 24l-2.5-9.5L0 12l9.5-2.5z"/></svg>
+              <div className="h-px w-5 md:w-10 bg-white/50" />
             </div>
-            <p className="font-vault text-white italic text-sm md:text-base mb-3 leading-relaxed">
+            <p className="font-vault text-white italic text-[11px] md:text-base mb-2 md:mb-3 leading-snug md:leading-relaxed">
               The cards whisper<br/>what your soul<br/>already knows.
             </p>
-            <div className="flex items-center gap-2 mb-5 text-white/70">
-              <div className="h-px w-10 bg-white/50" />
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0l2.5 9.5L24 12l-9.5 2.5L12 24l-2.5-9.5L0 12l9.5-2.5z"/></svg>
-              <div className="h-px w-10 bg-white/50" />
+            <div className="flex items-center gap-1.5 md:gap-2 mb-3 md:mb-5 text-white/70">
+              <div className="h-px w-5 md:w-10 bg-white/50" />
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="md:w-2.5 md:h-2.5"><path d="M12 0l2.5 9.5L24 12l-9.5 2.5L12 24l-2.5-9.5L0 12l9.5-2.5z"/></svg>
+              <div className="h-px w-5 md:w-10 bg-white/50" />
             </div>
-            <button className="bg-wade-accent/90 hover:bg-wade-accent text-white px-6 py-3 rounded-full font-bold shadow-lg shadow-wade-accent/30 flex items-center gap-2 transition-transform hover:-translate-y-1 [text-shadow:none]">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <button className="bg-wade-accent/90 hover:bg-wade-accent text-white text-[11px] md:text-base px-3 py-1.5 md:px-6 md:py-3 rounded-full font-bold shadow-lg shadow-wade-accent/30 flex items-center gap-1.5 md:gap-2 transition-transform hover:-translate-y-1 [text-shadow:none] whitespace-nowrap">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-[18px] md:h-[18px]"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               Draw Today's Card
             </button>
           </div>
